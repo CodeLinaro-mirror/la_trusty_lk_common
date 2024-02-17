@@ -8,4 +8,9 @@ MODULE_DEPS += \
 MODULE_SRCS += \
 	$(LOCAL_DIR)/timertest.c \
 
+ifneq (,$(APP_TIMERTEST_MAX_CLOCK_PERIOD))
+MODULE_DEFINES += \
+	APP_TIMERTEST_MAX_CLOCK_PERIOD=$(APP_TIMERTEST_MAX_CLOCK_PERIOD)
+endif
+
 include make/module.mk

@@ -20,6 +20,6 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-include external/lk/app/kerneltests-inc.mk
-include external/lk/hosttests/kerneltests-inc.mk
-include external/lk/lib/kerneltests-inc.mk
+include $(LKROOT)/app/kerneltests-inc.mk
+include $(LKROOT)/hosttests/kerneltests-inc.mk
+include $(LKROOT)/lib/kerneltests-inc.mk

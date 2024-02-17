@@ -50,8 +50,8 @@ struct pmm_vmm_obj {
     struct vm_page *chunk[];
 };
 
-#define PMM_OBJ_FLAG_NEEDS_CLEAR (1)
-#define PMM_OBJ_FLAG_ALLOW_TAGGED (2)
+#define PMM_OBJ_FLAG_NEEDS_CLEAR (1U)
+#define PMM_OBJ_FLAG_ALLOW_TAGGED (2U)
 
 static inline struct pmm_vmm_obj* vmm_obj_to_pmm_obj(struct vmm_obj *vmm_obj)
 {

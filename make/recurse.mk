@@ -6,12 +6,23 @@
 MODULES := $(sort $(MODULES))
 MODULES := $(filter-out $(ALLMODULES),$(MODULES))
 
-ifneq ($(MODULES),)
+HOST_MODULES := $(sort $(HOST_MODULES))
+HOST_MODULES := $(filter-out $(ALLHOSTMODULES),$(HOST_MODULES))
+
+ifneq ($(MODULES)$(HOST_MODULES),)
 
 ALLMODULES += $(MODULES)
 ALLMODULES := $(sort $(ALLMODULES))
 INCMODULES := $(MODULES)
 MODULES :=
+
+ALLHOSTMODULES += $(HOST_MODULES)
+ALLHOSTMODULES := $(sort $(ALLHOSTMODULES))
+HOST_MODULES :=
+
+# Needed for a true default
+MODULE_ADD_IMPLICIT_DEPS := true
+
 $(info including $(INCMODULES))
 include $(addsuffix /rules.mk,$(INCMODULES))
 

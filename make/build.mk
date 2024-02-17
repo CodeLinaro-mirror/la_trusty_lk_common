@@ -5,7 +5,7 @@ endif
 $(EXTRA_LINKER_SCRIPTS):
 
 $(OUTBIN): $(OUTELF)
-	@echo generating image: $@
+	@$(call ECHO_LOG,Generating image: $@)
 	$(NOECHO)$(SIZE) $<
 	$(NOECHO)$(OBJCOPY) -O binary $< $@
 
@@ -14,9 +14,10 @@ $(OUTELF).hex: $(OUTELF)
 	$(NOECHO)$(OBJCOPY) -O ihex $< $@
 
 $(OUTELF): $(ALLMODULE_OBJS) $(EXTRA_OBJS) $(LINKER_SCRIPT) $(EXTRA_LINKER_SCRIPTS)
-	@echo linking $@
+	@$(call ECHO,$(MODULE),linking,$@)
 	$(NOECHO)$(LD) $(GLOBAL_LDFLAGS) -T $(LINKER_SCRIPT) $(addprefix -T,$(EXTRA_LINKER_SCRIPTS)) \
 		--start-group $(ALLMODULE_OBJS) $(EXTRA_OBJS) $(LIBGCC) --end-group -Map=$(OUTELF).map -o $@
+	@$(call ECHO_DONE_SILENT,$(MODULE),linking,$@)
 
 $(OUTELF).sym: $(OUTELF)
 	@echo generating symbols: $@

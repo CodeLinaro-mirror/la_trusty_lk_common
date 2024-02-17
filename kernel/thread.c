@@ -456,6 +456,12 @@ static void thread_check_cookie(const thread_t *t) {
     const uint64_t expected_cookie = thread_get_expected_cookie(t);
 
     if (unlikely(t->cookie != expected_cookie)) {
+        /*
+         * It is not safe to call panic with interrupts enabled because
+         * backtracing calls printf which may block the current thread and put
+         * it on the runqueues with an invalid cookie - causing a double panic.
+         */
+        arch_disable_ints();
         panic("Corrupt or invalid thread cookie detected for thread: %s.\n"
               "Expected cookie: %" PRIu64 ", actual cookie: %" PRIu64 "\n",
               t->name,

@@ -65,6 +65,8 @@ OUTBIN := $(BUILDDIR)/lk.bin
 OUTELF := $(BUILDDIR)/lk.elf
 CONFIGHEADER := $(BUILDDIR)/config.h
 TOOLCHAIN_CONFIG := $(BUILDDIR)/toolchain.config
+TRUSTY_HOST_LIBRARY_BUILDDIR := $(BUILDDIR)/host_lib
+TRUSTY_KERNEL_LIBRARY_BUILDDIR := $(BUILDDIR)/kernellib
 
 # Eliminate /usr/local/include and /usr/include to build kernel hermetically
 GLOBAL_KERNEL_COMPILEFLAGS += --sysroot=fake_sysroot
@@ -81,7 +83,7 @@ GLOBAL_SHARED_COMPILEFLAGS += -Werror -Wall -Wsign-compare -Wno-multichar -Wno-u
 GLOBAL_SHARED_COMPILEFLAGS += -fno-short-enums -fno-common
 GLOBAL_SHARED_COMPILEFLAGS += -fno-omit-frame-pointer
 GLOBAL_SHARED_CFLAGS := --std=c17 -Wstrict-prototypes -Wwrite-strings
-GLOBAL_SHARED_CPPFLAGS := --std=c++17 -fno-exceptions -fno-rtti -fno-threadsafe-statics
+GLOBAL_SHARED_CPPFLAGS := --std=c++20 -fno-exceptions -fno-rtti -fno-threadsafe-statics
 # c99 array designators are not part of C++, but they are convenient and help avoid errors.
 GLOBAL_SHARED_CPPFLAGS += -Wno-c99-designator
 #GLOBAL_CPPFLAGS += -Weffc++
@@ -89,7 +91,7 @@ GLOBAL_SHARED_ASMFLAGS := -DASSEMBLY
 GLOBAL_LDFLAGS :=
 GLOBAL_SHARED_LDFLAGS :=
 GLOBAL_KERNEL_LDFLAGS :=
-GLOBAL_KERNEL_RUSTFLAGS :=
+GLOBAL_KERNEL_RUSTFLAGS := -L dependency=$(TRUSTY_HOST_LIBRARY_BUILDDIR) -L dependency=$(TRUSTY_KERNEL_LIBRARY_BUILDDIR)
 
 # This function is referenced by the linker-generated exidx tables, but seems to
 # be being dropped before it is needed. Force it to be included in the link.
@@ -104,7 +106,7 @@ GLOBAL_LTO_COMPILEFLAGS += \
 	-fvisibility-inlines-hidden \
 
 # Rust flags for proc macros
-GLOBAL_HOST_RUSTFLAGS :=
+GLOBAL_HOST_RUSTFLAGS := -L "$(RUST_HOST_LIBDIR)" -L dependency=$(TRUSTY_HOST_LIBRARY_BUILDDIR)
 
 # Rust flags, based on the flags used in AOSP
 GLOBAL_SHARED_RUSTFLAGS := -C codegen-units=1 -C debuginfo=2 -C opt-level=3 -C relocation-model=pic
@@ -153,6 +155,7 @@ TARGET :=
 PLATFORM :=
 ARCH :=
 ALLMODULES :=
+ALLMODULE_CRATE_STEMS :=
 
 # add any external module dependencies
 MODULES := $(EXTERNAL_MODULES)
@@ -243,6 +246,7 @@ GLOBAL_CPPFLAGS := $(GLOBAL_SHARED_CPPFLAGS) $(GLOBAL_KERNEL_CPPFLAGS)
 GLOBAL_ASMFLAGS := $(GLOBAL_SHARED_ASMFLAGS) $(GLOBAL_KERNEL_ASMFLAGS)
 GLOBAL_LDFLAGS := $(GLOBAL_SHARED_LDFLAGS) $(GLOBAL_KERNEL_LDFLAGS)
 
+$(call INFO_LOG,Project entry)
 $(info PROJECT = $(PROJECT))
 $(info PLATFORM = $(PLATFORM))
 $(info TARGET = $(TARGET))
@@ -256,6 +260,7 @@ SCS_ENABLED = $(KERNEL_SCS_ENABLED)
 include arch/$(ARCH)/rules.mk
 include top/rules.mk
 
+$(call INFO_LOG,Include recurse.mk)
 # recursively include any modules in the MODULE variable, leaving a trail of included
 # modules in the ALLMODULES list
 include make/recurse.mk
@@ -398,6 +403,7 @@ TOOLCHAIN_DEFINES := CLANG_BINDIR=\"$(subst $(SPACE),_,$(CLANG_BINDIR))\"
 TOOLCHAIN_DEFINES += CLANG_TOOLS_BINDIR=\"$(subst $(SPACE),_,$(CLANG_TOOLS_BINDIR))\"
 TOOLCHAIN_DEFINES += RUST_BINDIR=\"$(subst $(SPACE),_,$(RUST_BINDIR))\"
 $(TOOLCHAIN_CONFIG): configheader
+	@$(call INFO_DONE,toolchain,generating config file,$@)
 	@$(call MAKECONFIGHEADER,$@,TOOLCHAIN_DEFINES)
 
 GENERATED += $(TOOLCHAIN_CONFIG)
@@ -418,6 +424,9 @@ LIBGCC := $(CLANG_BINDIR)/../runtimes_ndk_cxx/libclang_rt.builtins-$(STANDARD_AR
 
 # try to have the compiler output colorized error messages if available
 export GCC_COLORS ?= 1
+
+# link all rust rlibs into a single top-level .a
+include make/rust-toplevel.mk
 
 # the logic to compile and link stuff is in here
 include make/build.mk
@@ -475,6 +484,7 @@ install: all
 configheader:
 
 $(CONFIGHEADER): configheader
+	@$(call INFO_DONE,global,generating config file,$@)
 	@$(call MAKECONFIGHEADER,$@,GLOBAL_DEFINES)
 
 # Empty rule for the .d files. The above rules will build .d files as a side
@@ -486,6 +496,10 @@ ifeq ($(filter $(MAKECMDGOALS), clean), )
 endif
 
 .PHONY: configheader
+
+# all build rules are defined, start build process
+$(call INFO_LOG,Start building)
+
 endif
 
 endif # make spotless

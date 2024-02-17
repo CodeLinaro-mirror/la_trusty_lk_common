@@ -77,6 +77,7 @@ static inline void hexdump8(const void *ptr, size_t len)
 }
 
 #define _dprintf_internal(level, x...) do { if ((level) <= LK_LOGLEVEL) { printf(x); } } while (0)
+#define vdprintf(level, fmt, args) do { if ((level) <= LK_LOGLEVEL) { vprintf(fmt, args); } } while (0)
 #if LK_DEBUGLEVEL_NO_ALIASES
 #define dprintf(level, x...) _dprintf_internal(LK_DEBUGLEVEL_##level, ##x)
 #else

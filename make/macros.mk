@@ -18,6 +18,9 @@ FIND_EXTERNAL = $(if $(wildcard external/trusty/$1),external/trusty/$1,external/
 # trusty/user/base/host/$CRATE and then trusty/user/base/lib/$CRATE-rust
 FIND_CRATE = $(if $(wildcard external/rust/crates/$1/rules.mk),external/rust/crates/$1,$(if $(wildcard trusty/user/base/host/$1/rules.mk),trusty/user/base/host/$1,$(if $(wildcard trusty/user/base/host/$1-rust/rules.mk),trusty/user/base/host/$1-rust,trusty/user/base/lib/$1-rust)))
 
+# checks if module with a given path exists
+FIND_MODULE = $(wildcard $1/rules.mk)$(wildcard $(addsuffix /$1/rules.mk,$(.INCLUDE_DIRS)))
+
 COMMA := ,
 EMPTY :=
 SPACE := $(EMPTY) $(EMPTY)
@@ -29,12 +32,11 @@ endef
 
 STRIP_TRAILING_COMMA = $(if $(1),$(subst $(COMMA)END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,,$(strip $(1))END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA))
 
-# try to read the crate name from a module makefile. this is brittle but fails
-# loudly if a name is not found. we do this to avoid needing to recursively
-# process all dependency makefiles to know the crate names of immediate
-# dependencies
-ERROR_IF_CRATE_NAME_EMPTY = $(if $(1),$(1),$(error could not determine crate name for $(2). crate name must be specified as a simple assignment of the form MODULE_CRATE_NAME := foo))
-READ_CRATE_NAME = $(call ERROR_IF_CRATE_NAME_EMPTY,$(shell grep -oP '(?<=MODULE_CRATE_NAME := )\s*.*' $(1)),$(1))
+# return $1 with the first word removed
+rest-of-words = $(wordlist 2,$(words $1),$1)
+# map $1 onto zipped pairs of items from lists $2 and $3
+pairmap = $(and $(strip $2),$(strip $3),\
+	$(call $1,$(firstword $2),$(firstword $3)) $(call pairmap,$1,$(call rest-of-words,$2),$(call rest-of-words,$3)))
 
 # test if two files are different, replacing the first
 # with the second if so
@@ -55,7 +57,6 @@ endef
 # generate a header file at $1 with an expanded variable in $2
 define MAKECONFIGHEADER
 	$(MKDIR); \
-	echo generating $1; \
 	rm -f $1.tmp; \
 	LDEF=`echo $1 | tr '/\\.-' '_' | sed "s/C++/CPP/g;s/c++/cpp/g"`; \
 	echo \#ifndef __$${LDEF}_H > $1.tmp; \
@@ -91,3 +92,34 @@ endif
 endif
 endif
 endef
+
+# prints task status message
+# Format: INFO/ECHO module, status, message
+ifneq ($(LOG_POSTPROCESSING),)
+# this output will be postprocessed by python later, insert extra markers
+# for easier parsing
+LOG_PREFIX=@log@
+LOG_DONE=@done@
+LOG_SDONE=@sdone@
+LOG_PRINT=@print@
+LOG_SEPARATOR=@:@
+INFO_LOG = $(info $(LOG_PREFIX)$(LOG_PRINT)$1)
+INFO = $(info $(LOG_PREFIX)$1$(LOG_SEPARATOR)$2$(LOG_SEPARATOR)$3)
+INFO_DONE = $(info $(LOG_PREFIX)$(LOG_DONE)$1$(LOG_SEPARATOR)$2$(LOG_SEPARATOR)$3)
+INFO_DONE_SILENT = $(info $(LOG_PREFIX)$(LOG_SDONE)$1$(LOG_SEPARATOR)$2$(LOG_SEPARATOR)$3)
+ECHO_LOG = echo $(LOG_PREFIX)$(LOG_PRINT)$1
+ECHO = echo $(LOG_PREFIX)$1$(LOG_SEPARATOR)$2$(LOG_SEPARATOR)$3
+ECHO_DONE = echo $(LOG_PREFIX)$(LOG_DONE)$1$(LOG_SEPARATOR)$2$(LOG_SEPARATOR)$3
+ECHO_DONE_SILENT = echo $(LOG_PREFIX)$(LOG_SDONE)$1$(LOG_SEPARATOR)$2$(LOG_SEPARATOR)$3
+else
+# just output as regular
+INFO_LOG = $(info $1)
+INFO = $(info $2 $3 for $1)
+INFO_DONE = $(info $2 $3 for $1)
+INFO_DONE_SILENT =
+ECHO_LOG = echo $1
+ECHO = echo $2 $3
+ECHO_DONE = echo $2 $3
+ECHO_DONE_SILENT =
+endif
+

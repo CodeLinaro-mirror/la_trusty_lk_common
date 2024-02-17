@@ -35,6 +35,8 @@
 // In gem5 simulation CNTPCT register is updated with frequency less than
 // 1MHz, so adjust target period for this test
 #define TIMER_TEST_MAX_CLOCK_PERIOD (1200)
+#elif defined(APP_TIMERTEST_MAX_CLOCK_PERIOD)
+#define TIMER_TEST_MAX_CLOCK_PERIOD (APP_TIMERTEST_MAX_CLOCK_PERIOD)
 #else
 #define TIMER_TEST_MAX_CLOCK_PERIOD (900)
 #endif

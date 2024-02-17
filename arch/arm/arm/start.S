@@ -239,8 +239,8 @@ arm_reset:
     mov     sp, r12
 
     cpsid   i,#0x17       /* abort */
-    ldr     r1, =arm_data_abort_state
-    mov     sp, r1
+    ldr     r4, =arm_data_abort_state
+    mov     sp, r4
 
     cpsid   i,#0x13       /* supervisor */
     ldr     r12, =abort_stack
