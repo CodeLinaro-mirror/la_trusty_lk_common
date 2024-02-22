@@ -31,6 +31,10 @@ $(OUTELF).dump: $(OUTELF)
 	@echo generating objdump: $@
 	$(NOECHO)$(OBJDUMP) -x $< > $@
 
+$(OUTELF).lst: $(OUTELF)
+	@echo generating listing: $@
+	$(NOECHO)$(OBJDUMP) -dS $< > $@
+
 $(OUTELF).size: $(OUTELF)
 	@echo generating size map: $@
 	$(NOECHO)$(NM) -S --size-sort $< > $@

@@ -126,7 +126,7 @@ ARCH_CPPFLAGS :=
 ARCH_ASMFLAGS :=
 
 # top level rule
-all:: $(OUTBIN) $(OUTELF).sym $(OUTELF).sym.sorted $(OUTELF).size $(OUTELF).dump $(BUILDDIR)/srcfiles.txt $(BUILDDIR)/include_paths.txt
+all:: $(OUTBIN) $(OUTELF).sym $(OUTELF).sym.sorted $(OUTELF).size $(OUTELF).dump $(OUTELF).lst $(BUILDDIR)/srcfiles.txt $(BUILDDIR)/include_paths.txt
 
 # master module object list
 ALLOBJS_MODULE :=
@@ -475,7 +475,7 @@ $(ALLOBJS): $(GLOBAL_SRCDEPS)
 all:: $(EXTRA_BUILDDEPS)
 
 clean: $(EXTRA_CLEANDEPS)
-	rm -f $(ALLOBJS) $(DEPS) $(GENERATED) $(OUTBIN) $(OUTELF) $(OUTELF).sym $(OUTELF).sym.sorted $(OUTELF).size $(OUTELF).hex $(OUTELF).dump
+	rm -f $(ALLOBJS) $(DEPS) $(GENERATED) $(OUTBIN) $(OUTELF) $(OUTELF).sym $(OUTELF).sym.sorted $(OUTELF).size $(OUTELF).hex $(OUTELF).dump $(OUTELF).lst
 
 install: all
 	scp $(OUTBIN) 192.168.0.4:/tftproot
