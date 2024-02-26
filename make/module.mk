@@ -175,6 +175,9 @@ endif
 
 endif
 
+# Initialize all automatic var to 0 if not initialized
+MODULE_COMPILEFLAGS += -ftrivial-auto-var-init=zero
+
 # Rebuild every module if the toolchain changes
 MODULE_SRCDEPS += $(TOOLCHAIN_CONFIG)
 
