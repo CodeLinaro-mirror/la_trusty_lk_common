@@ -73,7 +73,7 @@ MODULES += $(MODULE_DEPS)
 
 # Turn spaces into underscores and escape quotes for the module_config.h header
 define clean_defines
-$(subst $(SPACE),_,$(subst \",\\\\\",$(1)))
+$(subst $(SPACE),_,$(subst \",\\\\\",$(subst $(BUILDROOT),__BUILDROOT__,$(1))))
 endef
 
 MODULE_DEFINES += MODULE_COMPILEFLAGS=\"$(call clean_defines,$(MODULE_COMPILEFLAGS))\"
