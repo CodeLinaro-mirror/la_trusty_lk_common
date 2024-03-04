@@ -229,19 +229,18 @@ ifeq ($(call TOBOOL,$(MODULE_IS_KERNEL)),true)
 
 # validate crate name
 ifeq ($(MODULE_CRATE_NAME),)
-$(error rust module $(MODULE) does not set MODULE_CRATE_NAME. It must be set with a simple assignment, i.e. "MODULE_CRATE_NAME := foo")
+$(error rust module $(MODULE) does not set MODULE_CRATE_NAME)
 endif
 
-# if specific kernel rust deps not specified, rust modules use other deps.
 # library and module deps are set mutually exclusively, so it's safe to simply
 # concatenate them to use whichever is set
-MODULE_KERNEL_RUST_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODULE_DEPS)
+MODULE_ALL_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODULE_DEPS)
 
 ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 
 # In userspace, MODULE_ADD_IMPLICIT_DEPS adds std.
 # In the kernel, it adds core and compiler_builtins.
-MODULE_KERNEL_RUST_DEPS += \
+MODULE_ALL_DEPS += \
 	trusty/user/base/lib/libcore-rust/ \
 	trusty/user/base/lib/libcompiler_builtins-rust/ \
 
@@ -252,11 +251,6 @@ QUERY_MODULE := $1
 QUERY_VARIABLES := MODULE_CRATE_NAME MODULE_RUST_STEM MODULE_RUST_CRATE_TYPES
 $$(eval include make/query.mk)
 
-# crate name has no default; error if it is not given
-ifeq ($$(QUERY_MODULE_CRATE_NAME),)
-$$(error could not determine crate name for module $1)
-endif
-
 # assign queried variables for later use
 MODULE_$(1)_CRATE_NAME := $$(QUERY_MODULE_CRATE_NAME)
 MODULE_$(1)_CRATE_STEM := $$(if $$(QUERY_MODULE_RUST_STEM),$$(QUERY_MODULE_RUST_STEM),$$(QUERY_MODULE_CRATE_NAME))
@@ -264,12 +258,14 @@ MODULE_$(1)_RUST_CRATE_TYPES := $$(if $$(QUERY_MODULE_RUST_CRATE_TYPES),$$(QUERY
 endef
 
 # ensure that MODULE_..._CRATE_NAME, _CRATE_STEM, and _RUST_CRATE_TYPES are populated
-$(foreach rust_dep,$(MODULE_KERNEL_RUST_DEPS),$(eval $(call READ_CRATE_INFO,$(rust_dep))))
+$(foreach rust_dep,$(MODULE_ALL_DEPS),$(eval $(call READ_CRATE_INFO,$(rust_dep))))
+
+MODULE_RUST_DEPS := $(foreach dep, $(MODULE_ALL_DEPS), $(if $(MODULE_$(dep)_CRATE_NAME),$(dep),))
 
 # split deps into proc-macro and non- because the former are built for the host
-KERNEL_RUST_DEPS := $(foreach dep, $(MODULE_KERNEL_RUST_DEPS), $(if $(filter proc-macro,$(MODULE_$(dep)_RUST_CRATE_TYPES)),,$(dep)))
+KERNEL_RUST_DEPS := $(foreach dep, $(MODULE_RUST_DEPS), $(if $(filter proc-macro,$(MODULE_$(dep)_RUST_CRATE_TYPES)),,$(dep)))
 
-HOST_RUST_DEPS := $(foreach dep, $(MODULE_KERNEL_RUST_DEPS), $(if $(filter proc-macro,$(MODULE_$(dep)_RUST_CRATE_TYPES)),$(dep),))
+HOST_RUST_DEPS := $(foreach dep, $(MODULE_RUST_DEPS), $(if $(filter proc-macro,$(MODULE_$(dep)_RUST_CRATE_TYPES)),$(dep),))
 
 # add kernel rust deps to the set of modules
 MODULES += $(KERNEL_RUST_DEPS)
@@ -427,7 +423,8 @@ MODULE_RSOBJS :=
 MODULE_RUST_EDITION :=
 MODULE_RUSTDOC_OBJECT :=
 MODULE_RUSTDOCFLAGS :=
-MODULE_KERNEL_RUST_DEPS :=
+MODULE_ALL_DEPS :=
+MODULE_RUST_DEPS :=
 MODULE_SKIP_DOCS :=
 MODULE_ADD_IMPLICIT_DEPS := true
 
