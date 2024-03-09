@@ -39,14 +39,13 @@ WRAPPER_RUSTFLAGS += $(addprefix --extern ,$(WRAPPER_RUST_EXTERN_PATHS))
 # generate a .rs source file for the wrapper crate
 # we must not explicitly "extern crate" core or compiler_builtins
 CRATES_TO_IMPORT := $(filter-out core compiler_builtins,$(ALL_KERNEL_HOST_CRATE_STEMS) $(ALLMODULE_CRATE_STEMS_SORTED))
-RUST_WRAPPER_SRC := \#![feature(panic_abort)] \#![no_std] \
-    $(foreach crate, $(CRATES_TO_IMPORT), extern crate $(subst .,_,$(crate));) \
-    \#[panic_handler] fn handle_panic(_: &core::panic::PanicInfo) -> ! {loop {}}
+RUST_WRAPPER_SRC := \#![no_std] \
+    $(foreach crate, $(CRATES_TO_IMPORT), extern crate $(subst .,_,$(crate));)
 
 RUST_WRAPPER := $(BUILDDIR)/lk-crates.rs
 
 $(RUST_WRAPPER): RUST_WRAPPER_SRC := $(RUST_WRAPPER_SRC)
-$(RUST_WRAPPER): $(SORTED_CRATE_NAMES_FILE)
+$(RUST_WRAPPER): $(SORTED_CRATE_STEMS_FILE)
 	@$(MKDIR)
 	echo "$(RUST_WRAPPER_SRC)" > "$@"
 
