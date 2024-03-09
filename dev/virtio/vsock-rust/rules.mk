@@ -6,7 +6,6 @@ MODULE_SRCS := \
 
 MODULE_LIBRARY_DEPS := \
 	trusty/user/base/lib/liballoc-rust \
-	trusty/user/base/lib/libpanic_abort-rust \
 	trusty/user/base/lib/trusty-std \
 	external/rust/crates/virtio-drivers \
 
