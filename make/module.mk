@@ -232,6 +232,11 @@ ifeq ($(MODULE_CRATE_NAME),)
 $(error rust module $(MODULE) does not set MODULE_CRATE_NAME)
 endif
 
+# Generate Rust bindings with bindgen if requested
+ifneq ($(strip $(MODULE_BINDGEN_SRC_HEADER)),)
+include make/bindgen.mk
+endif
+
 # library and module deps are set mutually exclusively, so it's safe to simply
 # concatenate them to use whichever is set
 MODULE_ALL_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODULE_DEPS)
