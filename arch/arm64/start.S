@@ -333,8 +333,15 @@ _start:
     msr     tcr_el1, tmp
     isb
 
-    /* Invalidate TLB */
+    /* Enable Write implies XN (Execute-Never), EL0/1 */
+    mrs     tmp, sctlr_el1
+    orr     tmp, tmp, #(1<<19)
+    msr     sctlr_el1, tmp
+    isb
+
+    /* Invalidate TLB and sync (needed for at least WXN) */
     tlbi    vmalle1
+    dsb     sy
     isb
 
     /* We're no longer using the tagged identity map at this point, so
