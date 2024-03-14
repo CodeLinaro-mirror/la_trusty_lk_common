@@ -314,6 +314,10 @@ MODULE_LIBRARIES += $(MODULE_KERNEL_RUST_LIBS) $(MODULE_KERNEL_RUST_HOST_LIBS)
 # determine MODULE_RSOBJS and MODULE_RUST_CRATE_TYPES for rust kernel modules
 include make/rust.mk
 
+# save extra information for constructing kernel rust-project.json in rust-toplevel.mk
+MODULE_$(MODULE_RUST_STEM)_RUST_SRC := $(filter %.rs,$(MODULE_SRCS))
+MODULE_$(MODULE_RUST_STEM)_RUST_EDITION := $(MODULE_RUST_EDITION)
+
 # only allow rlibs because we build rlibs, then link them all into one .a
 ifneq ($(MODULE_RUST_CRATE_TYPES),rlib)
 $(error rust crates for the kernel must be built as rlibs only, but $(MODULE) builds $(MODULE_RUST_CRATE_TYPES))
