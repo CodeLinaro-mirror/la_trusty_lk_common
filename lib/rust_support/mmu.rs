@@ -21,33 +21,16 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Rust support library for the Trusty kernel
+pub use crate::sys::ARCH_MMU_FLAG_CACHED;
+pub use crate::sys::ARCH_MMU_FLAG_UNCACHED;
+pub use crate::sys::ARCH_MMU_FLAG_UNCACHED_DEVICE;
+pub use crate::sys::ARCH_MMU_FLAG_CACHE_MASK;
+pub use crate::sys::ARCH_MMU_FLAG_PERM_USER;
+pub use crate::sys::ARCH_MMU_FLAG_PERM_RO;
+pub use crate::sys::ARCH_MMU_FLAG_PERM_NO_EXECUTE;
+pub use crate::sys::ARCH_MMU_FLAG_NS;
+pub use crate::sys::ARCH_MMU_FLAG_TAGGED;
+pub use crate::sys::ARCH_MMU_FLAG_INVALID;
 
-#![no_std]
-#![feature(c_str_literals)]
-
-use alloc::format;
-use core::ffi::CStr;
-use core::panic::PanicInfo;
-
-mod sys {
-    #![allow(unused)]
-    #![allow(non_camel_case_types)]
-    include!(env!("BINDGEN_INC_FILE"));
-}
-pub mod err;
-pub mod mmu;
-pub mod vmm;
-
-pub use sys::status_t;
-pub use sys::vaddr_t;
-pub use sys::paddr_t;
-
-#[panic_handler]
-fn handle_panic(info: &PanicInfo) -> ! {
-    let panic_message = format!("{info}\0");
-    let panic_message_c = CStr::from_bytes_with_nul(panic_message.as_bytes())
-        .expect("Unexpected null byte in panic message");
-    // SAFETY: Calling C function with string pointers that outlive the call
-    unsafe { sys::_panic(c"Rust in Trusty kernel %s\n".as_ptr(), panic_message_c.as_ptr()) }
-}
+pub use crate::sys::PAGE_SIZE;
+pub use crate::sys::PAGE_SIZE_SHIFT;
