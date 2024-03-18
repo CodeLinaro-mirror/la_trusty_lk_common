@@ -22,15 +22,15 @@
  */
 
 pub use crate::sys::ARCH_MMU_FLAG_CACHED;
+pub use crate::sys::ARCH_MMU_FLAG_CACHE_MASK;
+pub use crate::sys::ARCH_MMU_FLAG_INVALID;
+pub use crate::sys::ARCH_MMU_FLAG_NS;
+pub use crate::sys::ARCH_MMU_FLAG_PERM_NO_EXECUTE;
+pub use crate::sys::ARCH_MMU_FLAG_PERM_RO;
+pub use crate::sys::ARCH_MMU_FLAG_PERM_USER;
+pub use crate::sys::ARCH_MMU_FLAG_TAGGED;
 pub use crate::sys::ARCH_MMU_FLAG_UNCACHED;
 pub use crate::sys::ARCH_MMU_FLAG_UNCACHED_DEVICE;
-pub use crate::sys::ARCH_MMU_FLAG_CACHE_MASK;
-pub use crate::sys::ARCH_MMU_FLAG_PERM_USER;
-pub use crate::sys::ARCH_MMU_FLAG_PERM_RO;
-pub use crate::sys::ARCH_MMU_FLAG_PERM_NO_EXECUTE;
-pub use crate::sys::ARCH_MMU_FLAG_NS;
-pub use crate::sys::ARCH_MMU_FLAG_TAGGED;
-pub use crate::sys::ARCH_MMU_FLAG_INVALID;
 
 pub use crate::sys::PAGE_SIZE;
 pub use crate::sys::PAGE_SIZE_SHIFT;

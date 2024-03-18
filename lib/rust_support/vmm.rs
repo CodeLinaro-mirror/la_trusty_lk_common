@@ -26,14 +26,14 @@ use core::ffi::c_uint;
 use core::ffi::c_void;
 use core::ptr::addr_of_mut;
 
-use crate::status_t;
 use crate::paddr_t;
+use crate::status_t;
 
-pub use crate::sys::vmm_aspace_t;
-pub use crate::sys::vmm_alloc_physical_etc;
-pub use crate::sys::vmm_alloc_contiguous;
-pub use crate::sys::vmm_free_region;
 pub use crate::sys::vaddr_to_paddr;
+pub use crate::sys::vmm_alloc_contiguous;
+pub use crate::sys::vmm_alloc_physical_etc;
+pub use crate::sys::vmm_aspace_t;
+pub use crate::sys::vmm_free_region;
 
 #[inline]
 pub fn vmm_get_kernel_aspace() -> *mut vmm_aspace_t {
@@ -63,6 +63,6 @@ pub unsafe fn vmm_alloc_physical(
         paddr.cast_mut(),
         1,
         vmm_flags,
-        arch_mmu_flags
+        arch_mmu_flags,
     )
 }
