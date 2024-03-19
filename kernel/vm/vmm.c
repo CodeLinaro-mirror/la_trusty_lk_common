@@ -1093,7 +1093,7 @@ status_t vmm_alloc_physical_etc(vmm_aspace_t* aspace,
                                 size_t size,
                                 void** ptr,
                                 uint8_t align_log2,
-                                paddr_t* paddr,
+                                const paddr_t* paddr,
                                 uint paddr_count,
                                 uint vmm_flags,
                                 uint arch_mmu_flags) {
