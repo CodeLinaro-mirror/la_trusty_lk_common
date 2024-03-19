@@ -438,7 +438,7 @@ status_t vmm_alloc_obj(vmm_aspace_t *aspace, const char *name,
 
 /* allocate a region of virtual space that maps a physical piece of address space.
    the physical pages that back this are not allocated from the pmm. */
-status_t vmm_alloc_physical_etc(vmm_aspace_t *aspace, const char *name, size_t size, void **ptr, uint8_t align_log2, paddr_t *paddr, uint paddr_count, uint vmm_flags, uint arch_mmu_flags);
+status_t vmm_alloc_physical_etc(vmm_aspace_t *aspace, const char *name, size_t size, void **ptr, uint8_t align_log2, const paddr_t *paddr, uint paddr_count, uint vmm_flags, uint arch_mmu_flags);
 
 /* allocate a region of virtual space that maps a physical piece of address space.
    the physical pages that back this are not allocated from the pmm. */
