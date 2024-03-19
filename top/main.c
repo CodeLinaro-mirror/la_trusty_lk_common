@@ -58,7 +58,7 @@ extern void kernel_init(void);
 
 /* constructors inserted by clang for global C++ objects currently do not have
  * CFI type info, so we have to disable this check until this is fixed */
-__attribute__((no_sanitize("cfi")))
+__attribute__((no_sanitize("cfi", "kcfi")))
 static void call_constructors(void)
 {
     void (**ctor)(void);

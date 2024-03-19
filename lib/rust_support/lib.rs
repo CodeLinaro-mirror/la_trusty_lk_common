@@ -39,9 +39,9 @@ pub mod err;
 pub mod mmu;
 pub mod vmm;
 
+pub use sys::paddr_t;
 pub use sys::status_t;
 pub use sys::vaddr_t;
-pub use sys::paddr_t;
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
