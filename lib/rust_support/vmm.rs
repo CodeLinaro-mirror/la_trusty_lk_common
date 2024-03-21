@@ -43,6 +43,9 @@ pub fn vmm_get_kernel_aspace() -> *mut vmm_aspace_t {
     unsafe { addr_of_mut!(crate::sys::_kernel_aspace) }
 }
 
+/// # Safety
+///
+/// Same as [`vmm_alloc_physical_etc`].
 #[inline]
 pub unsafe fn vmm_alloc_physical(
     aspace: *mut vmm_aspace_t,
@@ -54,15 +57,18 @@ pub unsafe fn vmm_alloc_physical(
     vmm_flags: c_uint,
     arch_mmu_flags: c_uint,
 ) -> status_t {
-    vmm_alloc_physical_etc(
-        aspace,
-        name,
-        size,
-        ptr.cast_mut(),
-        align_log2,
-        addr_of!(paddr),
-        1,
-        vmm_flags,
-        arch_mmu_flags,
-    )
+    // SAFETY: Delegated.
+    unsafe {
+        vmm_alloc_physical_etc(
+            aspace,
+            name,
+            size,
+            ptr.cast_mut(),
+            align_log2,
+            addr_of!(paddr),
+            1,
+            vmm_flags,
+            arch_mmu_flags,
+        )
+    }
 }
