@@ -25,6 +25,7 @@
 
 #![no_std]
 #![feature(c_str_literals)]
+#![deny(unsafe_op_in_unsafe_fn)]
 
 use alloc::format;
 use core::ffi::CStr;
