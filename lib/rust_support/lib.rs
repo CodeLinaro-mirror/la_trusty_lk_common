@@ -34,10 +34,13 @@ use core::panic::PanicInfo;
 mod sys {
     #![allow(unused)]
     #![allow(non_camel_case_types)]
+    #![allow(non_upper_case_globals)]
     include!(env!("BINDGEN_INC_FILE"));
 }
+
 pub mod err;
 pub mod mmu;
+pub mod sync;
 pub mod vmm;
 
 pub use sys::paddr_t;
