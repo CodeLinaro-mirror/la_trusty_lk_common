@@ -1715,7 +1715,8 @@ static int cmd_vmm(int argc, const cmd_args* argv) {
         void* ptr = (void*)0x99;
         status_t err = vmm_alloc_physical(test_aspace, "physical test",
                                           argv[3].u, &ptr, argv[4].u, argv[2].u,
-                                          0, ARCH_MMU_FLAG_UNCACHED_DEVICE);
+                                          0, ARCH_MMU_FLAG_UNCACHED_DEVICE |
+                                              ARCH_MMU_FLAG_PERM_NO_EXECUTE);
         printf("vmm_alloc_physical returns %d, ptr %p\n", err, ptr);
     } else if (!strcmp(argv[1].str, "alloc_contig")) {
         if (argc < 4)
