@@ -96,7 +96,7 @@ MODULE_RUSTFLAGS += --emit link
 
 # Allow all lints if the module is in external/. This matches the behavior of
 # soong.
-ifneq ($(filter external/%,$(MODULE_SRCS)),)
+ifneq ($(filter external/rust/%,$(MODULE_SRCS)),)
 MODULE_RUSTFLAGS += --cap-lints allow
 MODULE_RUSTDOCFLAGS += --cap-lints allow
 endif
