@@ -31,6 +31,7 @@ use core::ops::DerefMut;
 
 use alloc::boxed::Box;
 
+use crate::err::NO_ERROR;
 use crate::sys::extern_is_mutex_held;
 use crate::sys::mutex_acquire_timeout;
 use crate::sys::mutex_destroy;
@@ -142,7 +143,7 @@ impl<T: ?Sized> Mutex<T> {
     pub fn lock(&self) -> MutexGuard<'_, T> {
         // SAFETY: `mutex_acquire` is thread safe and it was `mutex_init`ialized.
         let status = unsafe { mutex_acquire(self.mutex.get_raw()) };
-        assert_ne!(status, 0);
+        assert_eq!(status, NO_ERROR);
         MutexGuard { lock: &self }
     }
 
@@ -161,7 +162,7 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // SAFETY: `mutex_release` is thread safe and it was `mutex_init`ialized.
         let status = unsafe { mutex_release(self.lock.mutex.get_raw()) };
-        assert_ne!(status, 0);
+        assert_eq!(status, NO_ERROR);
     }
 }
 
