@@ -36,17 +36,22 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
+	extern_is_mutex_held \
+	mutex_acquire_timeout \
+	mutex_destroy \
+	mutex_init \
+	mutex_release \
+	vaddr_to_paddr \
 	vmm_alloc_physical_etc \
 	vmm_alloc_contiguous \
 	vmm_free_region \
-	vaddr_to_paddr \
 
 MODULE_BINDGEN_ALLOW_VARS := \
+	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
 	ERR_.* \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
-	_kernel_aspace \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
 

@@ -353,7 +353,8 @@ static void arm_map_regs(const char* name,
     }
 
     ret = vmm_alloc_physical(vmm_get_kernel_aspace(), "gic", size, &vaddrp, 0,
-                             paddr, 0, ARCH_MMU_FLAG_UNCACHED_DEVICE);
+                             paddr, 0, ARCH_MMU_FLAG_UNCACHED_DEVICE |
+                                 ARCH_MMU_FLAG_PERM_NO_EXECUTE);
     if (ret) {
         panic("%s: failed %d\n", __func__, ret);
     }
