@@ -46,12 +46,20 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	vmm_alloc_contiguous \
 	vmm_free_region \
 
+MODULE_BINDGEN_ALLOW_TYPES := \
+	lk_init_.* \
+
 MODULE_BINDGEN_ALLOW_VARS := \
 	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
 	ERR_.* \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
+
+MODULE_BINDGEN_FLAGS := \
+	--newtype-enum lk_init_level \
+	--bitfield-enum lk_init_flags \
+	--no-prepend-enum-name \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
 
