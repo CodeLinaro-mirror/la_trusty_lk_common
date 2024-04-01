@@ -29,38 +29,29 @@
 #include <dev/timer/x86_pit.h>
 #include <err.h>
 #include <lib/fixed_point.h>
+#include <lk/trace.h>
 #include <platform/interrupts.h>
 #include <platform/timer.h>
+
+#define LOCAL_TRACE 0
 
 static platform_timer_callback t_callback;
 
 static struct fp_32_64 ms_per_tsc;
 static struct fp_32_64 ns_per_tsc;
-static struct fp_32_64 ticks_per_ms;
+static struct fp_32_64 pit_ticks_per_ns;
 
 /* The oscillator used by the PIT chip runs at 1.193182MHz */
 #define INTERNAL_FREQ   1193182UL
-
-/* Maximum amount of time that can be program, in milliseconds */
-#define MAX_TIMER_INTERVAL  55
-
-/*
- * Freqency in HZ of the timer.
- * TODO: Select the frequency in platform_set_oneshot_timer based on the time
- * we actually need to sleep so we don't wake up more often than needed when
- * sleeping more than 55ms and so we get better precision when sleeping
- * significantly less than 55ms.
- */
-#define PIT_FREQUENCY 1000
 
 /* Mode/Command register */
 #define I8253_CONTROL_REG   0x43
 /* Channel 0 data port */
 #define I8253_DATA_REG      0x40
 
-static uint64_t lk_time_to_ticks(lk_time_t lk_time)
+static uint64_t lk_time_ns_to_pit_ticks(lk_time_ns_t lk_time_ns)
 {
-    return u64_mul_u32_fp32_64(lk_time, ticks_per_ms);
+    return u64_mul_u64_fp32_64(lk_time_ns, pit_ticks_per_ns);
 }
 
 static lk_time_t tsc_cnt_to_lk_time(uint64_t tsc_cnt)
@@ -127,7 +118,7 @@ lk_time_t current_time(void)
     return tsc_cnt_to_lk_time(__rdtsc());
 }
 
-static enum handler_return os_timer_tick(void* arg)
+static enum handler_return x86_pit_timer_interrupt_handler(void* arg)
 {
     if (t_callback) {
         return t_callback(arg, current_time_ns());
@@ -136,43 +127,13 @@ static enum handler_return os_timer_tick(void* arg)
     }
 }
 
-static void set_pit_frequency(uint32_t frequency)
-{
-    struct fp_32_64 result;
-    uint16_t count;
-
-    /* Figure out the correct divisor for the desired frequency */
-    if (frequency < 1) {
-        dprintf(SPEW, "invalid frequency, %u, use max count\n", frequency);
-        count = 0xffff;
-    } else if (frequency >= INTERNAL_FREQ) {
-        dprintf(SPEW, "invalid frequency, %u, use min count\n", frequency);
-        count = 1;
-    } else {
-        fp_32_64_div_32_32(&result, INTERNAL_FREQ, frequency);
-        if (result.l0 > 0xffff) {
-            dprintf(SPEW, "invalid frequency, %u, use max count\n", frequency);
-            count = 0xffff;
-        } else {
-            count = result.l0 & 0xffff;
-        }
-    }
-
-    /*
-     * Setup the Programmable Interval Timer
-     * Counter 0, mode 2, binary counter, LSB followed by MSB
-     */
-    outp(I8253_CONTROL_REG, 0x34);
-    outp(I8253_DATA_REG, count & 0xff);
-    outp(I8253_DATA_REG, count >> 8);
-}
-
 static void x86_pit_init_conversion_factors(void)
 {
     uint64_t begin, end;
     uint8_t status = 0;
+    uint16_t ticks_per_ms = INTERNAL_FREQ / 1000;
 
-    fp_32_64_div_32_32(&ticks_per_ms, INTERNAL_FREQ, 1000);
+    fp_32_64_div_32_32(&pit_ticks_per_ns, INTERNAL_FREQ, 1000000000);
 
     /* Set PIT mode to count down and set OUT pin high when count reaches 0 */
     outp(I8253_CONTROL_REG, 0x30);
@@ -191,9 +152,9 @@ static void x86_pit_init_conversion_factors(void)
     serializing_instruction();
 
     /* Write LSB in counter 0 */
-    outp(I8253_DATA_REG, ticks_per_ms.l0 & 0xff);
+    outp(I8253_DATA_REG, ticks_per_ms & 0xff);
     /* Write MSB in counter 0 */
-    outp(I8253_DATA_REG, ticks_per_ms.l0 >> 8);
+    outp(I8253_DATA_REG, ticks_per_ms >> 8);
 
     do {
         /* Read-back command, count MSB, counter 0 */
@@ -222,33 +183,30 @@ void x86_init_pit(void)
 
     x86_pit_init_conversion_factors();
 
-    /* 1ms granularity */
-    set_pit_frequency(PIT_FREQUENCY);
-
-    register_int_handler(INT_PIT, &os_timer_tick, NULL);
+    register_int_handler(INT_PIT, &x86_pit_timer_interrupt_handler, NULL);
     unmask_interrupt(INT_PIT);
 }
 
 status_t platform_set_oneshot_timer(platform_timer_callback callback,
-                                    lk_time_ns_t time_ns)
+                                    lk_time_ns_t time_ns_abs)
 {
-    uint32_t count;
+    uint64_t pit_ticks;
+    uint32_t pit_ticks_clamped;
     uint16_t divisor;
-    uint32_t time_ms;
+    lk_time_ns_t time_ns_rel = time_ns_abs - current_time_ns();
 
     t_callback = callback;
-    /* Set millisecond timer with interval */
-    time_ms = (time_ns - current_time_ns()) / (1000UL * 1000);
 
-    if (time_ms > MAX_TIMER_INTERVAL) {
-        time_ms = MAX_TIMER_INTERVAL;
-    } else if (time_ms < 1) {
-        time_ms = 1;
-    }
+    pit_ticks = lk_time_ns_to_pit_ticks(time_ns_rel);
+    /* Clamp ticks to 1 - 0x10000. 0 in the 16 bit counter means 0x10000 */
+    pit_ticks_clamped = MAX(1, MIN(pit_ticks, UINT16_MAX + 1));
+    divisor = pit_ticks_clamped & UINT16_MAX;
 
-    count = lk_time_to_ticks(time_ms);
+    LTRACEF("time_ns_abs %" PRIu64 " -> time_ns_rel %" PRIu64
+            " -> pit_ticks %" PRIu64 " -> pit_ticks_clamped %" PRIu32
+            " -> pit_ticks %" PRIu16 "\n",
+            time_ns_abs, time_ns_rel, pit_ticks, pit_ticks_clamped, divisor);
 
-    divisor = count & 0xffff;
     /*
      * Program PIT in the software strobe configuration, to send one pulse
      * after the count reach 0
@@ -262,6 +220,7 @@ status_t platform_set_oneshot_timer(platform_timer_callback callback,
 
 void platform_stop_timer(void)
 {
+    LTRACE;
     /* Enable interrupt mode that will stop the decreasing counter of the PIT */
     outp(I8253_CONTROL_REG, 0x30);
 }
