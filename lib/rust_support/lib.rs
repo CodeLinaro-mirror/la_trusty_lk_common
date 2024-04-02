@@ -39,6 +39,7 @@ mod sys {
 }
 
 pub mod err;
+pub mod init;
 pub mod mmu;
 pub mod sync;
 pub mod vmm;
