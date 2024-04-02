@@ -22,9 +22,6 @@
  */
 
 use core::cell::UnsafeCell;
-use core::fmt;
-use core::fmt::Debug;
-use core::fmt::Formatter;
 use core::mem;
 use core::ops::Deref;
 use core::ops::DerefMut;
@@ -32,7 +29,6 @@ use core::ops::DerefMut;
 use alloc::boxed::Box;
 
 use crate::err::NO_ERROR;
-use crate::sys::extern_is_mutex_held;
 use crate::sys::mutex_acquire_timeout;
 use crate::sys::mutex_destroy;
 use crate::sys::mutex_init;
@@ -146,16 +142,6 @@ impl<T: ?Sized> Mutex<T> {
         assert_eq!(status, NO_ERROR);
         MutexGuard { lock: &self }
     }
-
-    pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
-        // SAFETY: `extern_is_mutex_held` is thread safe and it was `mutex_init`ialized.
-        let locked = unsafe { extern_is_mutex_held(self.mutex.get_raw()) };
-        if locked {
-            None
-        } else {
-            Some(self.lock())
-        }
-    }
 }
 
 impl<T: ?Sized> Drop for MutexGuard<'_, T> {
@@ -195,22 +181,5 @@ unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
 impl<T> From<T> for Mutex<T> {
     fn from(value: T) -> Self {
         Self::new(value)
-    }
-}
-
-/// Copied from [`std::sync::Mutex`],
-/// with minor changes as [`Mutex`] has no poisoning.
-impl<T: ?Sized + Debug> Debug for Mutex<T> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let mut d = f.debug_struct("Mutex");
-        match self.try_lock() {
-            Some(guard) => {
-                d.field("data", &&*guard);
-            }
-            None => {
-                d.field("data", &format_args!("<locked>"));
-            }
-        }
-        d.finish_non_exhaustive()
     }
 }

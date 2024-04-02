@@ -36,7 +36,6 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
-	extern_is_mutex_held \
 	mutex_acquire_timeout \
 	mutex_destroy \
 	mutex_init \
