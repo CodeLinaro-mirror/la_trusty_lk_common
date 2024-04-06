@@ -40,6 +40,8 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	mutex_destroy \
 	mutex_init \
 	mutex_release \
+	thread_create \
+	thread_resume \
 	vaddr_to_paddr \
 	vmm_alloc_physical_etc \
 	vmm_alloc_contiguous \
@@ -49,9 +51,12 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	lk_init_.* \
 
 MODULE_BINDGEN_ALLOW_VARS := \
+	.*_PRIORITY \
 	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
+	DEFAULT_STACK_SIZE \
 	ERR_.* \
+	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
 
