@@ -42,6 +42,7 @@ pub mod err;
 pub mod init;
 pub mod mmu;
 pub mod sync;
+pub mod thread;
 pub mod vmm;
 
 pub use sys::paddr_t;
