@@ -30,8 +30,13 @@ MODULE_CRATE_NAME := rust_support
 MODULE_SRCS := \
 	$(LOCAL_DIR)/lib.rs \
 
+# Don't make this module depend on itself.
+MODULE_ADD_IMPLICIT_DEPS := false
+
 MODULE_DEPS := \
 	trusty/user/base/lib/liballoc-rust \
+	trusty/user/base/lib/libcore-rust/ \
+	trusty/user/base/lib/libcompiler_builtins-rust/ \
 	trusty/user/base/lib/trusty-std \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
