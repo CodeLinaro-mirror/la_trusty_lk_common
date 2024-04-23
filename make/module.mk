@@ -244,10 +244,12 @@ MODULE_ALL_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODU
 ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 
 # In userspace, MODULE_ADD_IMPLICIT_DEPS adds std.
-# In the kernel, it adds core and compiler_builtins.
+# In the kernel, it adds core, compiler_builtins and
+# lib/rust_support.
 MODULE_ALL_DEPS += \
 	trusty/user/base/lib/libcore-rust/ \
 	trusty/user/base/lib/libcompiler_builtins-rust/ \
+	$(LKROOT)/lib/rust_support \
 
 endif
 

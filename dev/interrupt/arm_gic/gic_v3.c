@@ -198,7 +198,7 @@ void arm_gicv3_init(void) {
     int i;
 
     /* Disable all groups before making changes */
-    gicv3_gicd_ctrl_write(GICDREG_READ(0, GICD_CTLR) & ~0x7);
+    gicv3_gicd_ctrl_write(GICDREG_READ(0, GICD_CTLR) & ~0x7U);
 
     for (i = 0; i < MAX_INT; i += 32) {
         GICDREG_WRITE(0, GICD_ICENABLER(i / 32), ~0U);

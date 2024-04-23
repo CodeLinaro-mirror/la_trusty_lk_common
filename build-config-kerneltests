@@ -21,6 +21,6 @@
     hosttest("list_test"),
     porttest("com.android.kernel.scstest"),
     porttest("com.android.kernel.threadtest"),
-    porttest("com.android.kernel.timertest"),
+    porttest("com.android.kernel.timertest").needs(smp4=True),
     porttest("com.android.kernel.pincputest").needs(smp4=True),
 ]
