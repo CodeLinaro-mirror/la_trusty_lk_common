@@ -32,14 +32,13 @@ use core::ops::Add;
 use core::ops::Sub;
 use core::ptr::NonNull;
 
-use crate::err::NO_ERROR;
+use crate::Error;
 
 use crate::sys::thread_create;
 use crate::sys::thread_resume;
 use crate::sys::thread_t;
 use crate::sys::DEFAULT_PRIORITY;
 use crate::sys::DPC_PRIORITY;
-use crate::sys::ERR_GENERIC;
 use crate::sys::HIGHEST_PRIORITY;
 use crate::sys::HIGH_PRIORITY;
 use crate::sys::IDLE_PRIORITY;
@@ -198,10 +197,10 @@ impl<'a> Builder<'a> {
                 self.stack_size,
             )
         };
-        let thread = NonNull::new(thread).ok_or(ERR_GENERIC)?;
+        let thread = NonNull::new(thread).ok_or::<i32>(Error::ERR_GENERIC.into())?;
         // SAFETY: `thread` is non-null, so `thread_create` initialized it properly.
         let status = unsafe { thread_resume(thread.as_ptr()) };
-        if status == NO_ERROR {
+        if status == Error::NO_ERROR.into() {
             Ok(JoinHandle { _thread: thread })
         } else {
             Err(status)
