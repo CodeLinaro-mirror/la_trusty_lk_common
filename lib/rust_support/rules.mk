@@ -34,6 +34,8 @@ MODULE_SRCS := \
 MODULE_ADD_IMPLICIT_DEPS := false
 
 MODULE_DEPS := \
+	external/rust/crates/num-derive \
+	external/rust/crates/num-traits \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/libcore-rust/ \
 	trusty/user/base/lib/libcompiler_builtins-rust/ \
@@ -53,6 +55,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	vmm_free_region \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
+	Error \
 	lk_init_.* \
 
 MODULE_BINDGEN_ALLOW_VARS := \
@@ -60,15 +63,16 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
 	DEFAULT_STACK_SIZE \
-	ERR_.* \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
 
 MODULE_BINDGEN_FLAGS := \
+	--newtype-enum Error \
 	--newtype-enum lk_init_level \
 	--bitfield-enum lk_init_flags \
 	--no-prepend-enum-name \
+	--with-derive-custom Error=FromPrimitive \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
 
