@@ -35,6 +35,7 @@ mod sys {
     #![allow(unused)]
     #![allow(non_camel_case_types)]
     #![allow(non_upper_case_globals)]
+    use num_derive::FromPrimitive;
     include!(env!("BINDGEN_INC_FILE"));
 }
 
@@ -48,6 +49,7 @@ pub mod vmm;
 pub use sys::paddr_t;
 pub use sys::status_t;
 pub use sys::vaddr_t;
+pub use sys::Error;
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
