@@ -72,6 +72,22 @@ endif
 
 ARCH_OPTFLAGS := -O2
 
+# Set ARM64_BOOT_PROTOCOL to X0_MEMSIZE for platforms that pass the memory
+# size in x0 or to X0_DTB for platforms that pass a device tree in x0.
+ARM64_BOOT_PROTOCOL ?= X0_MEMSIZE
+GLOBAL_DEFINES += ARM64_BOOT_PROTOCOL_$(ARM64_BOOT_PROTOCOL)=1
+ARM64_BOOT_PROTOCOLS = X0_MEMSIZE X0_DTB
+
+ifneq ($(filter-out $(ARM64_BOOT_PROTOCOLS),$(ARM64_BOOT_PROTOCOL)),)
+$(error unrecognized ARM64_BOOT_PROTOCOL, $(ARM64_BOOT_PROTOCOL), not in [$(ARM64_BOOT_PROTOCOLS)])
+endif
+
+ifeq (X0_MEMSIZE,$(ARM64_BOOT_PROTOCOL))
+MODULE_DEPS += \
+	$(LKROOT)/lib/device_tree \
+
+endif
+
 # Set ARM_MERGE_FIQ_IRQ to remove separation between IRQs and FIQs. This is
 # for GICv3 or GICv4 when running in trustzone as the non-secure interrupts
 # will be delivered as FIQs instead of IRQs.
