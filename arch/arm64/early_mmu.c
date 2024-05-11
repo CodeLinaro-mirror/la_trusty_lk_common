@@ -29,6 +29,10 @@
 #include <panic.h>
 #include <sys/types.h>
 
+#if ARM64_BOOT_PROTOCOL_X0_DTB
+#include <lib/device_tree/libfdt_helpers.h>
+#endif
+
 static uint get_aspace_flags(void) {
     uint aspace_flags = ARCH_ASPACE_FLAG_KERNEL;
 
@@ -40,6 +44,9 @@ static uint get_aspace_flags(void) {
 
     return aspace_flags;
 }
+
+/* trampoline translation table */
+extern pte_t tt_trampoline[MMU_PAGE_TABLE_ENTRIES_IDENT];
 
 /* the main translation table */
 pte_t arm64_kernel_translation_table[MMU_KERNEL_PAGE_TABLE_ENTRIES_TOP]
@@ -88,7 +95,72 @@ void arch_mmu_map_early(vaddr_t vaddr,
     ASSERT(!ret);
 }
 
-void arm64_early_mmu_init(ulong ram_size, uintptr_t* relr_start,
+#if ARM64_BOOT_PROTOCOL_X0_MEMSIZE
+static inline void map_trampoline(paddr_t paddr, size_t size) {}
+
+ulong arm64_get_ram_size(ulong ram_size_or_dtb_addr, paddr_t kernel_paddr) {
+    return ram_size_or_dtb_addr;
+}
+#elif ARM64_BOOT_PROTOCOL_X0_DTB
+static void map_trampoline(paddr_t paddr, size_t size) {
+    paddr_t end = paddr + (size - 1);
+    paddr_t i = paddr >> MMU_IDENT_TOP_SHIFT;
+    paddr_t end_i = end >> MMU_IDENT_TOP_SHIFT;
+    pte_t attrs = arm64_tagging_supported() ? MMU_PTE_IDENT_FLAGS_TAGGED
+                                            : MMU_PTE_IDENT_FLAGS;
+
+    /*
+     * Remove MMU_PTE_IDENT_DESCRIPTOR since arm64_mmu_map_pt will select this
+     * on its own.
+     */
+    attrs &= ~MMU_PTE_IDENT_DESCRIPTOR;
+
+    for (; i <= end_i; i++) {
+        if (!tt_trampoline[i]) {
+            int ret = arm64_mmu_map_pt(
+                    i << MMU_IDENT_TOP_SHIFT, i << MMU_IDENT_TOP_SHIFT,
+                    i << MMU_IDENT_TOP_SHIFT, 1 << MMU_IDENT_TOP_SHIFT, attrs,
+                    MMU_IDENT_TOP_SHIFT, MMU_IDENT_PAGE_SIZE_SHIFT,
+                    tt_trampoline, MMU_ARM64_GLOBAL_ASID, false);
+            ASSERT(!ret);
+        }
+    }
+}
+
+ulong arm64_get_ram_size(ulong ram_size_or_dtb_addr, paddr_t kernel_paddr) {
+    const void *fdt = (const void *)ram_size_or_dtb_addr;
+    int offset;
+    paddr_t mem_base, mem_size;
+
+    /* Make sure device-tree is mapped */
+    map_trampoline(ram_size_or_dtb_addr, FDT_V1_SIZE);
+    if (fdt_magic(fdt) != FDT_MAGIC) {
+        panic("No device tree found at %p\n", fdt);
+    }
+    map_trampoline(ram_size_or_dtb_addr, fdt_totalsize(fdt));
+
+    offset = fdt_node_offset_by_prop_value(fdt, 0, "device_type", "memory", 7);
+    if (fdt_helper_get_reg(fdt, offset, 0, &mem_base, &mem_size)) {
+        panic("No memory node found in device tree\n");
+    }
+
+    if ((kernel_paddr >= mem_base) && (kernel_paddr - mem_base < mem_size)) {
+        /*
+         * TODO: Allow using memory below kernel base. For now subtract this
+         * from mem_size and ignore this memory.
+         */
+        return mem_size - (kernel_paddr - mem_base);
+    }
+
+    panic("kernel_paddr, 0x%" PRIxPADDR ", not in memory range: 0x%" PRIxPADDR
+          ", size 0x%" PRIxPADDR "\n",
+          kernel_paddr, mem_base, mem_size);
+}
+#else
+#error "Unknown ARM64_BOOT_PROTOCOL"
+#endif
+
+void arm64_early_mmu_init(ulong ram_size_or_dtb_addr, uintptr_t* relr_start,
                           uintptr_t* relr_end, paddr_t kernel_paddr) {
     const uintptr_t kernel_initial_vaddr = KERNEL_BASE + KERNEL_LOAD_OFFSET;
     uintptr_t virt_offset = kernel_initial_vaddr - kernel_paddr;
@@ -96,6 +168,11 @@ void arm64_early_mmu_init(ulong ram_size, uintptr_t* relr_start,
 
     /* Relocate the kernel to its physical address */
     relocate_kernel(relr_start, relr_end, kernel_initial_vaddr, kernel_paddr);
+
+    ulong ram_size = arm64_get_ram_size(ram_size_or_dtb_addr, kernel_paddr);
+
+    /* Map any ram not already mapped in trampoline page table */
+    map_trampoline(kernel_paddr, ram_size);
 
     vm_assign_initial_dynamic(kernel_paddr, ram_size);
     vaddr_t kernel_final_vaddr =
