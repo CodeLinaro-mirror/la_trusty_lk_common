@@ -82,7 +82,7 @@ ifneq ($(filter-out $(ARM64_BOOT_PROTOCOLS),$(ARM64_BOOT_PROTOCOL)),)
 $(error unrecognized ARM64_BOOT_PROTOCOL, $(ARM64_BOOT_PROTOCOL), not in [$(ARM64_BOOT_PROTOCOLS)])
 endif
 
-ifeq (X0_MEMSIZE,$(ARM64_BOOT_PROTOCOL))
+ifeq (X0_DTB,$(ARM64_BOOT_PROTOCOL))
 MODULE_DEPS += \
 	$(LKROOT)/lib/device_tree \
 
