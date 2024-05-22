@@ -112,12 +112,27 @@ _start:
     cmp     tmp, #MMU_PAGE_TABLE_ENTRIES_IDENT
     b.hs    platform_early_halt
 
+#if ARM64_BOOT_PROTOCOL_X0_MEMSIZE
     /*
-     * The physical address of last byte of the kernel image is (_start + x0 - 1),
-     * and we round that down to a multiple of 1<<MMU_IDENT_TOP_SHIFT
-     * to get the inclusive upper bound of the tt_trampoline range.
+     * The physical address of end of ram (exclusive) is (_start + x0).
      */
     add     index, index, x0
+#elif ARM64_BOOT_PROTOCOL_X0_DTB
+    /*
+     * The physical address if end of kernel (exclusive) that could be used
+     * before any dynamic memory allocations are made is &_end.
+     * (The rest will be mapped in arm64_early_mmu_init)
+     */
+    adrl    index, _end
+#else
+    #error Unknown ARM64_BOOT_PROTOCOL
+#endif
+    /*
+     * `index` is the first byte of memory after the kernel that we don't need
+     * mapped at this point. We subtract one and round that down to a multiple
+     * of 1<<MMU_IDENT_TOP_SHIFT to get the inclusive upper bound of the
+     * tt_trampoline range.
+     */
     sub     index, index, #1
     lsr     index, index, #MMU_IDENT_TOP_SHIFT
 
