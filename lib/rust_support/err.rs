@@ -22,6 +22,7 @@
  */
 
 use core::{fmt, num::NonZeroI32};
+use log::error;
 use num_traits::FromPrimitive;
 
 use crate::sys::Error;
@@ -33,7 +34,10 @@ impl Error {
         }
         match Error::try_from(NonZeroI32::new(e).unwrap()) {
             Ok(expected_err) => Err(expected_err),
-            Err(_conversion) => Err(Error::ERR_INVALID_ARGS),
+            Err(_conversion) => {
+                error!("don't know how to map {e} to Error");
+                Err(Error::ERR_INVALID_ARGS)
+            }
         }
     }
 }

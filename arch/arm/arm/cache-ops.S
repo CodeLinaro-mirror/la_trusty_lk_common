@@ -62,7 +62,7 @@ FUNCTION(arch_disable_cache)
     mcr     p15, 0, r12, c7, c5, 0      // invalidate icache
 
 .Ldone_disable:
-    msr     cpsr, r3
+    msr     cpsr_xc, r3
     bx      lr
 
 /* void arch_enable_cache(uint flags) */
@@ -94,7 +94,7 @@ FUNCTION(arch_enable_cache)
     mcr     p15, 0, r1, c1, c0, 0       // enable icache
 
 .Ldone_enable:
-    msr     cpsr, r3
+    msr     cpsr_xc, r3
     bx      lr
 
 #elif ARM_ISA_ARMV7
@@ -153,7 +153,7 @@ FUNCTION(arch_disable_cache)
     mov     r0, #0
     mcr     p15, 0, r0, c7, c5, 0       // invalidate icache to PoU
 
-    msr     cpsr, r8
+    msr     cpsr_xc, r8
     ldmfd   sp!, {r4-r11, pc}
 
 /* void arch_enable_cache(uint flags) */
@@ -202,7 +202,7 @@ FUNCTION(arch_enable_cache)
 
 .Ldone_enable:
     isb
-    msr     cpsr, r8
+    msr     cpsr_xc, r8
     ldmfd   sp!, {r4-r12, pc}
 
 // flush & invalidate cache routine, trashes r0-r6, r9-r11
