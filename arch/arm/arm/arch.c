@@ -438,7 +438,7 @@ void arch_enter_uspace(vaddr_t entry_point, vaddr_t user_stack_top, vaddr_t shad
     __asm__ volatile(
         "mov    r0, %[arg0];"
         "ldmia  %[ustack], { sp }^;"
-        "msr	spsr, %[spsr];"
+        "msr    spsr_fsxc, %[spsr];"
         "mov	sp, %[kstack];"
         "mov    lr, %[entry];"
         "mov    r1, #0;"
