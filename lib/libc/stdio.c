@@ -159,3 +159,10 @@ int vprintf(const char *fmt, va_list ap)
     return vfprintf(stdout, fmt, ap);
 #endif
 }
+
+#if LK_LIBC_IMPLEMENTATION_IS_LK
+int fflush(FILE *stream) {
+    /* nothing to flush; output streams aren't buffered */
+    return 0;
+}
+#endif

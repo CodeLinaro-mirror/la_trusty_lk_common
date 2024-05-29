@@ -396,6 +396,7 @@ SIZE := $(CLANG_BINDIR)/llvm-size
 NM := $(CLANG_BINDIR)/llvm-nm
 STRIP := $(CLANG_BINDIR)/llvm-strip
 RUSTC := $(RUST_BINDIR)/rustc
+CLIPPY_DRIVER := $(RUST_BINDIR)/clippy-driver
 
 # Save the toolchain paths in order to rebuild the world if they change. This is
 # needed to force a rebuild when changing compiler versions.
