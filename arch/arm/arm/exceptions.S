@@ -316,7 +316,7 @@ FUNCTION(arm_fiq)
      */
     sub     lr, #4
     orr     r8, #(1<<6)
-    msr     spsr, r8
+    msr     spsr_c, r8
     eret
 #else
     save_offset #4
