@@ -4,5 +4,7 @@
 #include <kernel/vm.h>
 #include <lk/init.h>
 #include <panic.h>
+#include <stdio.h>
+#include <streams.h> /* stubs for stdin, stdout, stderr */
 
 #include "error.h"

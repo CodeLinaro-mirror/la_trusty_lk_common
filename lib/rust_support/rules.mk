@@ -36,13 +36,20 @@ MODULE_ADD_IMPLICIT_DEPS := false
 MODULE_DEPS := \
 	external/rust/crates/num-derive \
 	external/rust/crates/num-traits \
+	external/rust/crates/log \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/libcore-rust/ \
 	trusty/user/base/lib/libcompiler_builtins-rust/ \
 	trusty/user/base/lib/trusty-std \
+	$(LOCAL_DIR)/wrappers \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
+	fflush \
+	fputs \
+	lk_stdin \
+	lk_stdout \
+	lk_stderr \
 	mutex_acquire_timeout \
 	mutex_destroy \
 	mutex_init \
@@ -63,6 +70,7 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
 	DEFAULT_STACK_SIZE \
+	FILE \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
