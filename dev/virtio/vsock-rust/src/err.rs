@@ -21,44 +21,43 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Rust support library for the Trusty kernel
+use core::num::NonZeroI32;
+use virtio_drivers::transport::pci::VirtioPciError;
 
-#![no_std]
-#![feature(cfg_version)]
-// C string literals were stabilized in Rust 1.77
-#![cfg_attr(not(version("1.77")), feature(c_str_literals))]
-#![deny(unsafe_op_in_unsafe_fn)]
+use rust_support::Error as LkError;
+use virtio_drivers::Error as VirtioError;
 
-use alloc::format;
-use core::ffi::CStr;
-use core::panic::PanicInfo;
-
-mod sys {
-    #![allow(unused)]
-    #![allow(non_camel_case_types)]
-    #![allow(non_upper_case_globals)]
-    use num_derive::FromPrimitive;
-    include!(env!("BINDGEN_INC_FILE"));
+pub enum Error {
+    Pci(VirtioPciError),
+    Virtio(VirtioError),
+    Lk(LkError),
 }
 
-pub mod err;
-pub mod init;
-pub mod log;
-pub mod mmu;
-pub mod sync;
-pub mod thread;
-pub mod vmm;
+impl From<VirtioPciError> for Error {
+    fn from(e: VirtioPciError) -> Self {
+        Self::Pci(e)
+    }
+}
 
-pub use sys::paddr_t;
-pub use sys::status_t;
-pub use sys::vaddr_t;
-pub use sys::Error;
+impl From<VirtioError> for Error {
+    fn from(e: VirtioError) -> Self {
+        Self::Virtio(e)
+    }
+}
 
-#[panic_handler]
-fn handle_panic(info: &PanicInfo) -> ! {
-    let panic_message = format!("{info}\0");
-    let panic_message_c = CStr::from_bytes_with_nul(panic_message.as_bytes())
-        .expect("Unexpected null byte in panic message");
-    // SAFETY: Calling C function with string pointers that outlive the call
-    unsafe { sys::_panic(c"Rust in Trusty kernel %s\n".as_ptr(), panic_message_c.as_ptr()) }
+impl From<LkError> for Error {
+    fn from(e: LkError) -> Self {
+        Self::Lk(e)
+    }
+}
+
+impl Error {
+    pub fn into_c(self) -> i32 {
+        match self {
+            Self::Pci(_) => rust_support::Error::ERR_GENERIC,
+            Self::Virtio(_) => rust_support::Error::ERR_GENERIC,
+            Self::Lk(e) => e,
+        }
+        .into()
+    }
 }
