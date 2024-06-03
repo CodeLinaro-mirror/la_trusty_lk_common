@@ -8,6 +8,7 @@ MODULE_LIBRARY_DEPS := \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/trusty-std \
 	external/rust/crates/lazy_static \
+	external/rust/crates/log \
 	external/rust/crates/static_assertions \
 	external/rust/crates/virtio-drivers \
 
