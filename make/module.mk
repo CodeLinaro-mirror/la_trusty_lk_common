@@ -244,10 +244,18 @@ MODULE_ALL_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODU
 ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 
 # In userspace, MODULE_ADD_IMPLICIT_DEPS adds std.
-# In the kernel, it adds core and compiler_builtins.
+# In the kernel, it adds core, compiler_builtins and
+# lib/rust_support (except for external crates).
 MODULE_ALL_DEPS += \
 	trusty/user/base/lib/libcore-rust/ \
 	trusty/user/base/lib/libcompiler_builtins-rust/ \
+
+# rust_support depends on some external crates. We cannot
+# add it as an implicit dependency to any of them because
+# that would create a circular dependency.
+ifeq ($(filter external/rust/crates/%,$(MODULE)),)
+MODULE_ALL_DEPS += $(LKROOT)/lib/rust_support
+endif
 
 endif
 
@@ -346,6 +354,13 @@ $(MODULE_RSOBJS): MODULE := $(MODULE)
 $(MODULE_RSOBJS): $(MODULE_RSSRC) $(MODULE_SRCDEPS) $(MODULE_EXTRA_OBJECTS) $(MODULE_LIBRARIES) $(addsuffix .d,$(MODULE_RSOBJS))
 	@$(MKDIR)
 	@$(call ECHO,$(MODULE),compiling rust module,$<)
+ifeq ($(call TOBOOL,$(MODULE_RUST_USE_CLIPPY)),true)
+	$(NOECHO) set -e ; \
+		TEMP_CLIPPY_DIR=$$(mktemp -d) ;\
+		mkdir -p $(dir $$TEMP_CLIPPY_DIR/$@) ;\
+		$(MODULE_RUST_ENV) $(CLIPPY_DRIVER) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS) $< -o $$TEMP_CLIPPY_DIR/$@ ;\
+		rm -rf $$TEMP_CLIPPY_DIR
+endif
 	$(NOECHO)$(MODULE_RUST_ENV) $(RUSTC) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS) $< --emit "dep-info=$@.d" -o $@
 	@$(call ECHO_DONE_SILENT,$(MODULE),compiling rust module,$<)
 
@@ -428,6 +443,7 @@ MODULE_DISABLE_STACK_PROTECTOR :=
 MODULE_DISABLE_SCS :=
 MODULE_RSSRC :=
 MODULE_IS_RUST :=
+MODULE_RUST_USE_CLIPPY :=
 MODULE_RSOBJS :=
 MODULE_RUST_EDITION :=
 MODULE_RUSTDOC_OBJECT :=

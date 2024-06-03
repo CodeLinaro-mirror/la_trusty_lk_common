@@ -80,12 +80,18 @@ static bool mmu_flags_to_pte_attr(const uint aspace_flags, const uint flags, pte
 
     DEBUG_ASSERT((aspace_flags & ~ARCH_ASPACE_FLAG_ALL) == 0);
 
+    /* Enforce that executable mappings are not also writable */
+    if ((flags & (ARCH_MMU_FLAG_PERM_RO | ARCH_MMU_FLAG_PERM_NO_EXECUTE)) == 0) {
+            return false;
+    }
+
     if (flags & ARCH_MMU_FLAG_TAGGED) {
         if ((flags & ARCH_MMU_FLAG_CACHE_MASK) & ~ARCH_MMU_FLAG_CACHED) {
             /* only normal memory can be tagged */
             return false;
         }
     }
+
     switch (flags & ARCH_MMU_FLAG_CACHE_MASK) {
         case ARCH_MMU_FLAG_CACHED:
             if (flags & ARCH_MMU_FLAG_TAGGED) {

@@ -30,23 +30,57 @@ MODULE_CRATE_NAME := rust_support
 MODULE_SRCS := \
 	$(LOCAL_DIR)/lib.rs \
 
+# Don't make this module depend on itself.
+MODULE_ADD_IMPLICIT_DEPS := false
+
 MODULE_DEPS := \
+	external/rust/crates/num-derive \
+	external/rust/crates/num-traits \
+	external/rust/crates/log \
 	trusty/user/base/lib/liballoc-rust \
+	trusty/user/base/lib/libcore-rust/ \
+	trusty/user/base/lib/libcompiler_builtins-rust/ \
 	trusty/user/base/lib/trusty-std \
+	$(LOCAL_DIR)/wrappers \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
+	fflush \
+	fputs \
+	lk_stdin \
+	lk_stdout \
+	lk_stderr \
+	mutex_acquire_timeout \
+	mutex_destroy \
+	mutex_init \
+	mutex_release \
+	thread_create \
+	thread_resume \
+	vaddr_to_paddr \
 	vmm_alloc_physical_etc \
 	vmm_alloc_contiguous \
 	vmm_free_region \
-	vaddr_to_paddr \
+
+MODULE_BINDGEN_ALLOW_TYPES := \
+	Error \
+	lk_init_.* \
 
 MODULE_BINDGEN_ALLOW_VARS := \
+	.*_PRIORITY \
+	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
-	ERR_.* \
+	DEFAULT_STACK_SIZE \
+	FILE \
+	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
-	_kernel_aspace \
+
+MODULE_BINDGEN_FLAGS := \
+	--newtype-enum Error \
+	--newtype-enum lk_init_level \
+	--bitfield-enum lk_init_flags \
+	--no-prepend-enum-name \
+	--with-derive-custom Error=FromPrimitive \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
 

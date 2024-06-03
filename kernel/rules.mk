@@ -5,7 +5,6 @@ MODULE := $(LOCAL_DIR)
 MODULE_DEPS := \
 	lib/debug \
 	lib/heap \
-	lib/rust_support \
 	trusty/kernel/lib/rand
 
 ifeq ($(LK_LIBC_IMPLEMENTATION),lk)

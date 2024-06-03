@@ -79,6 +79,16 @@ static inline void bst_root_initialize(struct bst_root *root) {
 typedef int (*bst_compare_t)(struct bst_node *a, struct bst_node *b);
 
 /**
+ * bst_compare_key_t - Compare node to key function provided by caller
+ * @a: First node to compare
+ * @b: Opaque key pointer for second node to compare
+ *
+ * Return: a positive number if @b should be after @a, 0 if @b is a match for
+ * @a, a negative otherwise.
+ */
+typedef int (*bst_compare_key_t)(const struct bst_node *a, const void *b);
+
+/**
  * bst_search - Find a node in a binary search tree.
  * @root:       Tree to search
  * @node:       Dummy node containing key to search for.
@@ -111,7 +121,40 @@ static inline struct bst_node *bst_search(const struct bst_root *root,
 }
 
 /**
- * bst_search - Find an item in a binary search tree.
+ * bst_search_key - Find a node in a binary search tree.
+ * @root:           Tree to search
+ * @key:            Pointer to a key to search for.
+ * @compare_key:    Compare function. See &typedef bst_compare_key_t.
+ *
+ * Find a node in a binary search tree. Use bst_search_key_type instead to get a
+ * pointer to the struct that contains @node.
+ *
+ * Note that if there are multiple matching nodes in the tree, the node returned
+ * may not be the leftmost matching node.
+ *
+ * Return: Node in @root matching @node, or %NULL if no matching node is found.
+ */
+static inline struct bst_node *bst_search_key(const struct bst_root *root,
+                                              const void *key,
+                                              bst_compare_key_t compare_key) {
+    DEBUG_ASSERT(root);
+    DEBUG_ASSERT(key);
+    DEBUG_ASSERT(compare_key);
+
+    struct bst_node *tree_node = root->root;
+    while (tree_node) {
+        int cmp = compare_key(tree_node, key);
+        if (!cmp) {
+            return tree_node;
+        }
+        tree_node = tree_node->child[cmp > 0];
+    }
+    return NULL;
+}
+
+
+/**
+ * bst_search_type - Find an item in a binary search tree.
  * @root:       Tree to search
  * @item:       Dummy item containing key to search for.
  * @compare:    Compare function.
@@ -120,9 +163,24 @@ static inline struct bst_node *bst_search(const struct bst_root *root,
  *
  * Return: Item in @root matching @item, or %NULL if no matching node is found.
  */
-#define bst_search_type(root, item, compare, type, member) \
-    containerof_null_safe(bst_search(root, &(item)->member, compare), type, \
-                          member)
+#define bst_search_type(root, item, compare, type, member) ({ \
+    type *__item = (item); \
+    containerof_null_safe(bst_search(root, &__item->member, compare), type, \
+                          member); \
+})
+
+/**
+ * bst_search_key_type - Find an item in a binary search tree.
+ * @root:           Tree to search
+ * @key:            Pointer to key to search for.
+ * @compare_key:    Compare function.
+ * @type:           Type to return.
+ * @member:         Name of struct bst_node embedded in @type.
+ *
+ * Return: Item in @root matching @key, or %NULL if no matching node is found.
+ */
+#define bst_search_key_type(root, key, compare_key, type, member) \
+    containerof_null_safe(bst_search_key(root, key, compare_key), type, member);
 
 /* Internal helper. Don't call directly */
 void bst_update_rank_insert(struct bst_root *root, struct bst_node *node);
