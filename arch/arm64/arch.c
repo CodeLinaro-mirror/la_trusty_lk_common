@@ -87,7 +87,7 @@ void arch_init(void)
     /* flush the release of the lock, since the secondary cpus are running without cache on */
     arch_clean_cache_range((addr_t)&arm_boot_cpu_lock, sizeof(arm_boot_cpu_lock));
 #endif
-    dprintf(INFO, "mte is %savailable\n", arch_tagging_enabled() ? "" : "not ");
+    dprintf(SPEW, "mte is %savailable\n", arch_tagging_enabled() ? "" : "not ");
 }
 
 void arch_quiesce(void)

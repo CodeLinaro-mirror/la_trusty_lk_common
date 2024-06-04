@@ -43,6 +43,7 @@ mod sys {
 
 pub mod err;
 pub mod init;
+pub mod ipc;
 pub mod log;
 pub mod mmu;
 pub mod sync;
