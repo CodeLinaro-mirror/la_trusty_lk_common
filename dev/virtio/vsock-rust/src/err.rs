@@ -21,7 +21,6 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use core::num::NonZeroI32;
 use virtio_drivers::transport::pci::VirtioPciError;
 
 use rust_support::Error as LkError;
