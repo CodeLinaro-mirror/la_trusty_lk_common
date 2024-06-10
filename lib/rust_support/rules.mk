@@ -38,8 +38,8 @@ MODULE_DEPS := \
 	external/rust/crates/num-traits \
 	external/rust/crates/log \
 	trusty/user/base/lib/liballoc-rust \
-	trusty/user/base/lib/libcore-rust/ \
-	trusty/user/base/lib/libcompiler_builtins-rust/ \
+	trusty/user/base/lib/libcompiler_builtins-rust \
+	trusty/user/base/lib/libcore-rust \
 	trusty/user/base/lib/trusty-std \
 	$(LOCAL_DIR)/wrappers \
 
@@ -47,6 +47,11 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
 	fflush \
 	fputs \
+	ipc_get_msg \
+	ipc_port_connect_async \
+	ipc_put_msg \
+	ipc_read_msg \
+	ipc_send_msg \
 	lk_stdin \
 	lk_stdout \
 	lk_stderr \
@@ -63,7 +68,10 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
+	iovec_kern \
+	ipc_msg_.* \
 	lk_init_.* \
+	trusty_ipc_event_type \
 
 MODULE_BINDGEN_ALLOW_VARS := \
 	.*_PRIORITY \
@@ -71,9 +79,12 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	ARCH_MMU_FLAG_.* \
 	DEFAULT_STACK_SIZE \
 	FILE \
+	IPC_CONNECT_WAIT_FOR_PORT \
+	IPC_HANDLE_POLL_.* \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
+	zero_uuid \
 
 MODULE_BINDGEN_FLAGS := \
 	--newtype-enum Error \
