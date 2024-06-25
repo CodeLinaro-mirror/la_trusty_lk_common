@@ -42,6 +42,8 @@ mod sys {
 }
 
 pub mod err;
+pub mod handle;
+pub mod handle_set;
 pub mod init;
 pub mod ipc;
 pub mod log;
@@ -54,6 +56,12 @@ pub use sys::paddr_t;
 pub use sys::status_t;
 pub use sys::vaddr_t;
 pub use sys::Error;
+
+// NOTE: `INFINITE_TIME` is defined in `lk/types.h` as `UINT32_MAX`,
+// which in turn is defined as `UINT_MAX`, which is not recognized
+// by bindgen according to the bug below so we use `u32::MAX`.
+// See <https://github.com/rust-lang/rust-bindgen/issues/1636>.
+pub const INFINITE_TIME: u32 = u32::MAX;
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
