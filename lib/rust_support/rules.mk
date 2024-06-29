@@ -43,6 +43,10 @@ MODULE_DEPS := \
 	trusty/user/base/lib/trusty-std \
 	$(LOCAL_DIR)/wrappers \
 
+ifeq (true,$(call TOBOOL,$(UBSAN_ENABLED)))
+UBSAN_ENABLE += -fsanitize-blacklist=$(LOCALDIR)/exemptlist
+endif
+
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
 	fflush \
@@ -92,6 +96,7 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	FILE \
 	IPC_CONNECT_WAIT_FOR_PORT \
 	IPC_HANDLE_POLL_.* \
+	IPC_PORT_PATH_MAX \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
