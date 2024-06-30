@@ -29,6 +29,7 @@ use core::ops::DerefMut;
 use alloc::boxed::Box;
 
 use crate::Error;
+use crate::INFINITE_TIME;
 
 use crate::sys::mutex_acquire_timeout;
 use crate::sys::mutex_destroy;
@@ -36,12 +37,6 @@ use crate::sys::mutex_init;
 use crate::sys::mutex_release;
 use crate::sys::mutex_t;
 use crate::sys::status_t;
-
-// TODO: `INFINITE_TIME` is defined in `lk/types.h` as `UINT32_MAX`,
-// which in turn is defined as `UINT_MAX`, which is not recognized
-// by bindgen according to the bug below so we use `u32::MAX`.
-// See <https://github.com/rust-lang/rust-bindgen/issues/1636>.
-const INFINITE_TIME: u32 = u32::MAX;
 
 /// Try to acquire the mutex with a timeout value.
 ///
