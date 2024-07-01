@@ -26,6 +26,7 @@ use virtio_drivers::transport::pci::VirtioPciError;
 use rust_support::Error as LkError;
 use virtio_drivers::Error as VirtioError;
 
+#[derive(Debug)]
 pub enum Error {
     Pci(VirtioPciError),
     Virtio(VirtioError),
