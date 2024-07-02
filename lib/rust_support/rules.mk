@@ -43,10 +43,6 @@ MODULE_DEPS := \
 	trusty/user/base/lib/trusty-std \
 	$(LOCAL_DIR)/wrappers \
 
-ifeq (true,$(call TOBOOL,$(UBSAN_ENABLED)))
-UBSAN_ENABLE += -fsanitize-blacklist=$(LOCALDIR)/exemptlist
-endif
-
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
 	fflush \
