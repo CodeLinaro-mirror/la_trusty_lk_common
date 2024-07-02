@@ -38,6 +38,9 @@ rest-of-words = $(wordlist 2,$(words $1),$1)
 pairmap = $(and $(strip $2),$(strip $3),\
 	$(call $1,$(firstword $2),$(firstword $3)) $(call pairmap,$1,$(call rest-of-words,$2),$(call rest-of-words,$3)))
 
+# Normalize rust cfg, Uppercase everything and swap (`-` and `/` with `_`)
+normalize-rust-cfg = $(subst /,_,$(subst -,_,$(shell echo $1 | tr '[:lower:]' '[:upper:]')))
+
 # test if two files are different, replacing the first
 # with the second if so
 # args: $1 - temporary file to test
