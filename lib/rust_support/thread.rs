@@ -31,11 +31,14 @@ use core::fmt::Formatter;
 use core::ops::Add;
 use core::ops::Sub;
 use core::ptr::NonNull;
+use core::time::Duration;
 
 use crate::Error;
 
+use crate::sys::lk_time_ns_t;
 use crate::sys::thread_create;
 use crate::sys::thread_resume;
+use crate::sys::thread_sleep_ns;
 use crate::sys::thread_t;
 use crate::sys::DEFAULT_PRIORITY;
 use crate::sys::DPC_PRIORITY;
@@ -47,6 +50,12 @@ use crate::sys::LOW_PRIORITY;
 use crate::sys::NUM_PRIORITIES;
 
 use crate::sys::DEFAULT_STACK_SIZE;
+
+pub fn sleep(dur: Duration) {
+    let dur_ns: lk_time_ns_t = dur.as_nanos().try_into().expect("could not convert duration to ns");
+    // Safety: trivially safe
+    unsafe { thread_sleep_ns(dur_ns) };
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Priority(c_int);
