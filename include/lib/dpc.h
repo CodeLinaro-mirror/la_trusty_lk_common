@@ -109,7 +109,8 @@ void dpc_work_init(struct dpc* work, dpc_callback cb, uint32_t flags);
 int dpc_enqueue_work(struct dpc_queue* q, struct dpc* work, bool resched);
 
 /**
- * dpc_queue_start(): initialize and start DPC queue
+ * dpc_queue_create(): initialize and start a DPC queue
+ * @pq: Pointer to be filled with a pointer to the new queue structure
  * @name: DPC queue name
  * @thread_priority: a priority of DPC queue handling thread
  * @thread_stack_size: stack size of DPC queue handling thread
@@ -117,7 +118,7 @@ int dpc_enqueue_work(struct dpc_queue* q, struct dpc* work, bool resched);
  *
  * Return: NO_ERROR on success, a negative error code otherwise
  */
-status_t dpc_queue_start(struct dpc_queue* q,
+status_t dpc_queue_create(struct dpc_queue** pq,
                          const char* name,
                          int thread_priority,
                          size_t thread_stack_size);
