@@ -195,7 +195,7 @@ $(MODULE_CONFIG): configheader
 
 GENERATED += $(MODULE_CONFIG)
 
-MODULE_COMPILEFLAGS += --include $(MODULE_CONFIG)
+MODULE_COMPILEFLAGS += --include=$(MODULE_CONFIG)
 
 MODULE_SRCDEPS += $(MODULE_CONFIG)
 
@@ -232,6 +232,11 @@ ifeq ($(MODULE_CRATE_NAME),)
 $(error rust module $(MODULE) does not set MODULE_CRATE_NAME)
 endif
 
+# Generate Rust bindings with bindgen if requested
+ifneq ($(strip $(MODULE_BINDGEN_SRC_HEADER)),)
+include make/bindgen.mk
+endif
+
 # library and module deps are set mutually exclusively, so it's safe to simply
 # concatenate them to use whichever is set
 MODULE_ALL_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODULE_DEPS)
@@ -239,10 +244,18 @@ MODULE_ALL_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODU
 ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 
 # In userspace, MODULE_ADD_IMPLICIT_DEPS adds std.
-# In the kernel, it adds core and compiler_builtins.
+# In the kernel, it adds core, compiler_builtins and
+# lib/rust_support (except for external crates).
 MODULE_ALL_DEPS += \
 	trusty/user/base/lib/libcore-rust/ \
 	trusty/user/base/lib/libcompiler_builtins-rust/ \
+
+# rust_support depends on some external crates. We cannot
+# add it as an implicit dependency to any of them because
+# that would create a circular dependency.
+ifeq ($(filter external/rust/crates/%,$(MODULE)),)
+MODULE_ALL_DEPS += $(LKROOT)/lib/rust_support
+endif
 
 endif
 
@@ -309,6 +322,10 @@ MODULE_LIBRARIES += $(MODULE_KERNEL_RUST_LIBS) $(MODULE_KERNEL_RUST_HOST_LIBS)
 # determine MODULE_RSOBJS and MODULE_RUST_CRATE_TYPES for rust kernel modules
 include make/rust.mk
 
+# save extra information for constructing kernel rust-project.json in rust-toplevel.mk
+MODULE_$(MODULE_RUST_STEM)_RUST_SRC := $(filter %.rs,$(MODULE_SRCS))
+MODULE_$(MODULE_RUST_STEM)_RUST_EDITION := $(MODULE_RUST_EDITION)
+
 # only allow rlibs because we build rlibs, then link them all into one .a
 ifneq ($(MODULE_RUST_CRATE_TYPES),rlib)
 $(error rust crates for the kernel must be built as rlibs only, but $(MODULE) builds $(MODULE_RUST_CRATE_TYPES))
@@ -337,6 +354,13 @@ $(MODULE_RSOBJS): MODULE := $(MODULE)
 $(MODULE_RSOBJS): $(MODULE_RSSRC) $(MODULE_SRCDEPS) $(MODULE_EXTRA_OBJECTS) $(MODULE_LIBRARIES) $(addsuffix .d,$(MODULE_RSOBJS))
 	@$(MKDIR)
 	@$(call ECHO,$(MODULE),compiling rust module,$<)
+ifeq ($(call TOBOOL,$(MODULE_RUST_USE_CLIPPY)),true)
+	$(NOECHO) set -e ; \
+		TEMP_CLIPPY_DIR=$$(mktemp -d) ;\
+		mkdir -p $(dir $$TEMP_CLIPPY_DIR/$@) ;\
+		$(MODULE_RUST_ENV) $(CLIPPY_DRIVER) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS) $< -o $$TEMP_CLIPPY_DIR/$@ ;\
+		rm -rf $$TEMP_CLIPPY_DIR
+endif
 	$(NOECHO)$(MODULE_RUST_ENV) $(RUSTC) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS) $< --emit "dep-info=$@.d" -o $@
 	@$(call ECHO_DONE_SILENT,$(MODULE),compiling rust module,$<)
 
@@ -419,12 +443,14 @@ MODULE_DISABLE_STACK_PROTECTOR :=
 MODULE_DISABLE_SCS :=
 MODULE_RSSRC :=
 MODULE_IS_RUST :=
+MODULE_RUST_USE_CLIPPY :=
 MODULE_RSOBJS :=
 MODULE_RUST_EDITION :=
 MODULE_RUSTDOC_OBJECT :=
 MODULE_RUSTDOCFLAGS :=
 MODULE_ALL_DEPS :=
 MODULE_RUST_DEPS :=
+MODULE_RUST_STEM :=
 MODULE_SKIP_DOCS :=
 MODULE_ADD_IMPLICIT_DEPS := true
 

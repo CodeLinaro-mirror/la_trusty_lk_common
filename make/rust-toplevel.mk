@@ -39,14 +39,13 @@ WRAPPER_RUSTFLAGS += $(addprefix --extern ,$(WRAPPER_RUST_EXTERN_PATHS))
 # generate a .rs source file for the wrapper crate
 # we must not explicitly "extern crate" core or compiler_builtins
 CRATES_TO_IMPORT := $(filter-out core compiler_builtins,$(ALL_KERNEL_HOST_CRATE_STEMS) $(ALLMODULE_CRATE_STEMS_SORTED))
-RUST_WRAPPER_SRC := \#![feature(panic_abort)] \#![no_std] \
-    $(foreach crate, $(CRATES_TO_IMPORT), extern crate $(subst .,_,$(crate));) \
-    \#[panic_handler] fn handle_panic(_: &core::panic::PanicInfo) -> ! {loop {}}
+RUST_WRAPPER_SRC := \#![no_std] \
+    $(foreach crate, $(CRATES_TO_IMPORT), extern crate $(subst .,_,$(crate));)
 
 RUST_WRAPPER := $(BUILDDIR)/lk-crates.rs
 
 $(RUST_WRAPPER): RUST_WRAPPER_SRC := $(RUST_WRAPPER_SRC)
-$(RUST_WRAPPER): $(SORTED_CRATE_NAMES_FILE)
+$(RUST_WRAPPER): $(SORTED_CRATE_STEMS_FILE)
 	@$(MKDIR)
 	echo "$(RUST_WRAPPER_SRC)" > "$@"
 
@@ -63,9 +62,36 @@ ifneq ($(ALLMODULE_CRATE_STEMS),)
 EXTRA_OBJS += $(RUST_WRAPPER_OBJ)
 endif
 
+CRATE_COUNT := 0
+
+$(foreach crate,$(ALLMODULE_CRATE_STEMS_SORTED),\
+	$(eval RUST_TOPLEVEL_$(crate)_CRATE_INDEX := $(CRATE_COUNT))\
+	$(eval CRATE_COUNT := $(shell echo $$(($(CRATE_COUNT)+1))))\
+)
+
+define CRATE_CONFIG =
+{
+	"display_name": "$(crate)",
+	"root_module": "$(filter %.rs,$(MODULE_$(crate)_RUST_SRC))",
+	"edition": "$(MODULE_$(crate)_RUST_EDITION)",
+	"deps": [
+		$(call STRIP_TRAILING_COMMA,$(foreach dep,$(sort $(MODULE_$(crate)_CRATE_DEPS)),\
+				{"name": "$(dep)"$(COMMA) "crate": $(RUST_TOPLEVEL_$(dep)_CRATE_INDEX)}$(COMMA)))
+	]
+},
+
+endef
+
+RUST_ANALYZER_CONTENTS := $(foreach crate,$(ALLMODULE_CRATE_STEMS_SORTED),$(CRATE_CONFIG))
+
+include make/rust-project-json.mk
+
 # restore BUILDDIR
 BUILDDIR := $(OLD_BUILDDIR)
 
+CRATE_COUNT :=
+CRATE_CONFIG :=
+RUST_ANALYZER_CONTENTS :=
 RUST_WRAPPER_SRC :=
 WRAPPER_RUSTFLAGS :=
 WRAPPER_RUST_EXTERN_PATHS :=

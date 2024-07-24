@@ -282,6 +282,11 @@ GLOBAL_DEFINES += \
 	LK_LOGLEVEL=$(LOG_LEVEL_KERNEL) \
 	TLOG_LVL_DEFAULT=$$(($(LOG_LEVEL_USER)+2)) \
 
+# add some automatic rust configuration flags
+GLOBAL_USER_RUSTFLAGS += \
+	--cfg 'PLAT_$(call normalize-rust-cfg,$(PLATFORM))' \
+	--cfg 'TARGET_$(call normalize-rust-cfg,$(TARGET))'
+
 GLOBAL_USER_INCLUDES += $(addsuffix /arch/$(ARCH)/include,$(LKINC))
 
 # test build?
@@ -396,6 +401,7 @@ SIZE := $(CLANG_BINDIR)/llvm-size
 NM := $(CLANG_BINDIR)/llvm-nm
 STRIP := $(CLANG_BINDIR)/llvm-strip
 RUSTC := $(RUST_BINDIR)/rustc
+CLIPPY_DRIVER := $(RUST_BINDIR)/clippy-driver
 
 # Save the toolchain paths in order to rebuild the world if they change. This is
 # needed to force a rebuild when changing compiler versions.

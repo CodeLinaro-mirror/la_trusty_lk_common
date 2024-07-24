@@ -1093,7 +1093,7 @@ status_t vmm_alloc_physical_etc(vmm_aspace_t* aspace,
                                 size_t size,
                                 void** ptr,
                                 uint8_t align_log2,
-                                paddr_t* paddr,
+                                const paddr_t* paddr,
                                 uint paddr_count,
                                 uint vmm_flags,
                                 uint arch_mmu_flags) {
@@ -1555,6 +1555,7 @@ status_t vmm_create_aspace_with_quota(vmm_aspace_t** _aspace,
         struct res_group* new_res_group = res_group_create(num_pages,
                                               &aspace->quota_res_group_ref);
         if (!new_res_group) {
+            free(aspace);
             return ERR_NO_MEMORY;
         }
         aspace->quota_res_group = new_res_group;
@@ -1715,7 +1716,8 @@ static int cmd_vmm(int argc, const cmd_args* argv) {
         void* ptr = (void*)0x99;
         status_t err = vmm_alloc_physical(test_aspace, "physical test",
                                           argv[3].u, &ptr, argv[4].u, argv[2].u,
-                                          0, ARCH_MMU_FLAG_UNCACHED_DEVICE);
+                                          0, ARCH_MMU_FLAG_UNCACHED_DEVICE |
+                                              ARCH_MMU_FLAG_PERM_NO_EXECUTE);
         printf("vmm_alloc_physical returns %d, ptr %p\n", err, ptr);
     } else if (!strcmp(argv[1].str, "alloc_contig")) {
         if (argc < 4)

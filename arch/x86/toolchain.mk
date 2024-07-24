@@ -1,3 +1,5 @@
+LOCAL_DIR := $(GET_LOCAL_DIR)
+
 # x86-32 toolchain
 ifeq ($(SUBARCH),x86-32)
 ifndef ARCH_x86_TOOLCHAIN_INCLUDED
@@ -26,7 +28,13 @@ ARCH_x86_COMPILEFLAGS += -target x86_64-$(CLANG_X86_64_TARGET_SYS)-$(CLANG_X86_6
 
 # Set Rust target to match clang target
 ARCH_x86_SUPPORTS_RUST := true
+ifeq (true,$(call TOBOOL,$(TRUSTY_USERSPACE)))
 ARCH_x86_RUSTFLAGS := --target=x86_64-unknown-trusty
+else
+# Use custom toolchain file that disables hardware floating point
+ARCH_x86_RUSTFLAGS := --target=$(LOCAL_DIR)/x86_64-unknown-trusty-kernel.json
+endif
+
 endif
 endif
 

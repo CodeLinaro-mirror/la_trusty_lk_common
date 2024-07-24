@@ -64,6 +64,9 @@
 #define SCTLR_EL1_ENDA (1llu << 27u)
 #define SCTLR_EL1_ENDB (1llu << 13u)
 
+/* WXN - Writable implies Execute Never */
+#define SCTLR_EL1_WXN (1llu << 19u)
+
 /* PAN */
 #define SCTLR_EL1_SPAN_SHIFT 23u    /* SPAN is from FEAT_PAN1 */
 #define SCTLR_EL1_EPAN_SHIFT 57u    /* EPAN is from FEAT_PAN3 */

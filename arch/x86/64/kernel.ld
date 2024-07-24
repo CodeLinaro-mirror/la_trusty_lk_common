@@ -48,11 +48,13 @@ SECTIONS
 
     .ctors : ALIGN(4) {
         __ctor_list = .;
+        KEEP(*(SORT_BY_INIT_PRIORITY(.ctors.*) SORT_BY_INIT_PRIORITY(.init_array.*)))
         KEEP(*(.ctors .init_array))
         __ctor_end = .;
     }
     .dtors : ALIGN(4) {
         __dtor_list = .;
+        KEEP(*(SORT_BY_INIT_PRIORITY(.dtors.*) SORT_BY_INIT_PRIORITY(.fini_array.*)))
         KEEP(*(.dtors .fini_array))
         __dtor_end = .;
     }
