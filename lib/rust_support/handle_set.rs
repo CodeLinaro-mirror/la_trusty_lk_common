@@ -100,3 +100,7 @@ impl Drop for HandleSet {
 // Safety: the kernel synchronizes operations on handle sets so they can be passed
 // from one thread to another
 unsafe impl Send for HandleSet {}
+
+// Safety: the kernel synchronizes operations on handle sets so it is safe to share
+// handle sets between threads
+unsafe impl Sync for HandleSet {}
