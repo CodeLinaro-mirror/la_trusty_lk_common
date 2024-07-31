@@ -100,7 +100,7 @@ static int dpc_thread_routine(void* arg) {
     return 0;
 }
 
-status_t dpc_queue_start(struct dpc_queue* q,
+static status_t dpc_queue_start(struct dpc_queue* q,
                          const char* name,
                          int thread_priority,
                          size_t thread_stack_size) {
@@ -135,3 +135,24 @@ static void dpc_init(uint level) {
 }
 
 LK_INIT_HOOK(libdpc, &dpc_init, LK_INIT_LEVEL_THREADING);
+
+status_t dpc_queue_create(struct dpc_queue** pq,
+                         const char* name,
+                         int thread_priority,
+                         size_t thread_stack_size) {
+    status_t rc;
+
+    DEBUG_ASSERT(pq);
+
+    *pq = calloc(sizeof(struct dpc_queue), 1);
+    if (!*pq)
+        return ERR_NO_MEMORY;
+
+    rc = dpc_queue_start(*pq, name, thread_priority, thread_stack_size);
+    if (rc) {
+        free(*pq);
+        *pq = NULL;
+    }
+
+    return rc;
+}
