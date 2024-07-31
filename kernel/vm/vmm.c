@@ -1555,6 +1555,7 @@ status_t vmm_create_aspace_with_quota(vmm_aspace_t** _aspace,
         struct res_group* new_res_group = res_group_create(num_pages,
                                               &aspace->quota_res_group_ref);
         if (!new_res_group) {
+            free(aspace);
             return ERR_NO_MEMORY;
         }
         aspace->quota_res_group = new_res_group;
