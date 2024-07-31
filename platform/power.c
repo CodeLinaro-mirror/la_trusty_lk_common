@@ -28,6 +28,7 @@
 #include <kernel/thread.h>
 #include <stdio.h>
 #include <lib/console.h>
+#include <version.h>
 
 /*
  * default implementations of these routines, if the platform code
@@ -46,6 +47,7 @@ __WEAK void platform_halt(platform_halt_action suggested_action,
 
 #endif  // ENABLE_PANIC_SHELL
 
+    dprintf(ALWAYS, "%s\n", lk_version);
     dprintf(ALWAYS, "HALT: spinning forever... (reason = %d)\n", reason);
     arch_disable_ints();
     for (;;);
