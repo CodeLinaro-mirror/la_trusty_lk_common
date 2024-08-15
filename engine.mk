@@ -283,9 +283,14 @@ GLOBAL_DEFINES += \
 	TLOG_LVL_DEFAULT=$$(($(LOG_LEVEL_USER)+2)) \
 
 # add some automatic rust configuration flags
-GLOBAL_USER_RUSTFLAGS += \
-	--cfg 'PLAT_$(call normalize-rust-cfg,$(PLATFORM))' \
-	--cfg 'TARGET_$(call normalize-rust-cfg,$(TARGET))'
+GLOBAL_SHARED_RUSTFLAGS += \
+	--cfg='PLAT_$(call normalize-rust-cfg,$(PLATFORM))' \
+	--cfg='TARGET_$(call normalize-rust-cfg,$(TARGET))'
+
+# Add configuration flag if this is a test build
+ifeq (true,$(call TOBOOL,$(TEST_BUILD)))
+GLOBAL_SHARED_RUSTFLAGS += --cfg='TEST_BUILD'
+endif
 
 GLOBAL_USER_INCLUDES += $(addsuffix /arch/$(ARCH)/include,$(LKINC))
 
