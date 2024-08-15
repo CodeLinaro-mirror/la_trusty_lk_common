@@ -1,5 +1,4 @@
 #![no_std]
-#![allow(unused)]
 #![allow(non_camel_case_types)]
 #![feature(cfg_version)]
 // C string literals were stabilized in Rust 1.77
@@ -7,3 +6,7 @@
 
 mod err;
 mod hal;
+mod pci;
+mod vsock;
+
+pub use pci::pci_init_mmio;

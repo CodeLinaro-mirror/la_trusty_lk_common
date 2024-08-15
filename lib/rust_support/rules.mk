@@ -38,8 +38,8 @@ MODULE_DEPS := \
 	external/rust/crates/num-traits \
 	external/rust/crates/log \
 	trusty/user/base/lib/liballoc-rust \
-	trusty/user/base/lib/libcore-rust/ \
-	trusty/user/base/lib/libcompiler_builtins-rust/ \
+	trusty/user/base/lib/libcompiler_builtins-rust \
+	trusty/user/base/lib/libcore-rust \
 	trusty/user/base/lib/trusty-std \
 	$(LOCAL_DIR)/wrappers \
 
@@ -47,6 +47,18 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
 	fflush \
 	fputs \
+	handle_close \
+	handle_decref \
+	handle_set_detach_ref \
+	handle_set_attach \
+	handle_set_create \
+	handle_set_wait \
+	handle_wait \
+	ipc_get_msg \
+	ipc_port_connect_async \
+	ipc_put_msg \
+	ipc_read_msg \
+	ipc_send_msg \
 	lk_stdin \
 	lk_stdout \
 	lk_stderr \
@@ -56,6 +68,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	mutex_release \
 	thread_create \
 	thread_resume \
+	thread_sleep_ns \
 	vaddr_to_paddr \
 	vmm_alloc_physical_etc \
 	vmm_alloc_contiguous \
@@ -63,7 +76,13 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
+	handle \
+	handle_ref \
+	iovec_kern \
+	ipc_msg_.* \
 	lk_init_.* \
+	lk_time_.* \
+	trusty_ipc_event_type \
 
 MODULE_BINDGEN_ALLOW_VARS := \
 	.*_PRIORITY \
@@ -71,9 +90,13 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	ARCH_MMU_FLAG_.* \
 	DEFAULT_STACK_SIZE \
 	FILE \
+	IPC_CONNECT_WAIT_FOR_PORT \
+	IPC_HANDLE_POLL_.* \
+	IPC_PORT_PATH_MAX \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
+	zero_uuid \
 
 MODULE_BINDGEN_FLAGS := \
 	--newtype-enum Error \
@@ -81,6 +104,7 @@ MODULE_BINDGEN_FLAGS := \
 	--bitfield-enum lk_init_flags \
 	--no-prepend-enum-name \
 	--with-derive-custom Error=FromPrimitive \
+	--with-derive-custom handle_waiter=Default \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
 

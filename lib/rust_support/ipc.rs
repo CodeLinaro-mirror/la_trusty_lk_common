@@ -21,43 +21,42 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use virtio_drivers::transport::pci::VirtioPciError;
+use core::ptr::null_mut;
 
-use rust_support::Error as LkError;
-use virtio_drivers::Error as VirtioError;
+pub use crate::sys::ipc_get_msg;
+pub use crate::sys::ipc_port_connect_async;
+pub use crate::sys::ipc_put_msg;
+pub use crate::sys::ipc_read_msg;
+pub use crate::sys::ipc_send_msg;
 
-#[derive(Debug)]
-pub enum Error {
-    Pci(VirtioPciError),
-    Virtio(VirtioError),
-    Lk(LkError),
-}
+pub use crate::sys::iovec_kern;
+pub use crate::sys::ipc_msg_info;
+pub use crate::sys::ipc_msg_kern;
 
-impl From<VirtioPciError> for Error {
-    fn from(e: VirtioPciError) -> Self {
-        Self::Pci(e)
+pub use crate::sys::zero_uuid;
+pub use crate::sys::IPC_CONNECT_WAIT_FOR_PORT;
+pub use crate::sys::IPC_PORT_PATH_MAX;
+
+impl Default for ipc_msg_info {
+    fn default() -> Self {
+        Self { id: 0, len: 0, num_handles: 0 }
     }
 }
 
-impl From<VirtioError> for Error {
-    fn from(e: VirtioError) -> Self {
-        Self::Virtio(e)
+impl Default for ipc_msg_kern {
+    fn default() -> Self {
+        Self { iov: null_mut(), num_iov: 0, handles: null_mut(), num_handles: 0 }
     }
 }
 
-impl From<LkError> for Error {
-    fn from(e: LkError) -> Self {
-        Self::Lk(e)
+impl ipc_msg_kern {
+    pub fn new(iov: &mut iovec_kern) -> Self {
+        Self { iov, num_iov: 1, ..ipc_msg_kern::default() }
     }
 }
 
-impl Error {
-    pub fn into_c(self) -> i32 {
-        match self {
-            Self::Pci(_) => rust_support::Error::ERR_GENERIC,
-            Self::Virtio(_) => rust_support::Error::ERR_GENERIC,
-            Self::Lk(e) => e,
-        }
-        .into()
+impl From<&mut [u8]> for iovec_kern {
+    fn from(value: &mut [u8]) -> Self {
+        Self { iov_base: value.as_mut_ptr() as _, iov_len: value.len() }
     }
 }
