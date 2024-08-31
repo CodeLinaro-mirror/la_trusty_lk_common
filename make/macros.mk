@@ -30,7 +30,12 @@ define NEWLINE
 
 endef
 
-STRIP_TRAILING_COMMA = $(if $(1),$(subst $(COMMA)END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,,$(strip $(1))END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA))
+# Remove last comma in $1 if it is at the end or before a newline at the end.
+STRIP_TRAILING_COMMA = \
+	$(subst END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,,\
+		$(subst $(COMMA)\nEND_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,\n,\
+			$(subst $(COMMA)END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,,\
+				$(strip $(1))END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA)))
 
 # return $1 with the first word removed
 rest-of-words = $(wordlist 2,$(words $1),$1)

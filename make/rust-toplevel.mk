@@ -70,15 +70,22 @@ $(foreach crate,$(ALLMODULE_CRATE_STEMS_SORTED),\
 )
 
 define CRATE_CONFIG =
-{
-	"display_name": "$(crate)",
-	"root_module": "$(filter %.rs,$(MODULE_$(crate)_RUST_SRC))",
-	"edition": "$(MODULE_$(crate)_RUST_EDITION)",
-	"deps": [
+\t\t{\n
+	\t\t\t"display_name": "$(crate)",\n
+	\t\t\t"root_module": "$(abspath $(filter %.rs,$(MODULE_$(crate)_RUST_SRC)))",\n
+	\t\t\t"edition": "$(MODULE_$(crate)_RUST_EDITION)",\n
+	\t\t\t"deps": [\n
 		$(call STRIP_TRAILING_COMMA,$(foreach dep,$(sort $(MODULE_$(crate)_CRATE_DEPS)),\
-				{"name": "$(dep)"$(COMMA) "crate": $(RUST_TOPLEVEL_$(dep)_CRATE_INDEX)}$(COMMA)))
-	]
-},
+			\t\t\t\t{\n
+			\t\t\t\t\t"name": "$(dep)"$(COMMA)\n
+			\t\t\t\t\t"crate": $(RUST_TOPLEVEL_$(dep)_CRATE_INDEX)\n
+			\t\t\t\t}$(COMMA)\n))
+	\t\t\t],\n
+	\t\t\t"cfg": [\n
+		$(call STRIP_TRAILING_COMMA,$(foreach f, $(MODULE_$(crate)_CRATE_CFG),\
+			\t\t\t\t"$(subst ",\\\\\\\",$(f))"$(COMMA)\n))
+	\t\t\t]\n
+\t\t},\n
 
 endef
 
