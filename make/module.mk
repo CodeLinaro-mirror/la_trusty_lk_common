@@ -307,6 +307,9 @@ MODULE_$(MODULE_RUST_STEM)_CRATE_DEPS := $(DEP_CRATE_STEMS)
 ALL_KERNEL_HOST_CRATE_NAMES := $(ALL_KERNEL_HOST_CRATE_NAMES) $(HOST_DEP_CRATE_NAMES)
 ALL_KERNEL_HOST_CRATE_STEMS := $(ALL_KERNEL_HOST_CRATE_STEMS) $(HOST_DEP_CRATE_STEMS)
 
+# save all --cfg RUSTFLAGS so they can be included in rust-project.json
+MODULE_$(MODULE_RUST_STEM)_CRATE_CFG := $(patsubst --cfg=%,%,$(filter --cfg=%,$(subst --cfg ,--cfg=,$(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS))))
+
 # change BUILDDIR so RSOBJS for kernel are distinct targets from userspace ones
 OLD_BUILDDIR := $(BUILDDIR)
 BUILDDIR := $(TRUSTY_KERNEL_LIBRARY_BUILDDIR)
