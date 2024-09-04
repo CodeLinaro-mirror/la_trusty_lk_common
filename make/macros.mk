@@ -16,7 +16,7 @@ FIND_EXTERNAL = $(if $(wildcard external/trusty/$1),external/trusty/$1,external/
 
 # try to find a Rust crate at external/rust/crates/$CRATE and fall back to
 # trusty/user/base/host/$CRATE and then trusty/user/base/lib/$CRATE-rust
-FIND_CRATE = $(if $(wildcard external/rust/crates/$1/rules.mk),external/rust/crates/$1,$(if $(wildcard trusty/user/base/host/$1/rules.mk),trusty/user/base/host/$1,$(if $(wildcard trusty/user/base/host/$1-rust/rules.mk),trusty/user/base/host/$1-rust,trusty/user/base/lib/$1-rust)))
+FIND_CRATE =  $(if $(wildcard external/rust/android-crates-io/crates/$1/rules.mk),external/rust/android-crates-io/crates/$1,$(if $(wildcard external/rust/crates/$1/rules.mk),external/rust/crates/$1,$(if $(wildcard trusty/user/base/host/$1/rules.mk),trusty/user/base/host/$1,$(if $(wildcard trusty/user/base/host/$1-rust/rules.mk),trusty/user/base/host/$1-rust,trusty/user/base/lib/$1-rust))))
 
 # checks if module with a given path exists
 FIND_MODULE = $(wildcard $1/rules.mk)$(wildcard $(addsuffix /$1/rules.mk,$(.INCLUDE_DIRS)))
@@ -30,7 +30,12 @@ define NEWLINE
 
 endef
 
-STRIP_TRAILING_COMMA = $(if $(1),$(subst $(COMMA)END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,,$(strip $(1))END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA))
+# Remove last comma in $1 if it is at the end or before a newline at the end.
+STRIP_TRAILING_COMMA = \
+	$(subst END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,,\
+		$(subst $(COMMA)\nEND_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,\n,\
+			$(subst $(COMMA)END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA,,\
+				$(strip $(1))END_OF_LIST_MARKER_FOR_STRIP_TRAILING_COMMA)))
 
 # return $1 with the first word removed
 rest-of-words = $(wordlist 2,$(words $1),$1)
