@@ -28,7 +28,9 @@ use virtio_drivers::Error as VirtioError;
 
 #[derive(Debug)]
 pub enum Error {
+    #[allow(dead_code)]
     Pci(VirtioPciError),
+    #[allow(dead_code)]
     Virtio(VirtioError),
     Lk(LkError),
 }
