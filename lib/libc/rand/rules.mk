@@ -7,7 +7,8 @@ LOCAL_DIR := $(GET_LOCAL_DIR)
 MODULE := $(LOCAL_DIR)
 
 # Generate a random 32-bit seed for the RNG
-KERNEL_LIBC_RANDSEED_HEX := $(shell xxd -l4 -g0 -p /dev/urandom)
+XXD := $(PATH_TOOLS_BINDIR)/xxd
+KERNEL_LIBC_RANDSEED_HEX := $(shell $(XXD) -l4 -g0 -p /dev/urandom)
 KERNEL_LIBC_RANDSEED := 0x$(KERNEL_LIBC_RANDSEED_HEX)U
 
 MODULE_DEFINES += \
