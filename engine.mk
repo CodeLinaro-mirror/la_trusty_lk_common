@@ -419,7 +419,9 @@ $(TOOLCHAIN_CONFIG): configheader
 
 GENERATED += $(TOOLCHAIN_CONFIG)
 
-GLOBAL_HOST_RUSTFLAGS += -C linker="$(CLANG_BINDIR)/clang++" -C link-args="-B $(CLANG_BINDIR) -fuse-ld=lld"
+GLOBAL_HOST_RUST_LINK_ARGS := -B $(CLANG_BINDIR) -B $(CLANG_HOST_SEARCHDIR) \
+	$(addprefix -L ,$(CLANG_HOST_LDDIRS)) --sysroot $(CLANG_HOST_SYSROOT) -fuse-ld=lld
+GLOBAL_HOST_RUSTFLAGS += -C linker="$(CLANG_BINDIR)/clang++" -C link-args="$(GLOBAL_HOST_RUST_LINK_ARGS)"
 GLOBAL_SHARED_RUSTFLAGS += -C linker="$(LD)"
 
 # TODO: we could find the runtime like this.
