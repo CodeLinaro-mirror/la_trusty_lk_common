@@ -41,6 +41,7 @@
 
 #define MSR_EFER    0xc0000080
 #define EFER_NXE    0x00000800
+#define EFER_SCE    0x00000001
 #define MSR_GS_BASE 0xc0000101
 
 #define PHYS(x) ((x) - KERNEL_BASE + MEMBASE)
@@ -440,7 +441,8 @@ paging_setup:
     movl $MSR_EFER ,%ecx
     rdmsr
     /* NXE bit should be set, since we update XD bit in page table */
-    orl $EFER_NXE,%eax
+    /* Set SCE to enable AMD compatible syscall support */
+    orl $(EFER_NXE | EFER_SCE),%eax
     wrmsr
 
     /* setting the corresponding PML4E to map from KERNEL_BASE */
