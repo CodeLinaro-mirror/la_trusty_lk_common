@@ -26,6 +26,7 @@
 #include <sys/types.h>
 
 #define IF_MASK             0x0200
+#define DF_MASK             0x0400
 #define IOPL_MASK           0x3000
 #define RSVD                0x0002
 
@@ -36,6 +37,11 @@
 #define SYSENTER_CS_MSR     0x174
 #define SYSENTER_ESP_MSR    0x175
 #define SYSENTER_EIP_MSR    0x176
+
+#define STAR_MSR (0xC0000081)
+#define LSTAR_MSR (0xC0000082)
+#define CSTAR_MSR (0xC0000083)
+#define SFMASK_MSR (0xC0000084)
 
 struct arch_thread {
     vaddr_t sp;
