@@ -91,7 +91,7 @@
  *   src_addr: base address of PT if fill in PDE
  *             base address of physical address if fill in PTE
  *   attr:     X86_KERNEL_PD_FLAGS if fill in PDE
- *             X86_KERNEL_PD_LP_FLAGS if fill in PTE
+ *             X86_KERNEL_PT_FLAGS if fill in PTE
  */
 .macro fill_page_table_entry src_addr, attr
     movq \src_addr, %rsi
@@ -145,7 +145,7 @@
     movq $MEMBASE, %rsi
     addq $KERNEL_LOAD_OFFSET, %rsi
     andq $X86_PAGE_ALIGN, %rsi
-    orq  $X86_KERNEL_PD_LP_FLAGS, %rsi
+    orq  $X86_KERNEL_PT_FLAGS, %rsi
     movq %rsi, (%rdi)
 
     /* Check whether gdtr and bootstrap code share same PDE */
@@ -183,7 +183,7 @@
     shlq $3, %rax
     addq %rax, %rdi
     movq $PHYS(_gdtr_phys), %rsi
-    orq  $X86_KERNEL_PD_LP_FLAGS, %rsi
+    orq  $X86_KERNEL_PT_FLAGS, %rsi
     movq %rsi, (%rdi)
 .endm
 
@@ -334,7 +334,7 @@
 .Lfill_upper_mem_pte:
     movq %rax, %rdx
     shlq $PAGE_DIV_SHIFT, %rdx
-    addq $X86_KERNEL_PD_LP_FLAGS, %rdx
+    addq $X86_KERNEL_PT_FLAGS, %rdx
     movq %rdx, (%rsi)
     incq %rax
     addq $8, %rsi
@@ -493,7 +493,7 @@ paging_setup:
     movq $PHYS(pt), %rdi
 
     /* fill in PTEs */
-    fill_page_table_entry $MEMBASE, $X86_KERNEL_PD_LP_FLAGS
+    fill_page_table_entry $MEMBASE, $X86_KERNEL_PT_FLAGS
 
     update_mapping_attribute_of_each_section
 
