@@ -25,6 +25,7 @@
 
 #define INT_DIVIDE_0        0x00
 #define INT_DEBUG_EX        0x01
+#define INT_NMI             0x02
 #define INT_INVALID_OP      0x06
 #define INT_DEV_NA_EX       0x07
 #define INT_DOUBLE_FAULT    0x08
