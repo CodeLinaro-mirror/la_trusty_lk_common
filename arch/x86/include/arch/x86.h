@@ -910,6 +910,7 @@ static inline void x86_disallow_explicit_smap(void) {
 }
 
 void x86_syscall(void);
+void x86_check_and_fix_gs(void);
 
 #endif // ARCH_X86_64
 
