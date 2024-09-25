@@ -191,7 +191,7 @@ void x86_pfe_handler(x86_iframe_t *frame)
             case 7:
             default:
                 arch_enable_ints();
-                trusty_app_crash(error_code);
+                trusty_app_crash(error_code, 0, 0);
                 break;
         }
     } else {
