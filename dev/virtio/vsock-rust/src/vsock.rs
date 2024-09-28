@@ -115,9 +115,8 @@ impl VsockConnection {
     fn tipc_port_name(&self) -> &str {
         self.tipc_port_name
             .as_ref()
-            .expect("port name not set")
-            .to_str()
-            .expect("invalid port name")
+            .map(|s| s.to_str().expect("invalid port name"))
+            .unwrap_or("(no port name)")
     }
 
     fn print_stats(&self) {
