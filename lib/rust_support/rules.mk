@@ -105,7 +105,19 @@ MODULE_BINDGEN_FLAGS := \
 	--no-prepend-enum-name \
 	--with-derive-custom Error=FromPrimitive \
 	--with-derive-custom handle_waiter=Default \
+	--with-derive-custom ipc_msg_info=Default \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
+
+MODULE_RUSTFLAGS += \
+	-A clippy::disallowed_names \
+	-A clippy::type-complexity \
+	-A clippy::unnecessary_fallible_conversions \
+	-A clippy::unnecessary-wraps \
+	-A clippy::unusual-byte-groupings \
+	-A clippy::upper-case-acronyms \
+	-D clippy::undocumented_unsafe_blocks \
+
+MODULE_RUST_USE_CLIPPY := true
 
 include make/module.mk
