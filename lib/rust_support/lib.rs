@@ -34,6 +34,7 @@ use core::ffi::CStr;
 use core::panic::PanicInfo;
 
 mod sys {
+    #![allow(clippy::upper_case_acronyms)]
     #![allow(unused)]
     #![allow(non_camel_case_types)]
     #![allow(non_upper_case_globals)]
