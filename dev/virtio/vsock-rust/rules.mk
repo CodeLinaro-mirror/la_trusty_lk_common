@@ -14,4 +14,15 @@ MODULE_LIBRARY_DEPS := \
 
 # `trusty-std` is for its `#[global_allocator]`.
 
+MODULE_RUSTFLAGS += \
+	-A clippy::disallowed_names \
+	-A clippy::type-complexity \
+	-A clippy::unnecessary_fallible_conversions \
+	-A clippy::unnecessary-wraps \
+	-A clippy::unusual-byte-groupings \
+	-A clippy::upper-case-acronyms \
+	-D clippy::undocumented_unsafe_blocks \
+
+MODULE_RUST_USE_CLIPPY := true
+
 include make/library.mk
