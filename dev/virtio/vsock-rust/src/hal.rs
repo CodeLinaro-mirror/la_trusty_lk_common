@@ -75,7 +75,7 @@ impl TrustyHal {
                 let bar_vaddr = core::ptr::null_mut();
                 let bar_size_aligned = (bar_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
 
-                // # Safety
+                // Safety:
                 // `aspace` is `vmm_get_kernel_aspace()`.
                 // `name` is a `&'static CStr`.
                 // `bar_paddr` and `bar_size_aligned` are safe by this function's safety requirements.
@@ -107,6 +107,7 @@ impl TrustyHal {
 // Safety: TrustyHal is stateless and thus trivially safe to send to another thread
 unsafe impl Send for TrustyHal {}
 
+// Safety: See function specific comments
 unsafe impl Hal for TrustyHal {
     // Safety:
     // Function either returns a non-null, properly aligned pointer or panics the kernel.
@@ -114,7 +115,7 @@ unsafe impl Hal for TrustyHal {
     fn dma_alloc(pages: usize, _direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
         let name = c"vsock-rust";
         // dma_alloc requests num pages but vmm_alloc_contiguous expects bytes.
-        let size = pages * PAGE_SIZE as usize;
+        let size = pages * PAGE_SIZE;
         let mut vaddr = core::ptr::null_mut(); // stores pointer to virtual memory
         let align_pow2 = PAGE_SIZE_SHIFT as u8;
         let vmm_flags = 0;
@@ -125,7 +126,7 @@ unsafe impl Hal for TrustyHal {
         // calls vmm_alloc_pmm which does not set the PMM_ALLOC_FLAG_NO_CLEAR
         // flag.
         //
-        // # Safety
+        // Safety:
         // `aspace` is `vmm_get_kernel_aspace()`.
         // `name` is a `&'static CStr`.
         // `size` is validated by the callee
