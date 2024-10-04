@@ -252,9 +252,13 @@ MODULE_ALL_DEPS += \
 
 # rust_support depends on some external crates. We cannot
 # add it as an implicit dependency to any of them because
-# that would create a circular dependency.
+# that would create a circular dependency. External crates
+# are either under external/rust/crates or in the monorepo
+# external/rust/android-crates-io/crates.
 ifeq ($(filter external/rust/crates/%,$(MODULE)),)
+ifeq ($(filter external/rust/android-crates-io/crates/%,$(MODULE)),)
 MODULE_ALL_DEPS += $(LKROOT)/lib/rust_support
+endif
 endif
 
 endif
