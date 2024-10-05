@@ -223,6 +223,22 @@ GLOBAL_KERNEL_LDFLAGS += --whole-archive
 # TODO(b/224064243): remove this when we have a proper triple
 GLOBAL_SHARED_COMPILEFLAGS += -U__linux__
 
+# Decide on the branch protection scheme.
+# Must mirror the MODULE_COMPILEFLAGS set in make/module.mk. We don't set
+# MODULE_RUSTFLAGS there since the lk-crates.a wrapper obj, which does not
+# use module.mk, needs the same flags.
+ifeq (true,$(call TOBOOL,$(KERNEL_BTI_ENABLED)))
+ifeq (true,$(call TOBOOL,$(KERNEL_PAC_ENABLED)))
+GLOBAL_KERNEL_RUSTFLAGS += -Z branch-protection=bti,pac-ret
+else
+GLOBAL_KERNEL_RUSTFLAGS += -Z branch-protection=bti
+endif
+else # !KERNEL_BTI_ENABLED
+ifeq (true,$(call TOBOOL,$(KERNEL_PAC_ENABLED)))
+GLOBAL_KERNEL_RUSTFLAGS += -Z branch-protection=pac-ret
+endif
+endif
+
 ifneq ($(GLOBAL_COMPILEFLAGS),)
 $(error Setting GLOBAL_COMPILEFLAGS directly from project or platform makefiles is no longer supported. Please use either GLOBAL_SHARED_COMPILEFLAGS or GLOBAL_KERNEL_COMPILEFLAGS.)
 endif
