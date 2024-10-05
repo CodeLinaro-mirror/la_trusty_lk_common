@@ -137,7 +137,7 @@ unsafe fn map_pci_root(
 
     // Map the PCI configuration space.
     let pci_vaddr = ptr::null_mut();
-    // # Safety
+    // Safety:
     // `aspace` is `vmm_get_kernel_aspace()`.
     // `name` is a `&'static CStr`.
     // `pci_paddr` and `pci_size` are safe by this function's safety requirements.
@@ -155,7 +155,7 @@ unsafe fn map_pci_root(
     };
     LkError::from_lk(e)?;
 
-    // # Safety:
+    // Safety:
     // `pci_paddr` is a valid physical address to the base of the MMIO region.
     // `pci_vaddr` is the mapped virtual address of that.
     // `pci_paddr` has `'static` lifetime, and `pci_vaddr` is never unmapped,
