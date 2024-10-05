@@ -34,9 +34,9 @@ MODULE_SRCS := \
 MODULE_ADD_IMPLICIT_DEPS := false
 
 MODULE_DEPS := \
-	external/rust/crates/num-derive \
-	external/rust/crates/num-traits \
-	external/rust/crates/log \
+	$(call FIND_CRATE,num-derive) \
+	$(call FIND_CRATE,num-traits) \
+	$(call FIND_CRATE,log) \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/libcompiler_builtins-rust \
 	trusty/user/base/lib/libcore-rust \
