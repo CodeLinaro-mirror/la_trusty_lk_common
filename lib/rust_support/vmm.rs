@@ -46,6 +46,7 @@ pub fn vmm_get_kernel_aspace() -> *mut vmm_aspace_t {
 /// # Safety
 ///
 /// Same as [`vmm_alloc_physical_etc`].
+#[allow(clippy::too_many_arguments)]
 #[inline]
 pub unsafe fn vmm_alloc_physical(
     aspace: *mut vmm_aspace_t,
