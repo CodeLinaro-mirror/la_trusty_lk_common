@@ -31,7 +31,6 @@ use core::time::Duration;
 
 use alloc::boxed::Box;
 use alloc::ffi::CString;
-use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -58,11 +57,13 @@ use rust_support::ipc::IPC_PORT_PATH_MAX;
 use rust_support::sync::Mutex;
 use rust_support::thread;
 use rust_support::thread::sleep;
+use virtio_drivers::device::socket::SocketError;
 use virtio_drivers::device::socket::VsockAddr;
 use virtio_drivers::device::socket::VsockConnectionManager;
 use virtio_drivers::device::socket::VsockEvent;
 use virtio_drivers::device::socket::VsockEventType;
 use virtio_drivers::transport::Transport;
+use virtio_drivers::Error as VirtioError;
 use virtio_drivers::Hal;
 use virtio_drivers::PAGE_SIZE;
 
@@ -115,9 +116,8 @@ impl VsockConnection {
     fn tipc_port_name(&self) -> &str {
         self.tipc_port_name
             .as_ref()
-            .expect("port name not set")
-            .to_str()
-            .expect("invalid port name")
+            .map(|s| s.to_str().expect("invalid port name"))
+            .unwrap_or("(no port name)")
     }
 
     fn print_stats(&self) {
@@ -135,7 +135,7 @@ impl VsockConnection {
 }
 
 fn vsock_connection_lookup(
-    connections: &mut Vec<VsockConnection>,
+    connections: &mut [VsockConnection],
     remote_port: u32,
 ) -> Option<(usize, &mut VsockConnection)> {
     connections
@@ -172,10 +172,10 @@ where
 
         // do we already have a connection?
         let mut guard = self.connections.lock();
-        if let Some(_) = guard
+        if guard
             .deref()
             .iter()
-            .find(|connection| connection.peer == peer && connection.local_port == local.port)
+            .any(|connection| connection.peer == peer && connection.local_port == local.port)
         {
             panic!("connection already exists");
         };
@@ -200,7 +200,7 @@ where
             .unwrap();
         assert!(data_len == length);
         // allow manual connect from nc in line mode
-        if buffer[data_len - 1] == '\n' as _ {
+        if buffer[data_len - 1] == b'\n' as _ {
             data_len -= 1;
         }
         let port_name = &buffer[0..data_len];
@@ -342,7 +342,7 @@ where
             c.print_stats();
             return true; // remove connection
         }
-        return false; // keep connection
+        false // keep connection
     }
 
     fn print_stats(&self) {
@@ -411,7 +411,7 @@ where
                                 state: VsockConnectionState::Active,
                                 ..
                             } => device.vsock_rx_channel(
-                                *c,
+                                c,
                                 length,
                                 source,
                                 destination,
@@ -489,7 +489,7 @@ where
             // get the event we care about.
             info!("handle_set_wait failed: {}", ret.unwrap_err());
             ret = device.handle_set.handle_wait(&mut href.emask(), timeout);
-            if ret != Err(LkError::ERR_TIMED_OUT.into()) {
+            if ret != Err(LkError::ERR_TIMED_OUT) {
                 info!("handle_wait on handle set returned: {ret:?}");
                 continue;
             }
@@ -550,12 +550,33 @@ where
                         c.tx_count += 1;
                         c.tx_since_rx += 1;
                         c.rx_since_tx = 0;
-                        device
-                            .connection_manager
-                            .lock()
-                            .send(c.peer, c.local_port, &tx_buffer[..msg_info.len])
-                            .expect(&format!("failed to send message from {}", c.tipc_port_name()));
-                        debug!("sent {} bytes from {}", msg_info.len, c.tipc_port_name());
+                        match device.connection_manager.lock().send(
+                            c.peer,
+                            c.local_port,
+                            &tx_buffer[..msg_info.len],
+                        ) {
+                            Err(err) => {
+                                if err == VirtioError::SocketDeviceError(SocketError::NotConnected)
+                                {
+                                    debug!(
+                                        "failed to send {} bytes from {}. Connection closed",
+                                        msg_info.len,
+                                        c.tipc_port_name()
+                                    );
+                                } else {
+                                    // TODO: close connection instead
+                                    panic!(
+                                        "failed to send {} bytes from {}: {:?}",
+                                        msg_info.len,
+                                        c.tipc_port_name(),
+                                        err
+                                    );
+                                }
+                            }
+                            Ok(_) => {
+                                debug!("sent {} bytes from {}", msg_info.len, c.tipc_port_name());
+                            }
+                        }
                     } else {
                         error!("ipc_read_msg failed: {ret}");
                     }

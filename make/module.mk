@@ -252,9 +252,13 @@ MODULE_ALL_DEPS += \
 
 # rust_support depends on some external crates. We cannot
 # add it as an implicit dependency to any of them because
-# that would create a circular dependency.
+# that would create a circular dependency. External crates
+# are either under external/rust/crates or in the monorepo
+# external/rust/android-crates-io/crates.
 ifeq ($(filter external/rust/crates/%,$(MODULE)),)
+ifeq ($(filter external/rust/android-crates-io/crates/%,$(MODULE)),)
 MODULE_ALL_DEPS += $(LKROOT)/lib/rust_support
+endif
 endif
 
 endif
@@ -306,6 +310,9 @@ endif
 MODULE_$(MODULE_RUST_STEM)_CRATE_DEPS := $(DEP_CRATE_STEMS)
 ALL_KERNEL_HOST_CRATE_NAMES := $(ALL_KERNEL_HOST_CRATE_NAMES) $(HOST_DEP_CRATE_NAMES)
 ALL_KERNEL_HOST_CRATE_STEMS := $(ALL_KERNEL_HOST_CRATE_STEMS) $(HOST_DEP_CRATE_STEMS)
+
+# save all --cfg RUSTFLAGS so they can be included in rust-project.json
+MODULE_$(MODULE_RUST_STEM)_CRATE_CFG := $(patsubst --cfg=%,%,$(filter --cfg=%,$(subst --cfg ,--cfg=,$(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS))))
 
 # change BUILDDIR so RSOBJS for kernel are distinct targets from userspace ones
 OLD_BUILDDIR := $(BUILDDIR)
@@ -373,7 +380,7 @@ ifneq ($(call TOBOOL,$(MODULE_SKIP_DOCS)),true)
 $(MODULE_RUSTDOC_OBJECT): $(MODULE_RSSRC) | $(MODULE_RSOBJS)
 	@$(MKDIR)
 	@$(call ECHO,rustdoc,generating documentation,for $(MODULE_CRATE_NAME))
-	$(NOECHO)$(MODULE_RUST_ENV) $(RUSTDOC) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTDOCFLAGS) -L $(TRUSTY_LIBRARY_BUILDDIR) --out-dir $(MODULE_RUSTDOC_OUT_DIR) $<
+	$(NOECHO)$(MODULE_RUST_ENV) $(RUSTDOC) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS_PRELINK) $(MODULE_RUSTDOCFLAGS) -L $(TRUSTY_LIBRARY_BUILDDIR) --out-dir $(MODULE_RUSTDOC_OUT_DIR) $<
 	@touch $@
 	@$(call ECHO_DONE_SILENT,rustdoc,generating documentation,for $(MODULE_CRATE_NAME))
 
