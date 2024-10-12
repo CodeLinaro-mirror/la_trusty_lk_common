@@ -116,7 +116,13 @@ ifeq (true,$(call TOBOOL,$(MODULE_CFI_ENABLED)))
 MODULE_COMPILEFLAGS += \
 	-fsanitize-blacklist=trusty/kernel/lib/ubsan/exemptlist \
 	-fsanitize=cfi \
+	-fsanitize-cfi-icall-experimental-normalize-integers \
 	-DCFI_ENABLED
+
+ifeq (true,$(call TOBOOL,$(ARCH_$(ARCH)_SUPPORTS_RUST_CFI)))
+# CFI rust <-> C cfi
+MODULE_RUSTFLAGS += -Zsanitizer=cfi -Zsanitizer-cfi-normalize-integers
+endif
 
 MODULES += trusty/kernel/lib/ubsan
 
