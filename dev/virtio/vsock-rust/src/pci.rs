@@ -27,7 +27,7 @@ use core::ptr;
 
 use alloc::sync::Arc;
 
-use log::debug;
+use log::{debug, error};
 
 use virtio_drivers::device::socket::VirtIOSocket;
 use virtio_drivers::device::socket::VsockConnectionManager;
@@ -65,10 +65,9 @@ impl TrustyHal {
             .name(c"virtio_vsock_rx")
             .priority(Priority::HIGH)
             .spawn(move || {
-                crate::vsock::vsock_rx_loop(device_for_rx)
-                    .err()
-                    .unwrap_or(LkError::NO_ERROR.into())
-                    .into_c()
+                let ret = crate::vsock::vsock_rx_loop(device_for_rx);
+                error!("vsock_rx_loop returned {:?}", ret);
+                ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
             })
             .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
@@ -76,10 +75,9 @@ impl TrustyHal {
             .name(c"virtio_vsock_tx")
             .priority(Priority::HIGH)
             .spawn(move || {
-                crate::vsock::vsock_tx_loop(device_for_tx)
-                    .err()
-                    .unwrap_or(LkError::NO_ERROR.into())
-                    .into_c()
+                let ret = crate::vsock::vsock_tx_loop(device_for_tx);
+                error!("vsock_tx_loop returned {:?}", ret);
+                ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
             })
             .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
