@@ -20,6 +20,12 @@ SECTIONS
             .text.init_have_lse_atomics
             .init_array*
         )
+
+        *libclang_rt.builtins-aarch64-android.a:aarch64.c.o(
+            .text.__init_cpu_features
+            .text.init_have_lse_atomics
+            .init_array*
+        )
     }
 
     /* text/read-only data */
