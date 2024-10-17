@@ -48,6 +48,7 @@ pub mod handle_set;
 pub mod init;
 pub mod ipc;
 pub mod log;
+pub mod macros;
 pub mod mmu;
 pub mod sync;
 pub mod thread;
