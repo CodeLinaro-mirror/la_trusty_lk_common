@@ -185,17 +185,9 @@ unsafe impl Hal for TrustyHal {
     }
 
     unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
-        // no-op on x86_64, not implemented on other architectures
-        #[cfg(not(target_arch = "x86_64"))]
-        unimplemented!();
-
         vaddr_to_paddr(buffer.as_ptr().cast())
     }
 
     // Safety: no-op on x86-64, panic elsewhere.
-    unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {
-        // no-op on x86_64, not implemented on other architectures
-        #[cfg(not(target_arch = "x86_64"))]
-        unimplemented!();
-    }
+    unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {}
 }
