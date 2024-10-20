@@ -120,16 +120,21 @@ impl TrustyHal {
 unsafe fn map_pci_root(
     pci_paddr: paddr_t,
     pci_size: usize,
-    _cfg_size: usize,
+    cfg_size: usize,
 ) -> Result<PciRoot, Error> {
     // The ECAM is defined in Section 7.2.2 of the PCI Express Base Specification, Revision 2.0.
     // The ECAM size must be a power of two with the exponent between 1 and 8.
-    let cam = Cam::Ecam;
+    let cam = match cfg_size / /* device functions */ 8 {
+        256 => Cam::MmioCam,
+        4096 => Cam::Ecam,
+        _ => return Err(LkError::ERR_BAD_LEN.into()),
+    };
+
     if !pci_size.is_power_of_two() || pci_size > cam.size() as usize {
         return Err(LkError::ERR_BAD_LEN.into());
     }
     // The ECAM base must be 2^(n + 20)-bit aligned.
-    if pci_paddr & (pci_size - 1) != 0 {
+    if cam == Cam::Ecam && pci_paddr & (pci_size - 1) != 0 {
         return Err(LkError::ERR_INVALID_ARGS.into());
     }
 

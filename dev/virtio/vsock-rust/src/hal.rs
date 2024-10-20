@@ -119,7 +119,7 @@ unsafe impl Hal for TrustyHal {
         let mut vaddr = core::ptr::null_mut(); // stores pointer to virtual memory
         let align_pow2 = PAGE_SIZE_SHIFT as u8;
         let vmm_flags = 0;
-        let arch_mmu_flags = 0;
+        let arch_mmu_flags = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
         let aspace = vmm_get_kernel_aspace();
 
         // NOTE: the allocated memory will be zeroed since vmm_alloc_contiguous
@@ -185,17 +185,9 @@ unsafe impl Hal for TrustyHal {
     }
 
     unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
-        // no-op on x86_64, not implemented on other architectures
-        #[cfg(not(target_arch = "x86_64"))]
-        unimplemented!();
-
         vaddr_to_paddr(buffer.as_ptr().cast())
     }
 
     // Safety: no-op on x86-64, panic elsewhere.
-    unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {
-        // no-op on x86_64, not implemented on other architectures
-        #[cfg(not(target_arch = "x86_64"))]
-        unimplemented!();
-    }
+    unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {}
 }

@@ -4,6 +4,9 @@ MODULE_CRATE_NAME := vsock
 MODULE_SRCS := \
 	$(LOCAL_DIR)/src/lib.rs \
 
+MODULE_EXPORT_INCLUDES += \
+	$(LOCAL_DIR)/include
+
 MODULE_LIBRARY_DEPS := \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/trusty-std \
