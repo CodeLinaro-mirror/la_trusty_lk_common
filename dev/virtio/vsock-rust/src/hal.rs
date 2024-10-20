@@ -119,7 +119,7 @@ unsafe impl Hal for TrustyHal {
         let mut vaddr = core::ptr::null_mut(); // stores pointer to virtual memory
         let align_pow2 = PAGE_SIZE_SHIFT as u8;
         let vmm_flags = 0;
-        let arch_mmu_flags = 0;
+        let arch_mmu_flags = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
         let aspace = vmm_get_kernel_aspace();
 
         // NOTE: the allocated memory will be zeroed since vmm_alloc_contiguous
