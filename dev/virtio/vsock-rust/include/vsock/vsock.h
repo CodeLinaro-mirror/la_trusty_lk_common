@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2009 Corey Tabaka
- * Copyright (c) 2015-2018 Intel Corporation
+ * Copyright (c) 2024 Google Inc. All rights reserved
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -21,34 +20,8 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#pragma once
 
-#include <sys/types.h>
-
-#define IF_MASK             0x0200
-#define DF_MASK             0x0400
-#define IOPL_MASK           0x3000
-#define RSVD                0x0002
-
-/* 0x3202 */
-#define USER_EFLAGS (IF_MASK|IOPL_MASK|RSVD)
-
-/* SYSCALL Handling */
-#define SYSENTER_CS_MSR     0x174
-#define SYSENTER_ESP_MSR    0x175
-#define SYSENTER_EIP_MSR    0x176
-
-#define STAR_MSR (0xC0000081)
-#define LSTAR_MSR (0xC0000082)
-#define CSTAR_MSR (0xC0000083)
-#define SFMASK_MSR (0xC0000084)
-
-struct arch_thread {
-    vaddr_t sp;
-    vaddr_t fs_base;
-#if X86_WITH_FPU
-    vaddr_t *fpu_states;
-    uint8_t fpu_buffer[512 + 16];
-#endif
-};
-
+/*
+ * TODO(b/370957658): generate header automatically via cbindgen.
+ */
+int pci_init_mmio(paddr_t cfg_base, size_t size, size_t cfg_size);
