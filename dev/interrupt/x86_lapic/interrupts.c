@@ -232,5 +232,7 @@ status_t sm_intc_fiq_enter(void) {
     return NO_ERROR;
 }
 
-void sm_intc_enable_interrupts(void) {}
+enum handler_return sm_intc_enable_interrupts(void) {
+    return INT_NO_RESCHEDULE;
+}
 #endif
