@@ -34,4 +34,5 @@ ifeq (true,$(call TOBOOL,$(TRUSTY_USERSPACE)))
 ARCH_arm64_RUSTFLAGS := --target=aarch64-unknown-trusty
 else
 ARCH_arm64_RUSTFLAGS := --target=$(LOCAL_DIR)/aarch64-unknown-trusty-kernel.json
+ARCH_arm64_SUPPORTS_RUST_CFI := true
 endif
