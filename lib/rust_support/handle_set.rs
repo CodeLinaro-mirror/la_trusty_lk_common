@@ -46,6 +46,7 @@ fn duration_as_ms(dur: Duration) -> Result<u32, Error> {
     }
 }
 
+#[allow(clippy::new_without_default)]
 impl HandleSet {
     pub fn new() -> Self {
         // Safety: `handle_set_create` places no preconditions on callers.

@@ -31,7 +31,6 @@ use core::time::Duration;
 
 use alloc::boxed::Box;
 use alloc::ffi::CString;
-use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -44,6 +43,7 @@ use log::warn;
 use rust_support::handle::IPC_HANDLE_POLL_HUP;
 use rust_support::handle::IPC_HANDLE_POLL_MSG;
 use rust_support::handle::IPC_HANDLE_POLL_READY;
+use rust_support::handle::IPC_HANDLE_POLL_SEND_UNBLOCKED;
 use rust_support::ipc::iovec_kern;
 use rust_support::ipc::ipc_get_msg;
 use rust_support::ipc::ipc_msg_info;
@@ -58,11 +58,13 @@ use rust_support::ipc::IPC_PORT_PATH_MAX;
 use rust_support::sync::Mutex;
 use rust_support::thread;
 use rust_support::thread::sleep;
+use virtio_drivers::device::socket::SocketError;
 use virtio_drivers::device::socket::VsockAddr;
 use virtio_drivers::device::socket::VsockConnectionManager;
 use virtio_drivers::device::socket::VsockEvent;
 use virtio_drivers::device::socket::VsockEventType;
 use virtio_drivers::transport::Transport;
+use virtio_drivers::Error as VirtioError;
 use virtio_drivers::Hal;
 use virtio_drivers::PAGE_SIZE;
 
@@ -83,6 +85,7 @@ enum VsockConnectionState {
     VsockOnly,
     TipcOnly,
     TipcConnecting,
+    TipcSendBlocked,
     Active,
     TipcClosed,
     Closed,
@@ -99,15 +102,25 @@ struct VsockConnection {
     tx_since_rx: u64,
     rx_count: u64,
     rx_since_tx: u64,
+    rx_buffer: Box<[u8]>, // buffers data if the tipc connection blocks
+    rx_pending: usize,    // how many bytes to send when tipc unblocks
 }
 
 impl VsockConnection {
     fn new(peer: VsockAddr, local_port: u32) -> Self {
+        // Make rx_buffer twice as large as the vsock connection rx buffer such
+        // that we can buffer pending messages if TIPC blocks.
+        //
+        // TODO: the ideal rx_buffer size depends on the connection so it might
+        // be worthwhile to dynamically re-size the buffer in response to tipc
+        // blocking or unblocking.
+        let rx_buffer_len = 2 * PAGE_SIZE;
         Self {
             peer,
             local_port,
             state: VsockConnectionState::VsockOnly,
             tipc_port_name: None,
+            rx_buffer: vec![0u8; rx_buffer_len].into_boxed_slice(),
             ..Default::default()
         }
     }
@@ -115,9 +128,8 @@ impl VsockConnection {
     fn tipc_port_name(&self) -> &str {
         self.tipc_port_name
             .as_ref()
-            .expect("port name not set")
-            .to_str()
-            .expect("invalid port name")
+            .map(|s| s.to_str().expect("invalid port name"))
+            .unwrap_or("(no port name)")
     }
 
     fn print_stats(&self) {
@@ -132,10 +144,48 @@ impl VsockConnection {
             self.state
         );
     }
+
+    fn tipc_try_send(&mut self) -> Result<(), Error> {
+        debug_assert!(self.rx_pending > 0 && self.rx_pending < PAGE_SIZE);
+        debug_assert!(
+            self.state == VsockConnectionState::Active
+                || self.state == VsockConnectionState::TipcSendBlocked
+        );
+
+        let length = self.rx_pending;
+        let mut iov = iovec_kern { iov_base: self.rx_buffer.as_mut_ptr() as _, iov_len: length };
+        let mut msg = ipc_msg_kern::new(&mut iov);
+
+        // Safety:
+        // `c.href.handle` is a handle attached to a tipc channel.
+        // `msg` contains an `iov` which points to a buffer from which
+        // the kernel can read `iov_len` bytes.
+        let ret = unsafe { ipc_send_msg(self.href.handle(), &mut msg) };
+        if ret == LkError::ERR_NOT_ENOUGH_BUFFER.into() {
+            self.state = VsockConnectionState::TipcSendBlocked;
+            return Ok(());
+        } else if ret < 0 {
+            error!("failed to send {length} bytes to {}: {ret} ", self.tipc_port_name());
+            LkError::from_lk(ret)?;
+        } else if ret as usize != length {
+            // TODO: in streaming mode, this should not be an error. Instead, consume
+            // the data that was sent and try sending the rest in the next message.
+            error!("sent {ret} bytes but expected to send {length} bytes");
+            return Err(LkError::ERR_BAD_LEN.into());
+        }
+
+        self.state = VsockConnectionState::Active;
+        self.tx_since_rx = 0;
+        self.rx_pending = 0;
+
+        debug!("sent {length} bytes to {}", self.tipc_port_name());
+
+        Ok(())
+    }
 }
 
 fn vsock_connection_lookup(
-    connections: &mut Vec<VsockConnection>,
+    connections: &mut [VsockConnection],
     remote_port: u32,
 ) -> Option<(usize, &mut VsockConnection)> {
     connections
@@ -172,10 +222,10 @@ where
 
         // do we already have a connection?
         let mut guard = self.connections.lock();
-        if let Some(_) = guard
+        if guard
             .deref()
             .iter()
-            .find(|connection| connection.peer == peer && connection.local_port == local.port)
+            .any(|connection| connection.peer == peer && connection.local_port == local.port)
         {
             panic!("connection already exists");
         };
@@ -200,7 +250,7 @@ where
             .unwrap();
         assert!(data_len == length);
         // allow manual connect from nc in line mode
-        if buffer[data_len - 1] == '\n' as _ {
+        if buffer[data_len - 1] == b'\n' as _ {
             data_len -= 1;
         }
         let port_name = &buffer[0..data_len];
@@ -233,7 +283,7 @@ where
             )
         }
 
-        info!("wait for connection to {}, remote {}", c.tipc_port_name(), c.peer.port);
+        debug!("wait for connection to {}, remote {}", c.tipc_port_name(), c.peer.port);
 
         c.state = VsockConnectionState::TipcConnecting;
 
@@ -270,40 +320,27 @@ where
         length: usize,
         source: VsockAddr,
         destination: VsockAddr,
-        rx_buffer: &mut Box<[u8]>,
     ) -> Result<(), Error> {
-        assert!(length <= rx_buffer.len());
-        let data_len = self
+        assert_eq!(c.state, VsockConnectionState::Active);
+
+        // multiple messages may be available when we call recv but we want to forward
+        // them on the tipc connection one by one. Pass a slice of the rx_buffer so
+        // we only drain the number of bytes that correspond to a single vsock event.
+        c.rx_pending = self
             .connection_manager
             .lock()
             .deref_mut()
-            .recv(source, destination.port, rx_buffer)
+            .recv(source, destination.port, &mut c.rx_buffer[..length])
             .unwrap();
 
         // TODO: handle large messages properly
-        assert!(data_len == length);
-
-        let mut iov = iovec_kern { iov_base: rx_buffer.as_mut_ptr() as _, iov_len: data_len };
-        let mut msg = ipc_msg_kern::new(&mut iov);
+        assert_eq!(c.rx_pending, length);
 
         c.rx_count += 1;
         c.rx_since_tx += 1;
-        c.tx_since_rx = 0;
-        // Safety:
-        // `c.href.handle` is a handle attached to a tipc channel.
-        // `msg` contains an `iov` which points to a buffer from which
-        // the kernel can read `iov_len` bytes.
-        let ret = unsafe { ipc_send_msg(c.href.handle(), &mut msg) };
-        if ret < 0 {
-            error!("failed to send {length} bytes to {}: {ret} ", c.tipc_port_name());
-            LkError::from_lk(ret)?;
-        }
-        if ret as usize != length {
-            error!("sent {ret} bytes but expected to send {length} bytes");
-            Err(LkError::ERR_IO)?;
-        }
 
-        debug!("sent {length} bytes to {}", c.tipc_port_name());
+        c.tipc_try_send()?;
+
         self.connection_manager.lock().deref_mut().update_credit(c.peer, c.local_port).unwrap();
 
         Ok(())
@@ -324,6 +361,7 @@ where
 
         if c.state == VsockConnectionState::Active
             || c.state == VsockConnectionState::TipcConnecting
+            || c.state == VsockConnectionState::TipcSendBlocked
         {
             // The handle set owns the only reference we have to the handle and
             // handle_set_wait might have already returned a pointer to c
@@ -342,7 +380,7 @@ where
             c.print_stats();
             return true; // remove connection
         }
-        return false; // keep connection
+        false // keep connection
     }
 
     fn print_stats(&self) {
@@ -379,94 +417,107 @@ where
 {
     let local_port = 1;
     let ten_ms = Duration::from_millis(10);
-    let mut rx_buffer = vec![0u8; PAGE_SIZE].into_boxed_slice();
+    let mut pending: Vec<VsockEvent> = vec![];
 
     debug!("starting vsock_rx_loop");
     device.connection_manager.lock().deref_mut().listen(local_port);
 
     loop {
         // TODO: use interrupts instead of polling
-        let event = device.connection_manager.lock().deref_mut().poll()?;
-        if let Some(VsockEvent { source, destination, event_type, .. }) = event {
-            match event_type {
-                VsockEventType::ConnectionRequest => {
-                    device.vsock_rx_op_request(source, destination);
-                }
-                VsockEventType::Connected => {
-                    panic!("outbound connections not supported");
-                }
-                VsockEventType::Received { length } => {
-                    debug!("recv destination: {destination:?}");
+        // TODO: handle case where poll returns SocketError::OutputBufferTooShort
+        let event = pending
+            .pop()
+            .or_else(|| device.connection_manager.lock().deref_mut().poll().expect("poll failed"));
 
-                    let mut guard = device.connections.lock();
-                    if let Some((conn_idx, mut connection)) =
-                        vsock_connection_lookup(guard.deref_mut(), source.port)
-                    {
-                        if let Err(e) = match connection {
-                            ref mut c @ VsockConnection {
-                                state: VsockConnectionState::VsockOnly,
-                                ..
-                            } => device.vsock_connect_tipc(c, length, source, destination),
-                            ref mut c @ VsockConnection {
-                                state: VsockConnectionState::Active,
-                                ..
-                            } => device.vsock_rx_channel(
-                                *c,
-                                length,
+        if event.is_none() {
+            sleep(ten_ms);
+            continue;
+        }
+
+        let VsockEvent { source, destination, event_type, buffer_status } = event.unwrap();
+
+        match event_type {
+            VsockEventType::ConnectionRequest => {
+                device.vsock_rx_op_request(source, destination);
+            }
+            VsockEventType::Connected => {
+                panic!("outbound connections not supported");
+            }
+            VsockEventType::Received { length } => {
+                debug!("recv destination: {destination:?}");
+
+                let mut guard = device.connections.lock();
+                if let Some((conn_idx, mut connection)) =
+                    vsock_connection_lookup(guard.deref_mut(), source.port)
+                {
+                    if let Err(e) = match connection {
+                        ref mut c @ VsockConnection {
+                            state: VsockConnectionState::VsockOnly, ..
+                        } => device.vsock_connect_tipc(c, length, source, destination),
+                        ref mut c @ VsockConnection {
+                            state: VsockConnectionState::Active, ..
+                        } => device.vsock_rx_channel(c, length, source, destination),
+                        VsockConnection {
+                            state: VsockConnectionState::TipcSendBlocked, ..
+                        } => {
+                            // requeue pending event.
+                            pending.push(VsockEvent {
                                 source,
                                 destination,
-                                &mut rx_buffer,
-                            ),
-                            VsockConnection {
-                                state: VsockConnectionState::TipcConnecting, ..
-                            } => {
-                                warn!("got data while still waiting for tipc connection");
-                                Err(LkError::ERR_BAD_STATE.into())
-                            }
-                            VsockConnection { state: s, .. } => {
-                                error!("got data for connection in state {s:?}");
-                                Err(LkError::ERR_BAD_STATE.into())
-                            }
-                        } {
-                            error!("failed to receive data from vsock connection:  {e:?}");
-                            // TODO: add reset function to device or connection?
-                            let _ = device
-                                .connection_manager
-                                .lock()
-                                .deref_mut()
-                                .force_close(connection.peer, connection.local_port);
+                                event_type,
+                                buffer_status,
+                            });
+                            // TODO: on one hand, we want to wait for the tipc connection to unblock
+                            // on the other, we want to pick up incoming events as soon as we can...
+                            // NOTE: Adding support for interrupts means we no longer have to sleep.
+                            sleep(ten_ms);
+                            Ok(())
+                        }
+                        VsockConnection { state: VsockConnectionState::TipcConnecting, .. } => {
+                            warn!("got data while still waiting for tipc connection");
+                            Err(LkError::ERR_BAD_STATE.into())
+                        }
+                        VsockConnection { state: s, .. } => {
+                            error!("got data for connection in state {s:?}");
+                            Err(LkError::ERR_BAD_STATE.into())
+                        }
+                    } {
+                        error!("failed to receive data from vsock connection:  {e:?}");
+                        // TODO: add reset function to device or connection?
+                        let _ = device
+                            .connection_manager
+                            .lock()
+                            .deref_mut()
+                            .force_close(connection.peer, connection.local_port);
 
-                            if device.vsock_connection_close(connection, true) {
-                                // TODO: find a proper way to satisfy the borrow checker
-                                guard.deref_mut().swap_remove(conn_idx);
-                            }
-                        }
-                    } else {
-                        warn!("got packet for unknown connection");
-                    }
-                }
-                VsockEventType::Disconnected { reason } => {
-                    debug!("disconnected from peer. reason: {reason:?}");
-                    let mut guard = device.connections.lock();
-                    let connections = guard.deref_mut();
-                    if let Some((c_idx, c)) = vsock_connection_lookup(connections, source.port) {
-                        let vsock_done = true;
-                        if device.vsock_connection_close(c, vsock_done) {
+                        if device.vsock_connection_close(connection, true) {
                             // TODO: find a proper way to satisfy the borrow checker
-                            connections.swap_remove(c_idx);
+                            guard.deref_mut().swap_remove(conn_idx);
                         }
-                    } else {
-                        warn!("got disconnect ({reason:?}) for unknown connection");
                     }
-                }
-                VsockEventType::CreditUpdate => { /* nothing to do */ }
-                VsockEventType::CreditRequest => {
-                    // Polling the VsockConnectionManager won't return this event type
-                    panic!("don't know how to handle credit requests");
+                } else {
+                    warn!("got packet for unknown connection");
                 }
             }
-        } else {
-            sleep(ten_ms);
+            VsockEventType::Disconnected { reason } => {
+                debug!("disconnected from peer. reason: {reason:?}");
+                let mut guard = device.connections.lock();
+                let connections = guard.deref_mut();
+                if let Some((c_idx, c)) = vsock_connection_lookup(connections, source.port) {
+                    let vsock_done = true;
+                    if device.vsock_connection_close(c, vsock_done) {
+                        // TODO: find a proper way to satisfy the borrow checker
+                        connections.swap_remove(c_idx);
+                    }
+                } else {
+                    warn!("got disconnect ({reason:?}) for unknown connection");
+                }
+            }
+            VsockEventType::CreditUpdate => { /* nothing to do */ }
+            VsockEventType::CreditRequest => {
+                // Polling the VsockConnectionManager won't return this event type
+                panic!("don't know how to handle credit requests");
+            }
         }
     }
 }
@@ -487,9 +538,8 @@ where
             // but we can wait for it to become non-empty using handle_wait.
             // Once that that returns we have to call handle_set_wait again to
             // get the event we care about.
-            info!("handle_set_wait failed: {}", ret.unwrap_err());
             ret = device.handle_set.handle_wait(&mut href.emask(), timeout);
-            if ret != Err(LkError::ERR_TIMED_OUT.into()) {
+            if ret != Err(LkError::ERR_TIMED_OUT) {
                 info!("handle_wait on handle set returned: {ret:?}");
                 continue;
             }
@@ -550,15 +600,46 @@ where
                         c.tx_count += 1;
                         c.tx_since_rx += 1;
                         c.rx_since_tx = 0;
-                        device
-                            .connection_manager
-                            .lock()
-                            .send(c.peer, c.local_port, &tx_buffer[..msg_info.len])
-                            .expect(&format!("failed to send message from {}", c.tipc_port_name()));
-                        debug!("sent {} bytes from {}", msg_info.len, c.tipc_port_name());
+                        match device.connection_manager.lock().send(
+                            c.peer,
+                            c.local_port,
+                            &tx_buffer[..msg_info.len],
+                        ) {
+                            Err(err) => {
+                                if err == VirtioError::SocketDeviceError(SocketError::NotConnected)
+                                {
+                                    debug!(
+                                        "failed to send {} bytes from {}. Connection closed",
+                                        msg_info.len,
+                                        c.tipc_port_name()
+                                    );
+                                } else {
+                                    // TODO: close connection instead
+                                    panic!(
+                                        "failed to send {} bytes from {}: {:?}",
+                                        msg_info.len,
+                                        c.tipc_port_name(),
+                                        err
+                                    );
+                                }
+                            }
+                            Ok(_) => {
+                                debug!("sent {} bytes from {}", msg_info.len, c.tipc_port_name());
+                            }
+                        }
                     } else {
                         error!("ipc_read_msg failed: {ret}");
                     }
+                }
+            }
+            if href.emask() & IPC_HANDLE_POLL_SEND_UNBLOCKED != 0 {
+                assert_eq!(c.state, VsockConnectionState::TipcSendBlocked);
+                assert_ne!(c.rx_pending, 0);
+
+                debug!("tipc connection unblocked {}", c.tipc_port_name());
+
+                if let Err(e) = c.tipc_try_send() {
+                    error!("failed to send pending message to {}: {e:?}", c.tipc_port_name());
                 }
             }
             if href.emask() & IPC_HANDLE_POLL_HUP != 0 {
@@ -571,9 +652,18 @@ where
                     c.peer,
                     c.local_port
                 );
-                device.connection_manager.lock().shutdown(c.peer, c.local_port)?;
-                device.vsock_connection_close(c, /* vsock_done */ false);
+                let res = device.connection_manager.lock().shutdown(c.peer, c.local_port);
+                if res.is_ok() {
+                    device.vsock_connection_close(c, /* vsock_done */ false);
+                } else {
+                    warn!(
+                        "failed to send shutdown command, connection removed? {}",
+                        res.unwrap_err()
+                    );
+                }
             }
+        } else {
+            warn!("got event for non-existent remote {}, was it closed?", href.id());
         }
         drop(guard);
         href.handle_decref();
