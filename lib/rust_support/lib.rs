@@ -34,6 +34,7 @@ use core::ffi::CStr;
 use core::panic::PanicInfo;
 
 mod sys {
+    #![allow(clippy::upper_case_acronyms)]
     #![allow(unused)]
     #![allow(non_camel_case_types)]
     #![allow(non_upper_case_globals)]
@@ -47,6 +48,7 @@ pub mod handle_set;
 pub mod init;
 pub mod ipc;
 pub mod log;
+pub mod macros;
 pub mod mmu;
 pub mod sync;
 pub mod thread;
