@@ -37,12 +37,6 @@ pub use crate::sys::zero_uuid;
 pub use crate::sys::IPC_CONNECT_WAIT_FOR_PORT;
 pub use crate::sys::IPC_PORT_PATH_MAX;
 
-impl Default for ipc_msg_info {
-    fn default() -> Self {
-        Self { id: 0, len: 0, num_handles: 0 }
-    }
-}
-
 impl Default for ipc_msg_kern {
     fn default() -> Self {
         Self { iov: null_mut(), num_iov: 0, handles: null_mut(), num_handles: 0 }
