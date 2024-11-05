@@ -116,8 +116,6 @@ GLOBAL_SHARED_RUSTFLAGS += -C symbol-mangling-version=v0
 GLOBAL_SHARED_RUSTFLAGS += -C panic=abort -Z link-native-libraries=no
 GLOBAL_SHARED_RUSTFLAGS += -Z panic_abort_tests
 GLOBAL_SHARED_RUSTFLAGS += --deny warnings
-# Enable LTO for all Rust modules.
-GLOBAL_SHARED_RUSTFLAGS += -C lto=thin
 
 # Architecture specific compile flags
 ARCH_COMPILEFLAGS :=
@@ -222,6 +220,20 @@ GLOBAL_KERNEL_LDFLAGS += --whole-archive
 # and incorrectly target the wrong OS
 # TODO(b/224064243): remove this when we have a proper triple
 GLOBAL_SHARED_COMPILEFLAGS += -U__linux__
+
+# Enable LTO for all Rust modules.
+#
+# If the kernel has CFI enabled it needs to use linker LTO instead of the one
+# built into rustc. We need split LTO enabled for both languages
+# to avoid linking issues from mismatches between object files.
+# clang selects this by default, but rustc currently needs it to be selected
+# manually.
+ifeq (true,$(call TOBOOL,$(KERNEL_CFI_ENABLED)))
+GLOBAL_USER_RUSTFLAGS += -C lto=thin
+GLOBAL_KERNEL_RUSTFLAGS += -C linker-plugin-lto -Zsplit-lto-unit
+else
+GLOBAL_SHARED_RUSTFLAGS += -C lto=thin
+endif
 
 # Decide on the branch protection scheme.
 # Must mirror the MODULE_COMPILEFLAGS set in make/module.mk. We don't set
