@@ -1,19 +1,37 @@
 LOCAL_DIR := $(GET_LOCAL_DIR)
 
-OBJS += \
-	$(LOCAL_DIR)/atoi.o \
-	$(LOCAL_DIR)/ctype.o \
-	$(LOCAL_DIR)/printf.o \
-	$(LOCAL_DIR)/malloc.o \
-	$(LOCAL_DIR)/rand.o \
+MODULE := $(LOCAL_DIR)
 
+MODULE_DEPS := \
+	lib/io \
+	lib/libc/rand
+
+ifndef WITH_CUSTOM_MALLOC
+MODULE_DEPS += lib/heap
+endif
+
+GLOBAL_INCLUDES += $(LOCAL_DIR)/include_common
+
+MODULE_SRCS += \
+	$(LOCAL_DIR)/atoi.c \
+	$(LOCAL_DIR)/bsearch.c \
+	$(LOCAL_DIR)/ctype.c \
+	$(LOCAL_DIR)/errno.c \
+	$(LOCAL_DIR)/printf.c \
+	$(LOCAL_DIR)/strtol.c \
+	$(LOCAL_DIR)/strtoll.c \
+	$(LOCAL_DIR)/stdio.c \
+	$(LOCAL_DIR)/qsort.c \
+	$(LOCAL_DIR)/eabi.c \
+	$(LOCAL_DIR)/eabi_unwind_stubs.c \
+	$(LOCAL_DIR)/io_handle.c
+
+ifeq ($(WITH_CPP_SUPPORT),true)
+MODULE_SRCS += \
+	$(LOCAL_DIR)/atexit.c \
+	$(LOCAL_DIR)/pure_virtual.cpp
+endif
 
 include $(LOCAL_DIR)/string/rules.mk
 
-ifeq ($(WITH_CPP_SUPPORT),true)
-OBJS += \
-	$(LOCAL_DIR)/new.o \
-	$(LOCAL_DIR)/atexit.o \
-	$(LOCAL_DIR)/pure_virtual.o
-endif
-
+include make/module.mk

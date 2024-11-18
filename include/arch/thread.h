@@ -29,6 +29,7 @@
 struct thread;
 
 void arch_thread_initialize(struct thread *);
+void arch_init_thread_initialize(struct thread *thread, uint cpu);
 void arch_context_switch(struct thread *oldthread, struct thread *newthread);
 
 #endif

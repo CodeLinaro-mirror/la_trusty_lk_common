@@ -25,37 +25,42 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#include <stdint.h>
 #include <string.h>
 #include <sys/types.h>
 
 void *
 memset(void *s, int c, size_t count)
 {
-	char *xs = (char *) s;
-	size_t len = (-(size_t)s) & (sizeof(size_t)-1);
-	int cc = c & 0xff;
+    char *xs = (char *) s;
+    size_t len_mask = sizeof(size_t) - 1;
+    size_t len_delta = (size_t)-(intptr_t)s;
+    size_t len = len_delta & len_mask;
+    size_t cc = c & 0xff;
 
-	if ( count > len ) {
-		count -= len;
-		cc |= cc << 8;
-		cc |= cc << 16;
+    if ( count > len ) {
+        count -= len;
+        cc |= cc << 8;
+        cc |= cc << 16;
+        if (sizeof(size_t) == 8)
+            cc |= (uint64_t)cc << 32; // should be optimized out on 32 bit machines
 
-		// write to non-aligned memory byte-wise
-		for ( ; len > 0; len-- )
-			*xs++ = c;
+        // write to non-aligned memory byte-wise
+        for ( ; len > 0; len-- )
+            *xs++ = c;
 
-		// write to aligned memory dword-wise
-		for ( len = count/sizeof(size_t); len > 0; len-- ) {
-			*((size_t *)xs) = cc;
-			xs += sizeof(size_t);
-		}
+        // write to aligned memory dword-wise
+        for ( len = count/sizeof(size_t); len > 0; len-- ) {
+            *((size_t *)xs) = (size_t)cc;
+            xs += sizeof(size_t);
+        }
 
-		count &= sizeof(size_t)-1;
-	}
+        count &= sizeof(size_t)-1;
+    }
 
-	// write remaining bytes
-	for ( ; count > 0; count-- )
-		*xs++ = c;
+    // write remaining bytes
+    for ( ; count > 0; count-- )
+        *xs++ = (char)c;
 
-	return s;
+    return s;
 }

@@ -23,11 +23,13 @@
 #ifndef __DEV_ETHERNET_H
 #define __DEV_ETHERNET_H
 
+#include <sys/types.h>
+
 /* Queue an ethernet frame for send.
 **
 ** CRC and minimum length padding are handled by the driver.
 **
-** Data is malloc()'d and ownership is transfered to the ethernet
+** Data is malloc()'d and ownership is transferred to the ethernet
 ** device which will free() it once the packet is transmitted.
 **
 */
