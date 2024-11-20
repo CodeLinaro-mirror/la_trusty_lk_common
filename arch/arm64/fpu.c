@@ -34,12 +34,22 @@ static void arm64_fpu_load_state(struct thread *t)
     uint cpu = arch_curr_cpu_num();
     struct fpstate *fpstate = &t->arch.fpstate;
 
-    if (fpstate == current_fpstate[cpu] && fpstate->current_cpu == cpu) {
+    if (!arm64_fpu_load_fpstate(fpstate, false)) {
         LTRACEF("cpu %d, thread %s, fpstate already valid\n", cpu, t->name);
         return;
     }
     LTRACEF("cpu %d, thread %s, load fpstate %p, last cpu %d, last fpstate %p\n",
             cpu, t->name, fpstate, fpstate->current_cpu, current_fpstate[cpu]);
+}
+
+bool arm64_fpu_load_fpstate(struct fpstate *fpstate, bool force)
+{
+    uint cpu = arch_curr_cpu_num();
+
+    if (!force && fpstate == current_fpstate[cpu] &&
+        fpstate->current_cpu == cpu) {
+        return false;
+    }
     fpstate->current_cpu = cpu;
     current_fpstate[cpu] = fpstate;
 
@@ -66,12 +76,22 @@ static void arm64_fpu_load_state(struct thread *t)
                      :: "r"(fpstate),
                      "r"((uint64_t)fpstate->fpcr),
                      "r"((uint64_t)fpstate->fpsr));
+
+    return true;
 }
 
 void arm64_fpu_save_state(struct thread *t)
 {
-    uint64_t fpcr, fpsr;
     struct fpstate *fpstate = &t->arch.fpstate;
+    arm64_fpu_save_fpstate(fpstate);
+
+    LTRACEF("thread %s, fpcr %x, fpsr %x\n", t->name, fpstate->fpcr, fpstate->fpsr);
+}
+
+void arm64_fpu_save_fpstate(struct fpstate *fpstate)
+{
+    uint64_t fpcr, fpsr;
+
     __asm__ volatile("stp     q0, q1, [%2, #(0 * 32)]\n"
                      "stp     q2, q3, [%2, #(1 * 32)]\n"
                      "stp     q4, q5, [%2, #(2 * 32)]\n"
@@ -95,8 +115,6 @@ void arm64_fpu_save_state(struct thread *t)
 
     fpstate->fpcr = fpcr;
     fpstate->fpsr = fpsr;
-
-    LTRACEF("thread %s, fpcr %x, fpsr %x\n", t->name, fpstate->fpcr, fpstate->fpsr);
 }
 
 void arm64_fpu_exception(struct arm64_iframe_long *iframe)
