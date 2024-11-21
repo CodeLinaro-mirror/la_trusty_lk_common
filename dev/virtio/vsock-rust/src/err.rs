@@ -23,6 +23,8 @@
 
 use virtio_drivers::transport::pci::VirtioPciError;
 
+#[cfg(target_arch = "aarch64")]
+use hypervisor_backends::KvmError;
 use rust_support::Error as LkError;
 use virtio_drivers::Error as VirtioError;
 
@@ -33,6 +35,8 @@ pub enum Error {
     #[allow(dead_code)]
     Virtio(VirtioError),
     Lk(LkError),
+    #[cfg(target_arch = "aarch64")]
+    KvmError(KvmError),
 }
 
 impl From<VirtioPciError> for Error {
@@ -53,11 +57,20 @@ impl From<LkError> for Error {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
+impl From<KvmError> for Error {
+    fn from(e: KvmError) -> Self {
+        Self::KvmError(e)
+    }
+}
+
 impl Error {
     pub fn into_c(self) -> i32 {
         match self {
             Self::Pci(_) => rust_support::Error::ERR_GENERIC,
             Self::Virtio(_) => rust_support::Error::ERR_GENERIC,
+            #[cfg(target_arch = "aarch64")]
+            Self::KvmError(_) => rust_support::Error::ERR_GENERIC,
             Self::Lk(e) => e,
         }
         .into()
