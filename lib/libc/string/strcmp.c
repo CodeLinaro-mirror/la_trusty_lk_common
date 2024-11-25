@@ -1,4 +1,4 @@
-/* 
+/*
 ** Copyright 2001, Travis Geiselbrecht. All rights reserved.
 ** Distributed under the terms of the NewOS License.
 */
@@ -30,12 +30,14 @@
 int
 strcmp(char const *cs, char const *ct)
 {
-	signed char __res;
+    int res;
+    const unsigned char *su1 = (const unsigned char *)cs;
+    const unsigned char *su2 = (const unsigned char *)ct;
 
-	while(1) {
-		if((__res = *cs - *ct++) != 0 || !*cs++)
-			break;
-	}
+    while (1) {
+        if ((res = *su1 - *su2++) != 0 || !*su1++)
+            break;
+    }
 
-	return __res;
+    return res;
 }

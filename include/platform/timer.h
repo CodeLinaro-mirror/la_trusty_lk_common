@@ -23,9 +23,25 @@
 #ifndef __PLATFORM_TIMER_H
 #define __PLATFORM_TIMER_H
 
-typedef enum handler_return (*platform_timer_callback)(void *arg, time_t now);
+#include <sys/types.h>
 
-status_t platform_set_periodic_timer(platform_timer_callback callback, void *arg, time_t interval);
+typedef enum handler_return (*platform_timer_callback)(void *arg,
+                             lk_time_ns_t now);
+
+status_t platform_set_periodic_timer(platform_timer_callback callback, void *arg, lk_time_t interval);
+
+#if PLATFORM_HAS_DYNAMIC_TIMER
+status_t platform_set_oneshot_timer(platform_timer_callback callback,
+                                    lk_time_ns_t time_ns);
+void     platform_stop_timer(void);
+#endif
+
+struct platform_timer_state {
+	uint64_t tval;  /* timer counter */
+	uint64_t cval;  /* timer comparator */
+};
+
+void platform_export_timer_state(struct platform_timer_state *ts, bool raw);
 
 #endif
 
