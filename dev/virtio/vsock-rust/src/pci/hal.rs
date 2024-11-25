@@ -46,6 +46,7 @@ use virtio_drivers::transport::pci::bus::PciRoot;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 
 use crate::err::Error;
+use crate::pci::arch;
 
 #[derive(Copy, Clone)]
 struct BarInfo {
@@ -151,13 +152,23 @@ unsafe impl Hal for TrustyHal {
         // Safety: `vaddr` is valid because the call to `vmm_alloc_continuous` succeeded
         let paddr = unsafe { vaddr_to_paddr(vaddr) };
 
+        arch::dma_alloc_share(paddr, size);
+
         (paddr, NonNull::<u8>::new(vaddr as *mut u8).unwrap())
     }
 
-    unsafe fn dma_dealloc(_paddr: PhysAddr, vaddr: NonNull<u8>, _pages: usize) -> i32 {
-        // TODO: store pointers allocated with dma_alloc to validate the args
+    // Safety: `vaddr` was returned by `dma_alloc` and hasn't been deallocated.
+    unsafe fn dma_dealloc(paddr: PhysAddr, vaddr: NonNull<u8>, pages: usize) -> i32 {
+        let size = pages * PAGE_SIZE;
+        arch::dma_dealloc_unshare(paddr, size);
+
         let aspace = vmm_get_kernel_aspace();
-        vmm_free_region(aspace, vaddr.as_ptr() as _)
+        let vaddr = vaddr.as_ptr();
+        // Safety:
+        // - function-level requirements
+        // - `aspace` points to the kernel address space object
+        // - `vaddr` is a region in `aspace`
+        unsafe { vmm_free_region(aspace, vaddr as usize) }
     }
 
     // Only used for MMIO addresses within BARs read from the device,
@@ -174,20 +185,32 @@ unsafe impl Hal for TrustyHal {
                 if paddr + size > bar_paddr_end {
                     panic!("invalid arguments passed to mmio_phys_to_virt");
                 }
-                let offset: isize = (paddr - bar.paddr).try_into().unwrap();
+                let offset = paddr - bar.paddr;
 
                 let bar_vaddr_ptr: *mut u8 = bar.vaddr as _;
-                return NonNull::<u8>::new(bar_vaddr_ptr.offset(offset)).unwrap();
+                // Safety:
+                // - `BARS` correctly maps from physical to virtual pages
+                // - `offset` is less than or equal to bar.size because
+                //   `bar.paddr` <= `paddr`` < `bar_paddr_end`
+                let vaddr = unsafe { bar_vaddr_ptr.add(offset) };
+                return NonNull::<u8>::new(vaddr).unwrap();
             }
         }
 
         panic!("error mapping physical memory to virtual for mmio");
     }
 
-    unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
-        vaddr_to_paddr(buffer.as_ptr().cast())
+    // Safety: delegated to callee
+    unsafe fn share(buffer: NonNull<[u8]>, direction: BufferDirection) -> PhysAddr {
+        // Safety: delegated to arch::share
+        unsafe { arch::share(buffer, direction) }
     }
 
-    // Safety: no-op on x86-64, panic elsewhere.
-    unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {}
+    // Safety: delegated to callee
+    unsafe fn unshare(paddr: PhysAddr, buffer: NonNull<[u8]>, direction: BufferDirection) {
+        // Safety: delegated to arch::unshare
+        unsafe {
+            arch::unshare(paddr, buffer, direction);
+        }
+    }
 }
