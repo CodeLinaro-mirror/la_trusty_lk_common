@@ -1,8 +1,27 @@
 LOCAL_DIR := $(GET_LOCAL_DIR)
 
-INCLUDES += -I$(LOCAL_DIR)/include
+MODULE := $(LOCAL_DIR)
 
-OBJS += \
-	$(LOCAL_DIR)/tests.o \
-	$(LOCAL_DIR)/thread_tests.o \
-	$(LOCAL_DIR)/printf_tests.o
+MODULE_SRCS += \
+    $(LOCAL_DIR)/benchmarks.c \
+    $(LOCAL_DIR)/cache_tests.c \
+    $(LOCAL_DIR)/cbuf_tests.c \
+    $(LOCAL_DIR)/clock_tests.c \
+    $(LOCAL_DIR)/fibo.c \
+    $(LOCAL_DIR)/float.c \
+    $(LOCAL_DIR)/float_instructions.S \
+    $(LOCAL_DIR)/float_test_vec.c \
+    $(LOCAL_DIR)/mem_tests.c \
+    $(LOCAL_DIR)/printf_tests.c \
+    $(LOCAL_DIR)/tests.c \
+    $(LOCAL_DIR)/thread_tests.c \
+    $(LOCAL_DIR)/port_tests.c \
+
+MODULE_ARM_OVERRIDE_SRCS := \
+
+MODULE_DEPS += \
+    lib/cbuf
+
+MODULE_COMPILEFLAGS += -Wno-format -fno-builtin -Wno-unused-variable
+
+include make/module.mk

@@ -24,33 +24,20 @@
 #define __PLATFORM_DEBUG_H
 
 #include <sys/types.h>
+#include <stdbool.h>
 #include <stdarg.h>
 #include <compiler.h>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+__BEGIN_CDECLS
 
-void dputc(char c);
-int dgetc(char *c);
-int dputs(const char *str);
-int dprintf(const char *fmt, ...) __PRINTFLIKE(1, 2);
-int dvprintf(const char *fmt, va_list ap);
-void debug_dump_regs(void);
-uint32_t debug_cycle_count(void);
+void platform_dputc(char c);
+int platform_dgetc(char *c, bool wait);
 
-void debug_dump_memory_bytes(void *mem, int len);
-void debug_dump_memory_halfwords(void *mem, int len);
-void debug_dump_memory_words(void *mem, int len);
+// Should be available even if the system has panicked.
+void platform_pputc(char c);
+int platform_pgetc(char *c, bool wait);
 
-void debug_set_trace_level(int trace_type, int level);
-
-void debug_halt(void) __NO_RETURN;
-
-#if defined(__cplusplus)
-}
-#endif
-
+__END_CDECLS
 
 #endif
 

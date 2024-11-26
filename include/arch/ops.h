@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008 Travis Geiselbrecht
+ * Copyright (c) 2008-2014 Travis Geiselbrecht
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -26,19 +26,29 @@
 #ifndef ASSEMBLY
 
 #include <sys/types.h>
+#include <stddef.h>
+#include <stdbool.h>
 #include <compiler.h>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+__BEGIN_CDECLS
 
-void arch_enable_ints(void);
-void arch_disable_ints(void);
+/* fast routines that most arches will implement inline */
+static void arch_enable_ints(void);
+static void arch_disable_ints(void);
+static bool arch_ints_disabled(void);
+static bool arch_in_int_handler(void);
 
-int atomic_swap(volatile int *ptr, int val);
-int atomic_add(volatile int *ptr, int val);
-int atomic_and(volatile int *ptr, int val);
-int atomic_or(volatile int *ptr, int val);
+static int atomic_swap(volatile int *ptr, int val);
+static int atomic_add(volatile int *ptr, int val);
+static int atomic_and(volatile int *ptr, int val);
+static int atomic_or(volatile int *ptr, int val);
+
+static uint32_t arch_cycle_count(void);
+
+static uint arch_curr_cpu_num(void);
+
+/* Use to align structures on cache lines to avoid cpu aliasing. */
+#define __CPU_ALIGN __ALIGNED(CACHE_LINE)
 
 #endif // !ASSEMBLY
 #define ICACHE 1
@@ -51,21 +61,67 @@ void arch_enable_cache(uint flags);
 
 void arch_clean_cache_range(addr_t start, size_t len);
 void arch_clean_invalidate_cache_range(addr_t start, size_t len);
-	
+void arch_invalidate_cache_range(addr_t start, size_t len);
+void arch_sync_cache_range(addr_t start, size_t len);
+
 void arch_idle(void);
 
-void arch_disable_mmu(void);
+/* Zero the specified memory as well as the corresponding tags */
+void arch_clear_pages_and_tags(vaddr_t addr, size_t size);
 
-void arch_switch_stacks_and_call(addr_t call, addr_t stack) __NO_RETURN;
+/**
+ * arch_tagging_enabled - indicate if memory tags can be read and written
+ *
+ * Return: true if tags can be written and read, false if not
+ */
+bool arch_tagging_enabled(void);
 
-#if defined(__cplusplus)
-}
-#endif
+/**
+ * arch_bti_supported - indicates if branch target identification is supported.
+ *
+ * Return: true if BTI is supported, false if not
+ */
+bool arch_bti_supported(void);
+
+/**
+ * arch_pac_address_supported - indicates if PAC for addresses is supported.
+ *
+ * Return: true if PAC is supported, false if not
+ */
+bool arch_pac_address_supported(void);
+
+/**
+ * arch_pac_exception_supported - indicates if AUT* & RETA* failures generate faults.
+ *
+ * Return: true if FPAC is supported, false if not
+ */
+bool arch_pac_exception_supported(void);
+
+/**
+ * arch_sve_supported - indicates if Scalable Vector Extension (SVE) is supported.
+ *
+ * Return: true if SVE is supported, false if not
+ */
+bool arch_sve_supported(void);
+
+/*
+ * arch_enable_sve - Enables Scalable Vector Extension (SVE).
+ *
+ * Return: Value of CPACR_EL1 before any change was made.
+ */
+uint64_t arch_enable_sve(void);
+
+/*
+ * arch_disable_sve - Disables Scalable Vector Extension (SVE).
+ *
+ * Return: Value of CPACR_EL1 before any change was made.
+ */
+uint64_t arch_disable_sve(void);
+
+__END_CDECLS
 
 #endif // !ASSEMBLY
 
-#if ARCH_ARM
-#include <arch/arm/ops.h>
-#endif
+#include <arch/arch_ops.h>
 
 #endif
