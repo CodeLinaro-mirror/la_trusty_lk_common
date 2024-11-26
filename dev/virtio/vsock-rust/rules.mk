@@ -10,12 +10,22 @@ MODULE_EXPORT_INCLUDES += \
 MODULE_LIBRARY_DEPS := \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/trusty-std \
+	$(call FIND_CRATE,cfg-if) \
 	$(call FIND_CRATE,lazy_static) \
 	$(call FIND_CRATE,log) \
+	$(call FIND_CRATE,num-integer) \
+	$(call FIND_CRATE,spin) \
 	$(call FIND_CRATE,static_assertions) \
 	$(call FIND_CRATE,virtio-drivers) \
 
 # `trusty-std` is for its `#[global_allocator]`.
+
+# hypervisor_backends is arm64-only for now
+ifeq ($(ARCH),arm64)
+MODULE_LIBRARY_DEPS += \
+	packages/modules/Virtualization/libs/libhypervisor_backends \
+
+endif
 
 MODULE_RUSTFLAGS += \
 	-A clippy::disallowed_names \
