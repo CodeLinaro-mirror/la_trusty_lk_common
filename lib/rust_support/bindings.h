@@ -12,5 +12,4 @@
 #include <streams.h> /* stubs for stdin, stdout, stderr */
 
 #include "error.h"
-#include "config.h" /* for LK_DEBUGLEVEL */
-#include "debug.h" /* for LK_DEBUGLEVEL_.* */
+#include "config.h" /* for LK_LOGLEVEL_RUST */
