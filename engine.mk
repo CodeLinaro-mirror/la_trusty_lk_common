@@ -55,6 +55,15 @@ DEBUG ?= 2
 # when LOG_LEVEL_KERNEL = 2, dprintf SPEW level is enabled
 LOG_LEVEL_KERNEL ?= $(DEBUG)
 
+# LOG_LEVEL_KERNEL_RUST controls LK_LOGLEVEL_RUST
+# when LOG_LEVEL_KERNEL_RUST = 0, Rust max log level is LevelFilter::Off
+# when LOG_LEVEL_KERNEL_RUST = 1, Rust max log level is LevelFilter::Error
+# when LOG_LEVEL_KERNEL_RUST = 2, Rust max log level is LogLevel::Warning
+# when LOG_LEVEL_KERNEL_RUST = 3, Rust max log level is LogLevel::Info
+# when LOG_LEVEL_KERNEL_RUST = 4, Rust max log level is LogLevel::Debug
+# when LOG_LEVEL_KERNEL_RUST = 5 or greater, the max log level is LogLevel::Trace
+LOG_LEVEL_KERNEL_RUST ?= $(LOG_LEVEL_KERNEL)
+
 # LOG_LEVEL_USER controls TLOG_LVL_DEFAULT
 # when LOG_LEVEL_USER = 2 TLOG_LVL_DEFAULT = 4 (info)
 # when LOG_LEVEL_USER = 3 TLOG_LVL_DEFAULT = 5 (debug)
@@ -308,6 +317,7 @@ GLOBAL_DEFINES += \
 GLOBAL_DEFINES += \
 	LK_DEBUGLEVEL=$(DEBUG) \
 	LK_LOGLEVEL=$(LOG_LEVEL_KERNEL) \
+	LK_LOGLEVEL_RUST=$(LOG_LEVEL_KERNEL_RUST) \
 	TLOG_LVL_DEFAULT=$$(($(LOG_LEVEL_USER)+2)) \
 
 # add some automatic rust configuration flags
