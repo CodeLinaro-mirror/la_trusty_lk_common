@@ -49,8 +49,11 @@ use rust_support::vmm::vmm_get_kernel_aspace;
 use rust_support::Error as LkError;
 
 use crate::err::Error;
-use crate::hal::TrustyHal;
 use crate::vsock::VsockDevice;
+use hal::TrustyHal;
+
+mod arch;
+mod hal;
 
 impl TrustyHal {
     fn init_vsock(pci_root: &mut PciRoot, device_function: DeviceFunction) -> Result<(), Error> {
