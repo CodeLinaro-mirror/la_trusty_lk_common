@@ -34,6 +34,7 @@ use crate::LK_INIT_HOOK;
 use crate::sys::fflush;
 use crate::sys::fputs;
 use crate::sys::lk_stderr;
+use crate::sys::LK_LOGLEVEL_RUST;
 
 static TRUSTY_LOGGER: TrustyKernelLogger = TrustyKernelLogger;
 
@@ -62,10 +63,32 @@ impl Log for TrustyKernelLogger {
     }
 }
 
+/// Initialize logging for Rust in the kernel
+///
+/// By default, only warnings and errors are logged (even in debug builds).
+///
+/// The log level (`LK_LOGLEVEL_RUST`) is controlled by these make variables:
+/// - `LOG_LEVEL_KERNEL_RUST` if set,
+/// - `LOG_LEVEL_KERNEL` if set, and
+/// - `DEBUG` otherwise.
+///
+/// Values below (above) expected values sets the log level to off (trace).
 extern "C" fn kernel_log_init_func(_level: c_uint) {
     log::set_logger(&TRUSTY_LOGGER).unwrap();
-    // TODO: should be set based on LK_DEBUGLEVEL
-    log::set_max_level(LevelFilter::Trace);
+    // Level or LevelFilter cannot be created directly from integers
+    // https://github.com/rust-lang/log/issues/460
+    //
+    // bindgen emits `LK_LOGLEVEL_RUST` as `u32` when the value is
+    // a positive integer and omits it otherwise thus causing the
+    // build to fail.
+    log::set_max_level(match LK_LOGLEVEL_RUST {
+        0 => LevelFilter::Off,
+        1 => LevelFilter::Error,
+        2 => LevelFilter::Warn, // the default for Trusty
+        3 => LevelFilter::Info,
+        4 => LevelFilter::Debug,
+        _ => LevelFilter::Trace, // enable trace! at 5+
+    });
 }
 
 LK_INIT_HOOK!(kernel_log_init, kernel_log_init_func, lk_init_level::LK_INIT_LEVEL_HEAP);
