@@ -46,6 +46,7 @@ use virtio_drivers::transport::pci::bus::PciRoot;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 
 use crate::err::Error;
+use crate::pci::arch;
 
 #[derive(Copy, Clone)]
 struct BarInfo {
@@ -75,7 +76,7 @@ impl TrustyHal {
                 let bar_vaddr = core::ptr::null_mut();
                 let bar_size_aligned = (bar_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
 
-                // # Safety
+                // Safety:
                 // `aspace` is `vmm_get_kernel_aspace()`.
                 // `name` is a `&'static CStr`.
                 // `bar_paddr` and `bar_size_aligned` are safe by this function's safety requirements.
@@ -107,6 +108,7 @@ impl TrustyHal {
 // Safety: TrustyHal is stateless and thus trivially safe to send to another thread
 unsafe impl Send for TrustyHal {}
 
+// Safety: See function specific comments
 unsafe impl Hal for TrustyHal {
     // Safety:
     // Function either returns a non-null, properly aligned pointer or panics the kernel.
@@ -114,18 +116,18 @@ unsafe impl Hal for TrustyHal {
     fn dma_alloc(pages: usize, _direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
         let name = c"vsock-rust";
         // dma_alloc requests num pages but vmm_alloc_contiguous expects bytes.
-        let size = pages * PAGE_SIZE as usize;
+        let size = pages * PAGE_SIZE;
         let mut vaddr = core::ptr::null_mut(); // stores pointer to virtual memory
         let align_pow2 = PAGE_SIZE_SHIFT as u8;
         let vmm_flags = 0;
-        let arch_mmu_flags = 0;
+        let arch_mmu_flags = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
         let aspace = vmm_get_kernel_aspace();
 
         // NOTE: the allocated memory will be zeroed since vmm_alloc_contiguous
         // calls vmm_alloc_pmm which does not set the PMM_ALLOC_FLAG_NO_CLEAR
         // flag.
         //
-        // # Safety
+        // Safety:
         // `aspace` is `vmm_get_kernel_aspace()`.
         // `name` is a `&'static CStr`.
         // `size` is validated by the callee
@@ -150,13 +152,23 @@ unsafe impl Hal for TrustyHal {
         // Safety: `vaddr` is valid because the call to `vmm_alloc_continuous` succeeded
         let paddr = unsafe { vaddr_to_paddr(vaddr) };
 
+        arch::dma_alloc_share(paddr, size);
+
         (paddr, NonNull::<u8>::new(vaddr as *mut u8).unwrap())
     }
 
-    unsafe fn dma_dealloc(_paddr: PhysAddr, vaddr: NonNull<u8>, _pages: usize) -> i32 {
-        // TODO: store pointers allocated with dma_alloc to validate the args
+    // Safety: `vaddr` was returned by `dma_alloc` and hasn't been deallocated.
+    unsafe fn dma_dealloc(paddr: PhysAddr, vaddr: NonNull<u8>, pages: usize) -> i32 {
+        let size = pages * PAGE_SIZE;
+        arch::dma_dealloc_unshare(paddr, size);
+
         let aspace = vmm_get_kernel_aspace();
-        vmm_free_region(aspace, vaddr.as_ptr() as _)
+        let vaddr = vaddr.as_ptr();
+        // Safety:
+        // - function-level requirements
+        // - `aspace` points to the kernel address space object
+        // - `vaddr` is a region in `aspace`
+        unsafe { vmm_free_region(aspace, vaddr as usize) }
     }
 
     // Only used for MMIO addresses within BARs read from the device,
@@ -173,28 +185,32 @@ unsafe impl Hal for TrustyHal {
                 if paddr + size > bar_paddr_end {
                     panic!("invalid arguments passed to mmio_phys_to_virt");
                 }
-                let offset: isize = (paddr - bar.paddr).try_into().unwrap();
+                let offset = paddr - bar.paddr;
 
                 let bar_vaddr_ptr: *mut u8 = bar.vaddr as _;
-                return NonNull::<u8>::new(bar_vaddr_ptr.offset(offset)).unwrap();
+                // Safety:
+                // - `BARS` correctly maps from physical to virtual pages
+                // - `offset` is less than or equal to bar.size because
+                //   `bar.paddr` <= `paddr`` < `bar_paddr_end`
+                let vaddr = unsafe { bar_vaddr_ptr.add(offset) };
+                return NonNull::<u8>::new(vaddr).unwrap();
             }
         }
 
         panic!("error mapping physical memory to virtual for mmio");
     }
 
-    unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
-        // no-op on x86_64, not implemented on other architectures
-        #[cfg(not(target_arch = "x86_64"))]
-        unimplemented!();
-
-        vaddr_to_paddr(buffer.as_ptr().cast())
+    // Safety: delegated to callee
+    unsafe fn share(buffer: NonNull<[u8]>, direction: BufferDirection) -> PhysAddr {
+        // Safety: delegated to arch::share
+        unsafe { arch::share(buffer, direction) }
     }
 
-    // Safety: no-op on x86-64, panic elsewhere.
-    unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {
-        // no-op on x86_64, not implemented on other architectures
-        #[cfg(not(target_arch = "x86_64"))]
-        unimplemented!();
+    // Safety: delegated to callee
+    unsafe fn unshare(paddr: PhysAddr, buffer: NonNull<[u8]>, direction: BufferDirection) {
+        // Safety: delegated to arch::unshare
+        unsafe {
+            arch::unshare(paddr, buffer, direction);
+        }
     }
 }

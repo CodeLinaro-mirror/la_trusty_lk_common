@@ -34,9 +34,9 @@ MODULE_SRCS := \
 MODULE_ADD_IMPLICIT_DEPS := false
 
 MODULE_DEPS := \
-	external/rust/crates/num-derive \
-	external/rust/crates/num-traits \
-	external/rust/crates/log \
+	$(call FIND_CRATE,num-derive) \
+	$(call FIND_CRATE,num-traits) \
+	$(call FIND_CRATE,log) \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/libcompiler_builtins-rust \
 	trusty/user/base/lib/libcore-rust \
@@ -93,6 +93,7 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	IPC_CONNECT_WAIT_FOR_PORT \
 	IPC_HANDLE_POLL_.* \
 	IPC_PORT_PATH_MAX \
+	LK_LOGLEVEL_RUST \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
@@ -105,7 +106,19 @@ MODULE_BINDGEN_FLAGS := \
 	--no-prepend-enum-name \
 	--with-derive-custom Error=FromPrimitive \
 	--with-derive-custom handle_waiter=Default \
+	--with-derive-custom ipc_msg_info=Default \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
+
+MODULE_RUSTFLAGS += \
+	-A clippy::disallowed_names \
+	-A clippy::type-complexity \
+	-A clippy::unnecessary_fallible_conversions \
+	-A clippy::unnecessary-wraps \
+	-A clippy::unusual-byte-groupings \
+	-A clippy::upper-case-acronyms \
+	-D clippy::undocumented_unsafe_blocks \
+
+MODULE_RUST_USE_CLIPPY := true
 
 include make/module.mk

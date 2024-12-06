@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2009 Corey Tabaka
- * Copyright (c) 2015-2018 Intel Corporation
+ * Copyright (c) 2024 Google Inc. All rights reserved
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -21,34 +20,37 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#pragma once
 
-#include <sys/types.h>
+use cfg_if::cfg_if;
 
-#define IF_MASK             0x0200
-#define DF_MASK             0x0400
-#define IOPL_MASK           0x3000
-#define RSVD                0x0002
+cfg_if! {
+    if #[cfg(target_arch = "aarch64")] {
+        mod aarch64;
+        pub(crate) use aarch64::*;
+    } else if #[cfg(target_arch = "x86_64")] {
+        mod x86_64;
+        pub(crate) use x86_64::*;
+    } else {
+        use core::ptr::NonNull;
+        use virtio_drivers::BufferDirection;
+        use virtio_drivers::PhysAddr;
 
-/* 0x3202 */
-#define USER_EFLAGS (IF_MASK|IOPL_MASK|RSVD)
+        pub(crate) fn dma_alloc_share(_paddr: usize, _size: usize) {
+            unimplemented!();
+        }
 
-/* SYSCALL Handling */
-#define SYSENTER_CS_MSR     0x174
-#define SYSENTER_ESP_MSR    0x175
-#define SYSENTER_EIP_MSR    0x176
+        pub(crate) fn dma_dealloc_unshare(_paddr: PhysAddr, _size: usize) {
+            unimplemented!();
+        }
 
-#define STAR_MSR (0xC0000081)
-#define LSTAR_MSR (0xC0000082)
-#define CSTAR_MSR (0xC0000083)
-#define SFMASK_MSR (0xC0000084)
+        // Safety: unimplemented
+        pub(crate) unsafe fn share(_buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
+            unimplemented!();
+        }
 
-struct arch_thread {
-    vaddr_t sp;
-    vaddr_t fs_base;
-#if X86_WITH_FPU
-    vaddr_t *fpu_states;
-    uint8_t fpu_buffer[512 + 16];
-#endif
-};
-
+        // Safety: unimplemented
+        pub(crate) unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {
+            unimplemented!();
+        }
+    }
+}

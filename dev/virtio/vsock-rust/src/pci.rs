@@ -27,7 +27,7 @@ use core::ptr;
 
 use alloc::sync::Arc;
 
-use log::debug;
+use log::{debug, error};
 
 use virtio_drivers::device::socket::VirtIOSocket;
 use virtio_drivers::device::socket::VsockConnectionManager;
@@ -49,8 +49,11 @@ use rust_support::vmm::vmm_get_kernel_aspace;
 use rust_support::Error as LkError;
 
 use crate::err::Error;
-use crate::hal::TrustyHal;
 use crate::vsock::VsockDevice;
+use hal::TrustyHal;
+
+mod arch;
+mod hal;
 
 impl TrustyHal {
     fn init_vsock(pci_root: &mut PciRoot, device_function: DeviceFunction) -> Result<(), Error> {
@@ -65,10 +68,9 @@ impl TrustyHal {
             .name(c"virtio_vsock_rx")
             .priority(Priority::HIGH)
             .spawn(move || {
-                crate::vsock::vsock_rx_loop(device_for_rx)
-                    .err()
-                    .unwrap_or(LkError::NO_ERROR.into())
-                    .into_c()
+                let ret = crate::vsock::vsock_rx_loop(device_for_rx);
+                error!("vsock_rx_loop returned {:?}", ret);
+                ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
             })
             .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
@@ -76,10 +78,9 @@ impl TrustyHal {
             .name(c"virtio_vsock_tx")
             .priority(Priority::HIGH)
             .spawn(move || {
-                crate::vsock::vsock_tx_loop(device_for_tx)
-                    .err()
-                    .unwrap_or(LkError::NO_ERROR.into())
-                    .into_c()
+                let ret = crate::vsock::vsock_tx_loop(device_for_tx);
+                error!("vsock_tx_loop returned {:?}", ret);
+                ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
             })
             .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
@@ -122,22 +123,27 @@ impl TrustyHal {
 unsafe fn map_pci_root(
     pci_paddr: paddr_t,
     pci_size: usize,
-    _cfg_size: usize,
+    cfg_size: usize,
 ) -> Result<PciRoot, Error> {
     // The ECAM is defined in Section 7.2.2 of the PCI Express Base Specification, Revision 2.0.
     // The ECAM size must be a power of two with the exponent between 1 and 8.
-    let cam = Cam::Ecam;
+    let cam = match cfg_size / /* device functions */ 8 {
+        256 => Cam::MmioCam,
+        4096 => Cam::Ecam,
+        _ => return Err(LkError::ERR_BAD_LEN.into()),
+    };
+
     if !pci_size.is_power_of_two() || pci_size > cam.size() as usize {
         return Err(LkError::ERR_BAD_LEN.into());
     }
     // The ECAM base must be 2^(n + 20)-bit aligned.
-    if pci_paddr & (pci_size - 1) != 0 {
+    if cam == Cam::Ecam && pci_paddr & (pci_size - 1) != 0 {
         return Err(LkError::ERR_INVALID_ARGS.into());
     }
 
     // Map the PCI configuration space.
     let pci_vaddr = ptr::null_mut();
-    // # Safety
+    // Safety:
     // `aspace` is `vmm_get_kernel_aspace()`.
     // `name` is a `&'static CStr`.
     // `pci_paddr` and `pci_size` are safe by this function's safety requirements.
@@ -155,7 +161,7 @@ unsafe fn map_pci_root(
     };
     LkError::from_lk(e)?;
 
-    // # Safety:
+    // Safety:
     // `pci_paddr` is a valid physical address to the base of the MMIO region.
     // `pci_vaddr` is the mapped virtual address of that.
     // `pci_paddr` has `'static` lifetime, and `pci_vaddr` is never unmapped,
