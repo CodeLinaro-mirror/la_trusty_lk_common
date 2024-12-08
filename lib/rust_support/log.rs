@@ -34,6 +34,10 @@ use crate::LK_INIT_HOOK;
 use crate::sys::fflush;
 use crate::sys::fputs;
 use crate::sys::lk_stderr;
+use crate::sys::LK_DEBUGLEVEL;
+use crate::sys::LK_DEBUGLEVEL_CRITICAL;
+use crate::sys::LK_DEBUGLEVEL_INFO;
+use crate::sys::LK_DEBUGLEVEL_SPEW;
 
 static TRUSTY_LOGGER: TrustyKernelLogger = TrustyKernelLogger;
 
@@ -64,8 +68,12 @@ impl Log for TrustyKernelLogger {
 
 extern "C" fn kernel_log_init_func(_level: c_uint) {
     log::set_logger(&TRUSTY_LOGGER).unwrap();
-    // TODO: should be set based on LK_DEBUGLEVEL
-    log::set_max_level(LevelFilter::Trace);
+    log::set_max_level(match LK_DEBUGLEVEL {
+        LK_DEBUGLEVEL_CRITICAL => LevelFilter::Warn,
+        LK_DEBUGLEVEL_INFO => LevelFilter::Info,
+        LK_DEBUGLEVEL_SPEW => LevelFilter::Trace,
+        _ => LevelFilter::Trace,
+    });
 }
 
 LK_INIT_HOOK!(kernel_log_init, kernel_log_init_func, lk_init_level::LK_INIT_LEVEL_HEAP);
