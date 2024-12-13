@@ -253,8 +253,8 @@ ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 # In the kernel, it adds core, compiler_builtins and
 # lib/rust_support (except for external crates).
 MODULE_ALL_DEPS += \
-	trusty/user/base/lib/libcore-rust/ \
-	trusty/user/base/lib/libcompiler_builtins-rust/ \
+	trusty/user/base/lib/libcore-rust \
+	trusty/user/base/lib/libcompiler_builtins-rust \
 
 # rust_support depends on some external crates. We cannot
 # add it as an implicit dependency to any of them because
@@ -358,6 +358,19 @@ MODULE_OBJECT := $(MODULE_RSOBJS)
 ALLMODULE_OBJS := $(MODULE_INIT_OBJS) $(ALLMODULE_OBJS) $(MODULE_OBJECT) $(MODULE_EXTRA_ARCHIVES)
 
 endif # kernel/userspace rust
+
+# trigger rebuild with any of the rust compiler flags change
+MODULE_RUSTFLAGS_CONFIG := $(MODULE_BUILDDIR)/rustflags.config
+
+# TODO(b/383631031): properly include $(GLOBAL_RUSTFLAGS) as set in rust.mk in MODULE_RUSTFLAGS
+$(MODULE_RUSTFLAGS_CONFIG): MODULE_RUSTFLAGS:=$(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS)
+$(MODULE_RUSTFLAGS_CONFIG): MODULE:=$(MODULE)
+$(MODULE_RUSTFLAGS_CONFIG): configheader
+	@$(call INFO_DONE,$(MODULE),generating module rustflags.config, $@)
+	@$(call MAKECONFIGHEADER,$@,MODULE_RUSTFLAGS)
+
+GENERATED += $(MODULE_RUSTFLAGS_CONFIG)
+$(MODULE_RSOBJS): $(MODULE_RUSTFLAGS_CONFIG)
 
 # Build Rust sources
 $(addsuffix .d,$(MODULE_RSOBJS)):
@@ -466,5 +479,6 @@ MODULE_RUST_DEPS :=
 MODULE_RUST_STEM :=
 MODULE_SKIP_DOCS :=
 MODULE_ADD_IMPLICIT_DEPS := true
+MODULE_RUSTFLAGS_CONFIG :=
 
 endif # QUERY_MODULE (this line should stay after all other processing)
