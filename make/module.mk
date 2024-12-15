@@ -253,8 +253,8 @@ ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 # In the kernel, it adds core, compiler_builtins and
 # lib/rust_support (except for external crates).
 MODULE_ALL_DEPS += \
-	trusty/user/base/lib/libcore-rust/ \
-	trusty/user/base/lib/libcompiler_builtins-rust/ \
+	trusty/user/base/lib/libcore-rust \
+	trusty/user/base/lib/libcompiler_builtins-rust \
 
 # rust_support depends on some external crates. We cannot
 # add it as an implicit dependency to any of them because
