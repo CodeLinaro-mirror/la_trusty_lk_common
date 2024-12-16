@@ -184,14 +184,79 @@ impl VsockConnection {
     }
 }
 
+/// The action to take after running the `f` closure in [`vsock_connection_lookup`].
+#[derive(PartialEq, Eq)]
+enum ConnectionStateAction {
+    /// No action needs to be taken, so the connection stays open.
+    None,
+
+    /// TIPC has requested that the connection be closed.
+    /// This closes the connection and waits for the peer to acknowledge before removing it.
+    Close,
+
+    /// We want to close the connection and remove it
+    /// without waiting for the peer to acknowledge it,
+    /// such as when there is an error (but also potentially other reasons).
+    Remove,
+}
+
 fn vsock_connection_lookup(
-    connections: &mut [VsockConnection],
+    connections: &mut Vec<VsockConnection>,
     remote_port: u32,
-) -> Option<(usize, &mut VsockConnection)> {
-    connections
+    f: impl FnOnce(&mut VsockConnection) -> ConnectionStateAction,
+) -> Result<(), ()> {
+    let (index, connection) = connections
         .iter_mut()
         .enumerate()
         .find(|(_idx, connection)| connection.peer.port == remote_port)
+        .ok_or(())?;
+    let action = f(connection);
+    if action == ConnectionStateAction::None {
+        return Ok(());
+    }
+
+    if vsock_connection_close(connection, action) {
+        connections.swap_remove(index);
+    }
+
+    Ok(())
+}
+
+fn vsock_connection_close(c: &mut VsockConnection, action: ConnectionStateAction) -> bool {
+    info!(
+        "remote_port {}, tipc_port_name {}, state {:?}",
+        c.peer.port,
+        c.tipc_port_name(),
+        c.state
+    );
+
+    if c.state == VsockConnectionState::VsockOnly {
+        info!("tipc vsock only connection closed");
+        c.state = VsockConnectionState::TipcClosed;
+    }
+
+    if c.state == VsockConnectionState::Active
+        || c.state == VsockConnectionState::TipcConnecting
+        || c.state == VsockConnectionState::TipcSendBlocked
+    {
+        // The handle set owns the only reference we have to the handle and
+        // handle_set_wait might have already returned a pointer to c
+        c.href.detach();
+        c.href.handle_close();
+        c.href.set_cookie(null_mut());
+        info!("tipc handle closed");
+        c.state = VsockConnectionState::TipcClosed;
+    }
+    if action == ConnectionStateAction::Remove && c.state == VsockConnectionState::TipcClosed {
+        info!("vsock closed");
+        c.state = VsockConnectionState::Closed;
+    }
+    if c.state == VsockConnectionState::Closed && c.href.cookie().is_null() {
+        info!("remove connection");
+        c.print_stats();
+        return true; // remove connection
+    }
+    false // keep connection
 }
 
 pub struct VsockDevice<H, T>
@@ -346,43 +411,6 @@ where
         Ok(())
     }
 
-    fn vsock_connection_close(&self, c: &mut VsockConnection, vsock_done: bool) -> bool {
-        info!(
-            "remote_port {}, tipc_port_name {}, state {:?}",
-            c.peer.port,
-            c.tipc_port_name(),
-            c.state
-        );
-
-        if c.state == VsockConnectionState::VsockOnly {
-            info!("tipc vsock only connection closed");
-            c.state = VsockConnectionState::TipcClosed;
-        }
-
-        if c.state == VsockConnectionState::Active
-            || c.state == VsockConnectionState::TipcConnecting
-            || c.state == VsockConnectionState::TipcSendBlocked
-        {
-            // The handle set owns the only reference we have to the handle and
-            // handle_set_wait might have already returned a pointer to c
-            c.href.detach();
-            c.href.handle_close();
-            c.href.set_cookie(null_mut());
-            info!("tipc handle closed");
-            c.state = VsockConnectionState::TipcClosed;
-        }
-        if vsock_done && c.state == VsockConnectionState::TipcClosed {
-            info!("vsock closed");
-            c.state = VsockConnectionState::Closed;
-        }
-        if c.state == VsockConnectionState::Closed && c.href.cookie().is_null() {
-            info!("remove connection");
-            c.print_stats();
-            return true; // remove connection
-        }
-        false // keep connection
-    }
-
     fn print_stats(&self) {
         let guard = self.connections.lock();
         let connections = guard.deref();
@@ -446,10 +474,8 @@ where
             VsockEventType::Received { length } => {
                 debug!("recv destination: {destination:?}");
 
-                let mut guard = device.connections.lock();
-                if let Some((conn_idx, mut connection)) =
-                    vsock_connection_lookup(guard.deref_mut(), source.port)
-                {
+                let connections = &mut *device.connections.lock();
+                let _ = vsock_connection_lookup(connections, source.port, |mut connection| {
                     if let Err(e) = match connection {
                         ref mut c @ VsockConnection {
                             state: VsockConnectionState::VsockOnly, ..
@@ -490,28 +516,23 @@ where
                             .deref_mut()
                             .force_close(connection.peer, connection.local_port);
 
-                        if device.vsock_connection_close(connection, true) {
-                            // TODO: find a proper way to satisfy the borrow checker
-                            guard.deref_mut().swap_remove(conn_idx);
-                        }
+                        return ConnectionStateAction::Remove;
                     }
-                } else {
+                    ConnectionStateAction::None
+                })
+                .inspect_err(|_| {
                     warn!("got packet for unknown connection");
-                }
+                });
             }
             VsockEventType::Disconnected { reason } => {
                 debug!("disconnected from peer. reason: {reason:?}");
-                let mut guard = device.connections.lock();
-                let connections = guard.deref_mut();
-                if let Some((c_idx, c)) = vsock_connection_lookup(connections, source.port) {
-                    let vsock_done = true;
-                    if device.vsock_connection_close(c, vsock_done) {
-                        // TODO: find a proper way to satisfy the borrow checker
-                        connections.swap_remove(c_idx);
-                    }
-                } else {
+                let connections = &mut *device.connections.lock();
+                let _ = vsock_connection_lookup(connections, source.port, |_connection| {
+                    ConnectionStateAction::Remove
+                })
+                .inspect_err(|_| {
                     warn!("got disconnect ({reason:?}) for unknown connection");
-                }
+                });
             }
             VsockEventType::CreditUpdate => { /* nothing to do */ }
             VsockEventType::CreditRequest => {
@@ -557,9 +578,7 @@ where
             continue;
         }
 
-        let mut guard = device.connections.lock();
-        let connections = guard.deref_mut();
-        if let Some((_, c)) = vsock_connection_lookup(connections, href.id()) {
+        let _ = vsock_connection_lookup(&mut device.connections.lock(), href.id(), |c| {
             if !eq(c.href.as_mut_ptr() as *mut c_void, href.cookie()) {
                 panic!(
                     "unexpected cookie {:?} != {:?} for connection {}",
@@ -654,7 +673,7 @@ where
                 );
                 let res = device.connection_manager.lock().shutdown(c.peer, c.local_port);
                 if res.is_ok() {
-                    device.vsock_connection_close(c, /* vsock_done */ false);
+                    return ConnectionStateAction::Close;
                 } else {
                     warn!(
                         "failed to send shutdown command, connection removed? {}",
@@ -662,10 +681,11 @@ where
                     );
                 }
             }
-        } else {
+            ConnectionStateAction::None
+        })
+        .inspect_err(|_| {
             warn!("got event for non-existent remote {}, was it closed?", href.id());
-        }
-        drop(guard);
+        });
         href.handle_decref();
     }
 }
