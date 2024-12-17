@@ -28,6 +28,7 @@
 // C string literals were stabilized in Rust 1.77
 #![cfg_attr(not(version("1.77")), feature(c_str_literals))]
 #![deny(unsafe_op_in_unsafe_fn)]
+#![feature(new_uninit)]
 
 use alloc::format;
 use core::ffi::CStr;
@@ -47,6 +48,7 @@ pub mod handle;
 pub mod handle_set;
 pub mod init;
 pub mod ipc;
+pub mod ktipc;
 pub mod log;
 pub mod macros;
 pub mod mmu;
