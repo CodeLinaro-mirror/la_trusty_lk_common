@@ -60,6 +60,13 @@ SECTIONS
     }
 
     /*
+     * .got and .dynamic need to follow .ctors and .dtors because the linker
+     * puts them all in the RELRO segment and wants them contiguous
+     */
+    .dynamic : { *(.dynamic) }
+    .got : { *(.got.plt) *(.got) }
+
+    /*
      * extra linker scripts tend to insert sections just after .rodata,
      * so we want to make sure this symbol comes after anything inserted above,
      * but not aligned to the next section necessarily.

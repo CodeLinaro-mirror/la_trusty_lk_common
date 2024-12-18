@@ -21,38 +21,36 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use core::ptr::null_mut;
+use cfg_if::cfg_if;
 
-pub use crate::sys::ipc_get_msg;
-pub use crate::sys::ipc_port_connect_async;
-pub use crate::sys::ipc_put_msg;
-pub use crate::sys::ipc_read_msg;
-pub use crate::sys::ipc_send_msg;
+cfg_if! {
+    if #[cfg(target_arch = "aarch64")] {
+        mod aarch64;
+        pub(crate) use aarch64::*;
+    } else if #[cfg(target_arch = "x86_64")] {
+        mod x86_64;
+        pub(crate) use x86_64::*;
+    } else {
+        use core::ptr::NonNull;
+        use virtio_drivers::BufferDirection;
+        use virtio_drivers::PhysAddr;
 
-pub use crate::sys::iovec_kern;
-pub use crate::sys::ipc_msg_info;
-pub use crate::sys::ipc_msg_kern;
+        pub(crate) fn dma_alloc_share(_paddr: usize, _size: usize) {
+            unimplemented!();
+        }
 
-pub use crate::sys::zero_uuid;
-pub use crate::sys::IPC_CONNECT_WAIT_FOR_PORT;
-pub use crate::sys::IPC_PORT_ALLOW_NS_CONNECT;
-pub use crate::sys::IPC_PORT_ALLOW_TA_CONNECT;
-pub use crate::sys::IPC_PORT_PATH_MAX;
+        pub(crate) fn dma_dealloc_unshare(_paddr: PhysAddr, _size: usize) {
+            unimplemented!();
+        }
 
-impl Default for ipc_msg_kern {
-    fn default() -> Self {
-        Self { iov: null_mut(), num_iov: 0, handles: null_mut(), num_handles: 0 }
-    }
-}
+        // Safety: unimplemented
+        pub(crate) unsafe fn share(_buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
+            unimplemented!();
+        }
 
-impl ipc_msg_kern {
-    pub fn new(iov: &mut iovec_kern) -> Self {
-        Self { iov, num_iov: 1, ..ipc_msg_kern::default() }
-    }
-}
-
-impl From<&mut [u8]> for iovec_kern {
-    fn from(value: &mut [u8]) -> Self {
-        Self { iov_base: value.as_mut_ptr() as _, iov_len: value.len() }
+        // Safety: unimplemented
+        pub(crate) unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {
+            unimplemented!();
+        }
     }
 }

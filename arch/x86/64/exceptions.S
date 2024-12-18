@@ -150,7 +150,15 @@ DATA(_idt)
 .rept NUM_INT
     .short 0        /* low 16 bits of ISR offset (_isr#i & 0FFFFh) */
     .short CODE_64_SELECTOR   /* selector */
-.if i == INT_DOUBLE_FAULT /* Use dedicated stack ist1 for Double Fault Exception */
+.if i == INT_DOUBLE_FAULT || i == INT_NMI
+     /*
+      * Use dedicated stack ist1 for Double Fault Exception and
+      * Non-Maskable-Interrupt Exception. Resetting the stack pointer for
+      * double faults allows the kernel to recover from kernel stack
+      * overflows. Resetting the stack on NMI exceptions allows the NMI
+      * exception handler to run if the NMI triggered when the stack pointer
+      * was invalid, e.g. on syscall entry.
+      */
     .byte  1
 .else
     .byte  0

@@ -28,12 +28,14 @@
 // C string literals were stabilized in Rust 1.77
 #![cfg_attr(not(version("1.77")), feature(c_str_literals))]
 #![deny(unsafe_op_in_unsafe_fn)]
+#![feature(new_uninit)]
 
 use alloc::format;
 use core::ffi::CStr;
 use core::panic::PanicInfo;
 
 mod sys {
+    #![allow(clippy::upper_case_acronyms)]
     #![allow(unused)]
     #![allow(non_camel_case_types)]
     #![allow(non_upper_case_globals)]
@@ -46,7 +48,9 @@ pub mod handle;
 pub mod handle_set;
 pub mod init;
 pub mod ipc;
+pub mod ktipc;
 pub mod log;
+pub mod macros;
 pub mod mmu;
 pub mod sync;
 pub mod thread;

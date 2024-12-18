@@ -191,7 +191,7 @@ void x86_pfe_handler(x86_iframe_t *frame)
             case 7:
             default:
                 arch_enable_ints();
-                trusty_app_crash(error_code);
+                trusty_app_crash(error_code, 0, 0);
                 break;
         }
     } else {
@@ -239,7 +239,23 @@ void x86_exception_handler(x86_iframe_t *frame)
 #endif
             break;
 
+        case INT_NMI:
+            /*
+             * Don't trust GS for NMI exceptions. The NMI exception could
+             * trigger right before swap_gs in the exception entry code.
+             */
+            x86_check_and_fix_gs();
+            x86_unhandled_exception(frame);
+            break;
+
         case INT_DOUBLE_FAULT:
+            /*
+             * Don't trust GS for double fault exceptions. If a bug allowed
+             * user-space to run with a near full kernel stack (in TSS:RSP0),
+             * then a double fault might occur after the switch to the kernel
+             * CS, but before runs swap_gs in the original exception handler.
+             */
+            x86_check_and_fix_gs();
             exception_die(frame, "double fault (kernel stack overflow?)\n");
             break;
 

@@ -121,7 +121,8 @@ static inline bool arch_in_int_handler(void)
     return (ipsr & IPSR_ISR_Msk);
 #else
     /* set by the interrupt glue to track that the cpu is inside a handler */
-    extern bool __arm_in_handler;
+    /* Note that this in not SMP safe */
+    extern volatile bool __arm_in_handler;
 
     return __arm_in_handler;
 #endif

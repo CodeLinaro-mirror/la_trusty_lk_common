@@ -116,7 +116,13 @@ ifeq (true,$(call TOBOOL,$(MODULE_CFI_ENABLED)))
 MODULE_COMPILEFLAGS += \
 	-fsanitize-blacklist=trusty/kernel/lib/ubsan/exemptlist \
 	-fsanitize=cfi \
+	-fsanitize-cfi-icall-experimental-normalize-integers \
 	-DCFI_ENABLED
+
+ifeq (true,$(call TOBOOL,$(ARCH_$(ARCH)_SUPPORTS_RUST_CFI)))
+# CFI rust <-> C cfi
+MODULE_RUSTFLAGS += -Zsanitizer=cfi -Zsanitizer-cfi-normalize-integers
+endif
 
 MODULES += trusty/kernel/lib/ubsan
 
@@ -247,14 +253,18 @@ ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 # In the kernel, it adds core, compiler_builtins and
 # lib/rust_support (except for external crates).
 MODULE_ALL_DEPS += \
-	trusty/user/base/lib/libcore-rust/ \
-	trusty/user/base/lib/libcompiler_builtins-rust/ \
+	trusty/user/base/lib/libcore-rust \
+	trusty/user/base/lib/libcompiler_builtins-rust \
 
 # rust_support depends on some external crates. We cannot
 # add it as an implicit dependency to any of them because
-# that would create a circular dependency.
+# that would create a circular dependency. External crates
+# are either under external/rust/crates or in the monorepo
+# external/rust/android-crates-io/crates.
 ifeq ($(filter external/rust/crates/%,$(MODULE)),)
+ifeq ($(filter external/rust/android-crates-io/crates/%,$(MODULE)),)
 MODULE_ALL_DEPS += $(LKROOT)/lib/rust_support
+endif
 endif
 
 endif
@@ -349,6 +359,19 @@ ALLMODULE_OBJS := $(MODULE_INIT_OBJS) $(ALLMODULE_OBJS) $(MODULE_OBJECT) $(MODUL
 
 endif # kernel/userspace rust
 
+# trigger rebuild with any of the rust compiler flags change
+MODULE_RUSTFLAGS_CONFIG := $(MODULE_BUILDDIR)/rustflags.config
+
+# TODO(b/383631031): properly include $(GLOBAL_RUSTFLAGS) as set in rust.mk in MODULE_RUSTFLAGS
+$(MODULE_RUSTFLAGS_CONFIG): MODULE_RUSTFLAGS:=$(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS)
+$(MODULE_RUSTFLAGS_CONFIG): MODULE:=$(MODULE)
+$(MODULE_RUSTFLAGS_CONFIG): configheader
+	@$(call INFO_DONE,$(MODULE),generating module rustflags.config, $@)
+	@$(call MAKECONFIGHEADER,$@,MODULE_RUSTFLAGS)
+
+GENERATED += $(MODULE_RUSTFLAGS_CONFIG)
+$(MODULE_RSOBJS): $(MODULE_RUSTFLAGS_CONFIG)
+
 # Build Rust sources
 $(addsuffix .d,$(MODULE_RSOBJS)):
 
@@ -358,13 +381,13 @@ $(MODULE_RSOBJS): $(MODULE_RSSRC) $(MODULE_SRCDEPS) $(MODULE_EXTRA_OBJECTS) $(MO
 	@$(MKDIR)
 	@$(call ECHO,$(MODULE),compiling rust module,$<)
 ifeq ($(call TOBOOL,$(MODULE_RUST_USE_CLIPPY)),true)
-	$(NOECHO) set -e ; \
+	+$(NOECHO) set -e ; \
 		TEMP_CLIPPY_DIR=$$(mktemp -d) ;\
 		mkdir -p $(dir $$TEMP_CLIPPY_DIR/$@) ;\
 		$(MODULE_RUST_ENV) $(CLIPPY_DRIVER) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS) $< -o $$TEMP_CLIPPY_DIR/$@ ;\
 		rm -rf $$TEMP_CLIPPY_DIR
 endif
-	$(NOECHO)$(MODULE_RUST_ENV) $(RUSTC) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS) $< --emit "dep-info=$@.d" -o $@
+	+$(NOECHO)$(MODULE_RUST_ENV) $(RUSTC) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS) $< --emit "dep-info=$@.d" -o $@
 	@$(call ECHO_DONE_SILENT,$(MODULE),compiling rust module,$<)
 
 ifneq ($(call TOBOOL,$(MODULE_SKIP_DOCS)),true)
@@ -376,7 +399,7 @@ ifneq ($(call TOBOOL,$(MODULE_SKIP_DOCS)),true)
 $(MODULE_RUSTDOC_OBJECT): $(MODULE_RSSRC) | $(MODULE_RSOBJS)
 	@$(MKDIR)
 	@$(call ECHO,rustdoc,generating documentation,for $(MODULE_CRATE_NAME))
-	$(NOECHO)$(MODULE_RUST_ENV) $(RUSTDOC) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTDOCFLAGS) -L $(TRUSTY_LIBRARY_BUILDDIR) --out-dir $(MODULE_RUSTDOC_OUT_DIR) $<
+	+$(NOECHO)$(MODULE_RUST_ENV) $(RUSTDOC) $(GLOBAL_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS_PRELINK) $(MODULE_RUSTDOCFLAGS) -L $(TRUSTY_LIBRARY_BUILDDIR) --out-dir $(MODULE_RUSTDOC_OUT_DIR) $<
 	@touch $@
 	@$(call ECHO_DONE_SILENT,rustdoc,generating documentation,for $(MODULE_CRATE_NAME))
 
@@ -456,5 +479,6 @@ MODULE_RUST_DEPS :=
 MODULE_RUST_STEM :=
 MODULE_SKIP_DOCS :=
 MODULE_ADD_IMPLICIT_DEPS := true
+MODULE_RUSTFLAGS_CONFIG :=
 
 endif # QUERY_MODULE (this line should stay after all other processing)

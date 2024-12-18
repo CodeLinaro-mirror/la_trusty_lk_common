@@ -221,6 +221,9 @@ void arm_gicv3_init_percpu(void) {
     /* Initialized by ATF */
 #if ARM_GIC_USE_DOORBELL_NS_IRQ
     gicv3_gicr_setup_irq_group(ARM_GIC_DOORBELL_IRQ, GICV3_IRQ_GROUP_GRP1NS);
+
+    /* Enable EOIMode=1 */
+    GICCREG_WRITE(0, icc_ctlr_el1, (GICCREG_READ(0, icc_ctlr_el1) | 0x2));
 #endif
 #else
     /* non-TZ */

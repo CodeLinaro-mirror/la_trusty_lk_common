@@ -55,6 +55,15 @@ DEBUG ?= 2
 # when LOG_LEVEL_KERNEL = 2, dprintf SPEW level is enabled
 LOG_LEVEL_KERNEL ?= $(DEBUG)
 
+# LOG_LEVEL_KERNEL_RUST controls LK_LOGLEVEL_RUST
+# when LOG_LEVEL_KERNEL_RUST = 0, Rust max log level is LevelFilter::Off
+# when LOG_LEVEL_KERNEL_RUST = 1, Rust max log level is LevelFilter::Error
+# when LOG_LEVEL_KERNEL_RUST = 2, Rust max log level is LogLevel::Warning
+# when LOG_LEVEL_KERNEL_RUST = 3, Rust max log level is LogLevel::Info
+# when LOG_LEVEL_KERNEL_RUST = 4, Rust max log level is LogLevel::Debug
+# when LOG_LEVEL_KERNEL_RUST = 5 or greater, the max log level is LogLevel::Trace
+LOG_LEVEL_KERNEL_RUST ?= $(LOG_LEVEL_KERNEL)
+
 # LOG_LEVEL_USER controls TLOG_LVL_DEFAULT
 # when LOG_LEVEL_USER = 2 TLOG_LVL_DEFAULT = 4 (info)
 # when LOG_LEVEL_USER = 3 TLOG_LVL_DEFAULT = 5 (debug)
@@ -116,8 +125,6 @@ GLOBAL_SHARED_RUSTFLAGS += -C symbol-mangling-version=v0
 GLOBAL_SHARED_RUSTFLAGS += -C panic=abort -Z link-native-libraries=no
 GLOBAL_SHARED_RUSTFLAGS += -Z panic_abort_tests
 GLOBAL_SHARED_RUSTFLAGS += --deny warnings
-# Enable LTO for all Rust modules.
-GLOBAL_SHARED_RUSTFLAGS += -C lto=thin
 
 # Architecture specific compile flags
 ARCH_COMPILEFLAGS :=
@@ -223,6 +230,36 @@ GLOBAL_KERNEL_LDFLAGS += --whole-archive
 # TODO(b/224064243): remove this when we have a proper triple
 GLOBAL_SHARED_COMPILEFLAGS += -U__linux__
 
+# Enable LTO for all Rust modules.
+#
+# If the kernel has CFI enabled it needs to use linker LTO instead of the one
+# built into rustc. We need split LTO enabled for both languages
+# to avoid linking issues from mismatches between object files.
+# clang selects this by default, but rustc currently needs it to be selected
+# manually.
+ifeq (true,$(call TOBOOL,$(KERNEL_CFI_ENABLED)))
+GLOBAL_USER_RUSTFLAGS += -C lto=thin
+GLOBAL_KERNEL_RUSTFLAGS += -C linker-plugin-lto -Zsplit-lto-unit
+else
+GLOBAL_SHARED_RUSTFLAGS += -C lto=thin
+endif
+
+# Decide on the branch protection scheme.
+# Must mirror the MODULE_COMPILEFLAGS set in make/module.mk. We don't set
+# MODULE_RUSTFLAGS there since the lk-crates.a wrapper obj, which does not
+# use module.mk, needs the same flags.
+ifeq (true,$(call TOBOOL,$(KERNEL_BTI_ENABLED)))
+ifeq (true,$(call TOBOOL,$(KERNEL_PAC_ENABLED)))
+GLOBAL_KERNEL_RUSTFLAGS += -Z branch-protection=bti,pac-ret
+else
+GLOBAL_KERNEL_RUSTFLAGS += -Z branch-protection=bti
+endif
+else # !KERNEL_BTI_ENABLED
+ifeq (true,$(call TOBOOL,$(KERNEL_PAC_ENABLED)))
+GLOBAL_KERNEL_RUSTFLAGS += -Z branch-protection=pac-ret
+endif
+endif
+
 ifneq ($(GLOBAL_COMPILEFLAGS),)
 $(error Setting GLOBAL_COMPILEFLAGS directly from project or platform makefiles is no longer supported. Please use either GLOBAL_SHARED_COMPILEFLAGS or GLOBAL_KERNEL_COMPILEFLAGS.)
 endif
@@ -280,6 +317,7 @@ GLOBAL_DEFINES += \
 GLOBAL_DEFINES += \
 	LK_DEBUGLEVEL=$(DEBUG) \
 	LK_LOGLEVEL=$(LOG_LEVEL_KERNEL) \
+	LK_LOGLEVEL_RUST=$(LOG_LEVEL_KERNEL_RUST) \
 	TLOG_LVL_DEFAULT=$$(($(LOG_LEVEL_USER)+2)) \
 
 # add some automatic rust configuration flags
@@ -419,7 +457,9 @@ $(TOOLCHAIN_CONFIG): configheader
 
 GENERATED += $(TOOLCHAIN_CONFIG)
 
-GLOBAL_HOST_RUSTFLAGS += -C linker="$(CLANG_BINDIR)/clang++" -C link-args="-B $(CLANG_BINDIR) -fuse-ld=lld"
+GLOBAL_HOST_RUST_LINK_ARGS := -B $(CLANG_BINDIR) -B $(CLANG_HOST_SEARCHDIR) \
+	$(addprefix -L ,$(CLANG_HOST_LDDIRS)) --sysroot $(CLANG_HOST_SYSROOT) -fuse-ld=lld
+GLOBAL_HOST_RUSTFLAGS += -C linker="$(CLANG_BINDIR)/clang++" -C link-args="$(GLOBAL_HOST_RUST_LINK_ARGS)"
 GLOBAL_SHARED_RUSTFLAGS += -C linker="$(LD)"
 
 # TODO: we could find the runtime like this.

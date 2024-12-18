@@ -53,7 +53,7 @@ impl lk_init_struct {
         hook: unsafe extern "C" fn(uint),
         name: *const c_char,
     ) -> Self {
-        lk_init_struct { level: level.0, flags: flags.0, hook: Option::Some(hook), name: name }
+        lk_init_struct { level: level.0, flags: flags.0, hook: Option::Some(hook), name }
     }
 }
 
