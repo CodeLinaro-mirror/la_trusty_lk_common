@@ -136,7 +136,7 @@ impl<T: ?Sized> Mutex<T> {
         // SAFETY: `mutex_acquire` is thread safe and it was `mutex_init`ialized.
         let status = unsafe { mutex_acquire(self.mutex.get_raw()) };
         assert_eq!(Error::from_lk(status), Ok(()));
-        MutexGuard { lock: &self }
+        MutexGuard { lock: self }
     }
 }
 

@@ -35,6 +35,7 @@
 #include <platform.h>
 #include <sys/types.h>
 #include <string.h>
+#include "arch/arch_thread.h"
 
 /* early stack */
 uint8_t _kstack[PAGE_SIZE] __ALIGNED(8);
@@ -66,6 +67,27 @@ static void init_per_cpu_state(uint cpu)
         states.syscall_stack = 0;
 
         write_msr(X86_MSR_GS_BASE, (uint64_t)&states);
+    }
+}
+
+void x86_check_and_fix_gs(void)
+{
+    uint cpu = arch_curr_cpu_num();
+    x86_per_cpu_states_t *expected_gs_base = &per_cpu_states[cpu];
+    x86_per_cpu_states_t *current_gs_base = (void *)read_msr(X86_MSR_GS_BASE);
+
+    if (current_gs_base != expected_gs_base) {
+        printf("GS base is wrong %p != %p, try swapgs\n", current_gs_base, expected_gs_base);
+        __asm__ __volatile__ (
+            "swapgs"
+        );
+        current_gs_base = (void *)read_msr(X86_MSR_GS_BASE);
+        if (current_gs_base != expected_gs_base) {
+            printf("GS base is still wrong after swapgs %p != %p\n",
+                   current_gs_base, expected_gs_base);
+            write_msr(X86_MSR_GS_BASE, (uint64_t)expected_gs_base);
+            current_gs_base = (void *)read_msr(X86_MSR_GS_BASE);
+        }
     }
 }
 
@@ -122,10 +144,50 @@ static void setup_syscall_percpu(void)
      *      RIP          <-  SYSENTER_EIP_MSR
      *      CS.Selector  <-  SYSENTER_CS_MSR[15:0] & 0xFFFCH
      *      SS.Selector  <-  CS.Selector + 8
+     * SYSEXIT (w/64-bit operand):
+     *      CS.Selector  <-  (SYSENTER_CS_MSR[15:0] + 32) | 3
+     *      SS.Selector  <-  CS.Selector + 8
      */
+    static_assert(CODE_64_SELECTOR + 8 == STACK_64_SELECTOR);
+    static_assert(CODE_64_SELECTOR + 32 == USER_CODE_64_SELECTOR);
+    static_assert(CODE_64_SELECTOR + 32 + 8 == USER_DATA_64_SELECTOR);
+
     write_msr(SYSENTER_CS_MSR, CODE_64_SELECTOR);
     write_msr(SYSENTER_ESP_MSR, x86_read_gs_with_offset(SYSCALL_STACK_OFF));
     write_msr(SYSENTER_EIP_MSR, (uint64_t)(x86_syscall));
+
+    /*
+     * SYSCALL:
+     *      RIP          <-  LSTAR_MSR
+     *      CS.Selector  <-  STAR_MSR[47:32] & 0xFFFCH
+     *      SS.Selector  <-  STAR_MSR[47:32] + 8
+     * SYSRET (w/64-bit operand):
+     *      CS.Selector  <-  (STAR_MSR[63:48] + 16) | 3
+     *      SS.Selector  <-  (STAR_MSR[63:48] + 8) | 3 - On Intel
+     *      SS.Selector  <-  (STAR_MSR[63:48] + 8) - On AMD
+     *
+     * AMD says the hidden parts of SS are set to fixed values for SYSCALL but
+     * perplexingly left unchanged for SYSRET. Intel sets the SS hidden parts
+     * to (different) fixed values for both SYSCALL and SYSRET.
+     *
+     * AMD also states that the hidden parts of SS are ignored in 64 bit mode,
+     * but IRET throws a GP exception if SS.RPL != CS.RPL. We therefore need
+     * to set STAR_MSR[49:48] to 3 (USER_RPL) to be compatible with AMD CPUs.
+     */
+    static_assert(CODE_64_SELECTOR + 8 == STACK_64_SELECTOR);
+    static_assert(USER_CODE_COMPAT_SELECTOR + 16 == USER_CODE_64_SELECTOR);
+    /*
+     * Note that USER_DATA_COMPAT_SELECTOR is not the same value as
+     * USER_DATA_64_SELECTOR (since these instructions use hardcoded offsets),
+     * but the content of the descriptor is the same. The process will start
+     * with one SS value, but then get a different value after the syscall.
+     */
+    static_assert(USER_CODE_COMPAT_SELECTOR + 8 == USER_DATA_COMPAT_SELECTOR);
+
+    write_msr(STAR_MSR, (uint64_t)CODE_64_SELECTOR << 32 |
+                        (uint64_t)(USER_CODE_COMPAT_SELECTOR | USER_RPL) << 48);
+    write_msr(LSTAR_MSR, (uint64_t)(x86_syscall));
+    write_msr(SFMASK_MSR, IF_MASK | DF_MASK);
 }
 
 void arch_early_init(void)
@@ -217,6 +279,10 @@ void arch_enter_uspace(vaddr_t ep,
      *
      * More details please refer "IRET/IRETD -- Interrupt Return" in Intel
      * ISDM VOL2 <Instruction Set Reference>.
+     *
+     * Disable interrupts before swapgs so avoid getting entering the
+     * interrupt vector with a user-space gs descriptor and a kernel cs
+     * selector (which exceptions.S:interrupt_common checks).
      */
     __asm__ __volatile__ (
             "pushq %0   \n"
@@ -225,6 +291,7 @@ void arch_enter_uspace(vaddr_t ep,
             "pushq %3   \n"
             "pushq %4   \n"
             "pushq %5   \n"
+            "cli \n"
             "swapgs \n"
             "xorq %%r15, %%r15 \n"
             "xorq %%r14, %%r14 \n"

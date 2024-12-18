@@ -315,7 +315,7 @@ FUNCTION(arch_clean_cache_range)
     add     r2, r0, r1                  // calculate the end address
     bic     r0, #(CACHE_LINE-1)         // align the start with a cache line
 0:
-    mcr     p15, 0, r0, c7, c10, 1      // clean cache to PoC by MVA
+    mcr     p15, 0, r0, c7, c10, 1      // clean cache to PoC by MVA (DCCMVAC)
     add     r0, #CACHE_LINE
     cmp     r0, r2
     blo     0b
@@ -341,7 +341,7 @@ FUNCTION(arch_clean_invalidate_cache_range)
     add     r2, r0, r1                  // calculate the end address
     bic     r0, #(CACHE_LINE-1)         // align the start with a cache line
 0:
-    mcr     p15, 0, r0, c7, c14, 1      // clean & invalidate dcache to PoC by MVA
+    mcr     p15, 0, r0, c7, c14, 1      // clean & invalidate dcache to PoC by MVA (DCCIMVAC)
     add     r0, r0, #CACHE_LINE
     cmp     r0, r2
     blo     0b
@@ -367,7 +367,7 @@ FUNCTION(arch_invalidate_cache_range)
     add     r2, r0, r1                  // calculate the end address
     bic     r0, #(CACHE_LINE-1)         // align the start with a cache line
 0:
-    mcr     p15, 0, r0, c7, c6, 1       // invalidate dcache to PoC by MVA
+    mcr     p15, 0, r0, c7, c6, 1       // invalidate dcache to PoC by MVA (DCIMVAC)
     add     r0, r0, #CACHE_LINE
     cmp     r0, r2
     blo     0b
@@ -392,7 +392,7 @@ FUNCTION(arch_sync_cache_range)
     bl      arch_clean_cache_range
 
     mov     r0, #0
-    mcr     p15, 0, r0, c7, c5, 0       // invalidate icache to PoU
+    mcr     p15, 0, r0, c7, c5, 0       // invalidate all icache to PoU (ICIALLU)
 
     pop     { pc }
 

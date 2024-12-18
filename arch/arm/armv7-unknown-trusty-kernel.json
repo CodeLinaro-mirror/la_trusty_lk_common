@@ -16,7 +16,7 @@
     "plt-by-default": false,
     "relro-level": "full",
     "static-position-independent-executables": true,
-    "supported-sanitizers": [],
+    "supported-sanitizers": ["cfi"],
     "target-mcount": "\u0001mcount",
     "target-pointer-width": "32"
 }

@@ -33,6 +33,7 @@ ARCH_x86_RUSTFLAGS := --target=x86_64-unknown-trusty
 else
 # Use custom toolchain file that disables hardware floating point
 ARCH_x86_RUSTFLAGS := --target=$(LOCAL_DIR)/x86_64-unknown-trusty-kernel.json
+ARCH_x86_SUPPORTS_RUST_CFI := true
 endif
 
 endif

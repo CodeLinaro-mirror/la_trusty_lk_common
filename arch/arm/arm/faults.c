@@ -149,7 +149,7 @@ static void halt_thread(uint32_t spsr, uint32_t crash_reason)
     if ((spsr & CPSR_MODE_MASK) == CPSR_MODE_USR) {
         arch_enable_fiqs();
         arch_enable_ints();
-        trusty_app_crash(crash_reason);
+        trusty_app_crash(crash_reason, 0, 0);
     }
 
     panic("fault\n");

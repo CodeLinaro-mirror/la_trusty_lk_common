@@ -34,9 +34,11 @@ MODULE_SRCS := \
 MODULE_ADD_IMPLICIT_DEPS := false
 
 MODULE_DEPS := \
-	external/rust/crates/num-derive \
-	external/rust/crates/num-traits \
-	external/rust/crates/log \
+	$(call FIND_CRATE,num-derive) \
+	$(call FIND_CRATE,num-traits) \
+	$(call FIND_CRATE,log) \
+	trusty/kernel/lib/ktipc \
+	trusty/kernel/lib/vmm_obj_service \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/libcompiler_builtins-rust \
 	trusty/user/base/lib/libcore-rust \
@@ -59,6 +61,8 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	ipc_put_msg \
 	ipc_read_msg \
 	ipc_send_msg \
+	ktipc_server_init \
+	ktipc_server_start \
 	lk_stdin \
 	lk_stdout \
 	lk_stderr \
@@ -70,9 +74,16 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	thread_resume \
 	thread_sleep_ns \
 	vaddr_to_paddr \
+	vmm_alloc \
 	vmm_alloc_physical_etc \
 	vmm_alloc_contiguous \
 	vmm_free_region \
+	vmm_get_obj \
+	vmm_obj_slice_init \
+	vmm_obj_slice_release \
+	vmm_obj_service_add \
+	vmm_obj_service_create_ro \
+	vmm_obj_service_destroy \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
@@ -80,9 +91,14 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	handle_ref \
 	iovec_kern \
 	ipc_msg_.* \
+	ktipc_port_acl \
+	ktipc_server \
 	lk_init_.* \
 	lk_time_.* \
 	trusty_ipc_event_type \
+	uuid \
+	vmm_obj_service \
+	vmm_obj_slice \
 
 MODULE_BINDGEN_ALLOW_VARS := \
 	.*_PRIORITY \
@@ -92,7 +108,10 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	FILE \
 	IPC_CONNECT_WAIT_FOR_PORT \
 	IPC_HANDLE_POLL_.* \
+	IPC_PORT_ALLOW_NS_CONNECT \
+	IPC_PORT_ALLOW_TA_CONNECT \
 	IPC_PORT_PATH_MAX \
+	LK_LOGLEVEL_RUST \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
@@ -105,7 +124,19 @@ MODULE_BINDGEN_FLAGS := \
 	--no-prepend-enum-name \
 	--with-derive-custom Error=FromPrimitive \
 	--with-derive-custom handle_waiter=Default \
+	--with-derive-custom ipc_msg_info=Default \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
+
+MODULE_RUSTFLAGS += \
+	-A clippy::disallowed_names \
+	-A clippy::type-complexity \
+	-A clippy::unnecessary_fallible_conversions \
+	-A clippy::unnecessary-wraps \
+	-A clippy::unusual-byte-groupings \
+	-A clippy::upper-case-acronyms \
+	-D clippy::undocumented_unsafe_blocks \
+
+MODULE_RUST_USE_CLIPPY := true
 
 include make/module.mk

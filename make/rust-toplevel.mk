@@ -55,7 +55,19 @@ $(RUST_WRAPPER_OBJ): WRAPPER_RUSTFLAGS := $(WRAPPER_RUSTFLAGS)
 $(RUST_WRAPPER_OBJ): ARCH_RUSTFLAGS := $(ARCH_$(ARCH)_RUSTFLAGS)
 
 $(RUST_WRAPPER_OBJ): $(ALLMODULE_RLIBS) $(RUST_WRAPPER)
-	$(RUSTC) $(GLOBAL_KERNEL_RUSTFLAGS) $(GLOBAL_SHARED_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(WRAPPER_RUSTFLAGS) -o $@ $(RUST_WRAPPER)
+	+$(NOECHO)$(RUSTC) $(GLOBAL_KERNEL_RUSTFLAGS) $(GLOBAL_SHARED_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(WRAPPER_RUSTFLAGS) -o $@ $(RUST_WRAPPER)
+
+# trigger rebuild with any of the rust compiler flags change
+RUST_WRAPPER_CONFIG := $(BUILDDIR)/rustflags.config
+
+$(RUST_WRAPPER_CONFIG): WRAPPER_RUSTFLAGS:=$(GLOBAL_KERNEL_RUSTFLAGS) $(GLOBAL_SHARED_RUSTFLAGS) $(ARCH_RUSTFLAGS) $(WRAPPER_RUSTFLAGS)
+$(RUST_WRAPPER_CONFIG): RUST_WRAPPER_OBJ:=$(RUST_WRAPPER_OBJ)
+$(RUST_WRAPPER_CONFIG): configheader
+	@$(call INFO_DONE,$(RUST_WRAPPER_OBJ),generating rustflags.config, $@)
+	@$(call MAKECONFIGHEADER,$@,WRAPPER_RUSTFLAGS)
+
+GENERATED += $(RUST_WRAPPER_CONFIG)
+$(RUST_WRAPPER_OBJ): $(RUST_WRAPPER_CONFIG)
 
 # if there were no rust crates, don't build the .a
 ifneq ($(ALLMODULE_CRATE_STEMS),)
@@ -70,15 +82,22 @@ $(foreach crate,$(ALLMODULE_CRATE_STEMS_SORTED),\
 )
 
 define CRATE_CONFIG =
-{
-	"display_name": "$(crate)",
-	"root_module": "$(filter %.rs,$(MODULE_$(crate)_RUST_SRC))",
-	"edition": "$(MODULE_$(crate)_RUST_EDITION)",
-	"deps": [
+\t\t{\n
+	\t\t\t"display_name": "$(crate)",\n
+	\t\t\t"root_module": "$(abspath $(filter %.rs,$(MODULE_$(crate)_RUST_SRC)))",\n
+	\t\t\t"edition": "$(MODULE_$(crate)_RUST_EDITION)",\n
+	\t\t\t"deps": [\n
 		$(call STRIP_TRAILING_COMMA,$(foreach dep,$(sort $(MODULE_$(crate)_CRATE_DEPS)),\
-				{"name": "$(dep)"$(COMMA) "crate": $(RUST_TOPLEVEL_$(dep)_CRATE_INDEX)}$(COMMA)))
-	]
-},
+			\t\t\t\t{\n
+			\t\t\t\t\t"name": "$(dep)"$(COMMA)\n
+			\t\t\t\t\t"crate": $(RUST_TOPLEVEL_$(dep)_CRATE_INDEX)\n
+			\t\t\t\t}$(COMMA)\n))
+	\t\t\t],\n
+	\t\t\t"cfg": [\n
+		$(call STRIP_TRAILING_COMMA,$(foreach f, $(MODULE_$(crate)_CRATE_CFG),\
+			\t\t\t\t"$(subst ",\\\\\\\",$(f))"$(COMMA)\n))
+	\t\t\t]\n
+\t\t},\n
 
 endef
 
@@ -96,3 +115,4 @@ RUST_WRAPPER_SRC :=
 WRAPPER_RUSTFLAGS :=
 WRAPPER_RUST_EXTERN_PATHS :=
 ALLMODULE_CRATE_STEMS_SORTED :=
+RUST_WRAPPER_CONFIG :=
