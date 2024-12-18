@@ -8,6 +8,7 @@
 
 mod err;
 #[cfg(target_arch = "aarch64")]
+#[path = "kvm_aarch64.rs"]
 mod kvm;
 mod pci;
 mod vsock;
