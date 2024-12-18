@@ -55,9 +55,11 @@ fn get_granule() -> KvmResult<usize> {
 }
 
 pub(crate) fn share_pages(paddr: usize, size: usize) -> KvmResult<()> {
-    let hypervisor = get_mem_sharer()
-        .ok_or(KvmError::NotSupported)
-        .inspect_err(|_| error!("failed to get hypervisor"))?;
+    let hypervisor = match get_mem_sharer() {
+        Some(h) => h,
+        None => return Ok(()), // not in a protected vm
+    };
+
     let hypervisor_page_size = get_granule()?;
 
     if !paddr.is_multiple_of(&hypervisor_page_size) {
@@ -92,9 +94,10 @@ pub(crate) fn share_pages(paddr: usize, size: usize) -> KvmResult<()> {
 }
 
 pub(crate) fn unshare_pages(paddr: usize, size: usize) -> KvmResult<()> {
-    let hypervisor = get_mem_sharer()
-        .ok_or(KvmError::NotSupported)
-        .inspect_err(|_| error!("failed to get hypervisor"))?;
+    let hypervisor = match get_mem_sharer() {
+        Some(h) => h,
+        None => return Ok(()), // not in a protected vm
+    };
 
     let hypervisor_page_size = get_granule()?;
 
