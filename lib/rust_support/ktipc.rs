@@ -21,38 +21,22 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use core::ptr::null_mut;
+pub use crate::sys::ktipc_port_acl;
+pub use crate::sys::ktipc_server;
+pub use crate::sys::ktipc_server_init;
+pub use crate::sys::ktipc_server_start;
+pub use crate::sys::uuid;
 
-pub use crate::sys::ipc_get_msg;
-pub use crate::sys::ipc_port_connect_async;
-pub use crate::sys::ipc_put_msg;
-pub use crate::sys::ipc_read_msg;
-pub use crate::sys::ipc_send_msg;
+use core::ffi::CStr;
+use trusty_std::boxed::Box;
 
-pub use crate::sys::iovec_kern;
-pub use crate::sys::ipc_msg_info;
-pub use crate::sys::ipc_msg_kern;
-
-pub use crate::sys::zero_uuid;
-pub use crate::sys::IPC_CONNECT_WAIT_FOR_PORT;
-pub use crate::sys::IPC_PORT_ALLOW_NS_CONNECT;
-pub use crate::sys::IPC_PORT_ALLOW_TA_CONNECT;
-pub use crate::sys::IPC_PORT_PATH_MAX;
-
-impl Default for ipc_msg_kern {
-    fn default() -> Self {
-        Self { iov: null_mut(), num_iov: 0, handles: null_mut(), num_handles: 0 }
+// TODO(b/384572144): Port ktipc_server to rust instead of using FFI.
+pub fn ktipc_server_new(name: &'static CStr) -> Box<ktipc_server> {
+    let mut srv = Box::<ktipc_server>::new_uninit();
+    // SAFETY: Initializes object declared above. name is static.
+    unsafe {
+        ktipc_server_init(srv.as_mut_ptr(), name.as_ptr());
     }
-}
-
-impl ipc_msg_kern {
-    pub fn new(iov: &mut iovec_kern) -> Self {
-        Self { iov, num_iov: 1, ..ipc_msg_kern::default() }
-    }
-}
-
-impl From<&mut [u8]> for iovec_kern {
-    fn from(value: &mut [u8]) -> Self {
-        Self { iov_base: value.as_mut_ptr() as _, iov_len: value.len() }
-    }
+    // SAFETY: Initialized above with a function that cannot fail.
+    unsafe { srv.assume_init() }
 }
