@@ -64,9 +64,12 @@ impl TrustyHal {
         let device_for_rx = Arc::new(VsockDevice::new(manager));
         let device_for_tx = device_for_rx.clone();
 
+        // In some builds, stack overflows can occur on both threads when using 4k stacks
+        let stack_size = 8192usize;
         Builder::new()
             .name(c"virtio_vsock_rx")
             .priority(Priority::HIGH)
+            .stack_size(stack_size)
             .spawn(move || {
                 let ret = crate::vsock::vsock_rx_loop(device_for_rx);
                 error!("vsock_rx_loop returned {:?}", ret);
@@ -77,6 +80,7 @@ impl TrustyHal {
         Builder::new()
             .name(c"virtio_vsock_tx")
             .priority(Priority::HIGH)
+            .stack_size(stack_size)
             .spawn(move || {
                 let ret = crate::vsock::vsock_tx_loop(device_for_tx);
                 error!("vsock_tx_loop returned {:?}", ret);
