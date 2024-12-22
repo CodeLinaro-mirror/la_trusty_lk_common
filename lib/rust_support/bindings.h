@@ -2,10 +2,12 @@
 #include <kernel/mutex.h>
 #include <kernel/thread.h>
 #include <kernel/vm.h>
+#include <lib/ktipc/ktipc.h>
 #include <lib/trusty/handle.h>
 #include <lib/trusty/handle_set.h>
 #include <lib/trusty/ipc.h>
 #include <lib/trusty/uuid.h>
+#include <lib/vmm_obj_service/vmm_obj_service.h>
 #include <lk/init.h>
 #include <panic.h>
 #include <stdio.h>
