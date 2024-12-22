@@ -57,6 +57,9 @@ _start:
     bic     tmp, tmp, #(1<<1)  /* Disable Alignment Checking for EL1 EL0 */
     msr     sctlr_el1, tmp
 
+    /* Make sure SP1 is being used */
+    msr     spsel, #1
+
     /* set up the mmu according to mmu_initial_mappings */
 
     /* load the base of the translation table and clear the table */
@@ -373,7 +376,6 @@ _start:
     cbnz    cpuid, .Lsecondary_boot
 #endif
 #endif /* WITH_KERNEL_VM */
-
     adrl    tmp, sp_el1_bufs
     mov     sp, tmp
 
