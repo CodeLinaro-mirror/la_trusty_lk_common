@@ -28,6 +28,7 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use crate::paddr_t;
 use crate::status_t;
+use crate::Error;
 
 pub use crate::sys::vaddr_to_paddr;
 pub use crate::sys::vmm_alloc;
@@ -98,7 +99,7 @@ impl VmmPageArray<'_> {
         size: usize,
         align_log2: u8,
         vmm_flags: c_uint,
-    ) -> Result<Self, status_t> {
+    ) -> Result<Self, Error> {
         let aspace = vmm_get_kernel_aspace();
         let mut aligned_ptr: *mut c_void = core::ptr::null_mut();
         // SAFETY: Name is static and will therefore outlive the allocation. The return code is
@@ -115,14 +116,13 @@ impl VmmPageArray<'_> {
             )
         };
         if rc < 0 {
-            Err(rc)
-        } else {
-            // SAFETY: Aligned pointer was successfully allocated by vmm_alloc and the same size is
-            // being used.
-            let arr: &mut [u8] =
-                unsafe { core::slice::from_raw_parts_mut(aligned_ptr as *mut u8, size) };
-            Ok(Self { arr })
+            Error::from_lk(rc)?;
         }
+        // SAFETY: Aligned pointer was successfully allocated by vmm_alloc and the same size is
+        // being used.
+        let arr: &mut [u8] =
+            unsafe { core::slice::from_raw_parts_mut(aligned_ptr as *mut u8, size) };
+        Ok(Self { arr })
     }
 }
 
