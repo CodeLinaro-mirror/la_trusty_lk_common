@@ -21,38 +21,27 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use core::ptr::null_mut;
+use core::ptr::NonNull;
 
-pub use crate::sys::ipc_get_msg;
-pub use crate::sys::ipc_port_connect_async;
-pub use crate::sys::ipc_put_msg;
-pub use crate::sys::ipc_read_msg;
-pub use crate::sys::ipc_send_msg;
+use virtio_drivers::BufferDirection;
+use virtio_drivers::PhysAddr;
 
-pub use crate::sys::iovec_kern;
-pub use crate::sys::ipc_msg_info;
-pub use crate::sys::ipc_msg_kern;
+use rust_support::vmm::vaddr_to_paddr;
 
-pub use crate::sys::zero_uuid;
-pub use crate::sys::IPC_CONNECT_WAIT_FOR_PORT;
-pub use crate::sys::IPC_PORT_ALLOW_NS_CONNECT;
-pub use crate::sys::IPC_PORT_ALLOW_TA_CONNECT;
-pub use crate::sys::IPC_PORT_PATH_MAX;
+pub(crate) fn dma_alloc_share(_paddr: usize, _size: usize) {}
+pub(crate) fn dma_dealloc_unshare(_paddr: PhysAddr, _size: usize) {}
 
-impl Default for ipc_msg_kern {
-    fn default() -> Self {
-        Self { iov: null_mut(), num_iov: 0, handles: null_mut(), num_handles: 0 }
-    }
+// Safety: buffer must be a valid kernel virtual address for the duration of the call.
+pub(crate) unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
+    // no-op on x86_64
+    // Safety: buffer is a valid kernel virtual address
+    unsafe { vaddr_to_paddr(buffer.as_ptr().cast()) }
 }
 
-impl ipc_msg_kern {
-    pub fn new(iov: &mut iovec_kern) -> Self {
-        Self { iov, num_iov: 1, ..ipc_msg_kern::default() }
-    }
-}
-
-impl From<&mut [u8]> for iovec_kern {
-    fn from(value: &mut [u8]) -> Self {
-        Self { iov_base: value.as_mut_ptr() as _, iov_len: value.len() }
-    }
+// Safety: not actually unsafe.
+pub(crate) unsafe fn unshare(
+    _paddr: PhysAddr,
+    _buffer: NonNull<[u8]>,
+    _direction: BufferDirection,
+) {
 }

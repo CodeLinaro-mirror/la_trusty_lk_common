@@ -74,6 +74,7 @@ struct arm64_iframe_short {
 };
 
 struct thread;
+struct fpstate;
 
 /*
  * This declaration is made to avoid issues with CFI while setting
@@ -86,6 +87,29 @@ extern uint32_t arm64_exception_base[];
 void arm64_el3_to_el1(void);
 void arm64_fpu_exception(struct arm64_iframe_long *iframe);
 void arm64_fpu_save_state(struct thread *thread);
+
+/**
+ * arm64_fpu_load_fpstate() - Load the FP state from memory.
+ * @fpstate: Pointer to a &struct fpstate containing the new
+ *           values of the FP registers.
+ * @force: Force the load operation even if the @fpstate pointer
+ *         is the same as the previous operation.
+ *
+ * Return:
+ * * %true if the load is performed successfully
+ * * %false if the register values are already present in the registers
+ *
+ * This function will copy the pointer from @fpstate into some internal
+ * storage. For this reason, the pointer should not point
+ * into the stack.
+ */
+bool arm64_fpu_load_fpstate(struct fpstate *fpstate, bool force);
+
+/**
+ * arm64_fpu_save_fpstate() - Save the current values of the FP registers.
+ * @fpstate: Pointer to a &struct fpstate to store the registers into.
+ */
+void arm64_fpu_save_fpstate(struct fpstate *fpstate);
 
 static inline void arm64_fpu_pre_context_switch(struct thread *thread)
 {

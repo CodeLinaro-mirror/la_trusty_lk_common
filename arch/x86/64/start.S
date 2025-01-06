@@ -26,19 +26,6 @@
 #include <arch/x86/descriptor.h>
 #include <arch/x86/mmu.h>
 
-/* The magic number for the Multiboot header. */
-#define MULTIBOOT_HEADER_MAGIC 0x1BADB002
-
-/* The flags for the Multiboot header. */
-#if defined(__ELF__) && 0
-#define MULTIBOOT_HEADER_FLAGS 0x00000002
-#else
-#define MULTIBOOT_HEADER_FLAGS 0x00010002
-#endif
-
-/* The magic number passed by a Multiboot-compliant boot loader. */
-#define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
-
 #define MSR_EFER    0xc0000080
 #define EFER_NXE    0x00000800
 #define EFER_SCE    0x00000001
@@ -346,84 +333,6 @@
 
 .global _start
 _start:
-    jmp real_start
-
-.align 8
-
-.type multiboot_header,STT_OBJECT
-multiboot_header:
-    /* magic */
-    .int MULTIBOOT_HEADER_MAGIC
-    /* flags */
-    .int MULTIBOOT_HEADER_FLAGS
-    /* checksum */
-    .int -(MULTIBOOT_HEADER_MAGIC + MULTIBOOT_HEADER_FLAGS)
-
-#if !defined(__ELF__) || 1
-    /* header_addr */
-    .int PHYS(multiboot_header)
-    /* load_addr */
-    .int PHYS(_start)
-    /* load_end_addr */
-    .int PHYS(__data_end)
-    /* bss_end_addr */
-    .int PHYS(__bss_end)
-    /* entry_addr */
-    .int PHYS(real_start)
-#endif
-
-real_start:
-    cmpq $MULTIBOOT_BOOTLOADER_MAGIC, %rax
-
-    jne .Lno_multiboot_info
-    movq %rbx, PHYS(_multiboot_info)
-
-    /* RSI stores multiboot info address */
-    leaq (%rbx), %rsi
-
-    /*
-     * first member in multiboot info structure is flag. If bit 0 in the flag
-     * word is set, then mem_lower and mem_high indicate the amount of lower
-     * and upper memory in kilobytes. Currently, we support this mode only.
-     */
-    movq 0(%rsi), %rcx
-    andq $0x1, %rcx
-    jz  .Lno_multiboot_info
-
-    /* ECX stores high memory (KB) provided by multiboot info */
-    movl 0x8(%rsi), %ecx
-
-    /* halt machine if memory size to small */
-    movq $__bss_end, %rdx
-    movq $__code_start, %rax
-    subq %rax, %rdx
-    addq $MEMBASE, %rdx
-    shrq $10, %rdx
-    cmpq %rdx, %rcx
-    jc .Lhalt
-
-    movq %rcx, %rdx
-    /* RDX indicates high memory in bytes */
-    shlq $10, %rdx
-    movq $MEMBASE, %rax
-
-    /* RDX indicates memory size in bytes */
-    subq %rax, %rdx
-
-    /* halt machine if memory size to large */
-    cmpq $MAX_MEM_SIZE, %rdx
-    jnc .Lhalt
-
-    leaq PHYS(mmu_initial_mappings), %rsi
-    /*
-     * RDI points to size of first entry in mmu_initial_mappings.
-     * Contents of this entry will be used to init pmm arena,
-     * mmu_initial_mappings is defined in platform.c.
-     */
-    leaq 0x10(%rsi), %rdi
-    movq %rdx, (%rdi)
-
-.Lno_multiboot_info:
 
     /* zero the bss section */
 bss_setup:

@@ -28,12 +28,24 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use crate::paddr_t;
 use crate::status_t;
+use crate::Error;
 
 pub use crate::sys::vaddr_to_paddr;
+pub use crate::sys::vmm_alloc;
 pub use crate::sys::vmm_alloc_contiguous;
 pub use crate::sys::vmm_alloc_physical_etc;
 pub use crate::sys::vmm_aspace_t;
 pub use crate::sys::vmm_free_region;
+pub use crate::sys::vmm_get_obj;
+pub use crate::sys::vmm_obj_service;
+pub use crate::sys::vmm_obj_service_add;
+pub use crate::sys::vmm_obj_service_create_ro;
+pub use crate::sys::vmm_obj_service_destroy;
+pub use crate::sys::vmm_obj_slice;
+pub use crate::sys::vmm_obj_slice_init;
+pub use crate::sys::vmm_obj_slice_release;
+
+use core::ffi::CStr;
 
 #[inline]
 pub fn vmm_get_kernel_aspace() -> *mut vmm_aspace_t {
@@ -71,5 +83,64 @@ pub unsafe fn vmm_alloc_physical(
             vmm_flags,
             arch_mmu_flags,
         )
+    }
+}
+
+/// A wrapper for an array allocated by Trusty's vmm library.
+pub struct VmmPageArray {
+    ptr: *mut c_void,
+    size: usize,
+}
+
+impl VmmPageArray {
+    /// Allocates memory with vmm_allox. size if automatically aligned up to the next page size.
+    /// Memory is automatically freed in drop.
+    pub fn new(
+        name: &'static CStr,
+        size: usize,
+        align_log2: u8,
+        vmm_flags: c_uint,
+    ) -> Result<Self, Error> {
+        let aspace = vmm_get_kernel_aspace();
+        let mut aligned_ptr: *mut c_void = core::ptr::null_mut();
+        // SAFETY: Name is static and will therefore outlive the allocation. The return code is
+        // checked before returning the array to the caller.
+        let rc = unsafe {
+            crate::sys::vmm_alloc(
+                aspace,
+                name.as_ptr(),
+                size,
+                &mut aligned_ptr,
+                align_log2,
+                vmm_flags,
+                crate::mmu::ARCH_MMU_FLAG_CACHED | crate::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE,
+            )
+        };
+        if rc < 0 {
+            Error::from_lk(rc)?;
+        }
+        Ok(Self { ptr: aligned_ptr, size })
+    }
+
+    pub fn ptr(&self) -> *mut c_void {
+        self.ptr
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
+        // SAFETY: Aligned pointer was successfully allocated by vmm_alloc and the same size is
+        // being used.
+        unsafe { core::slice::from_raw_parts_mut(self.ptr as *mut u8, self.size) }
+    }
+}
+
+impl Drop for VmmPageArray {
+    fn drop(&mut self) {
+        let aspace = vmm_get_kernel_aspace();
+        // SAFETY: Freeing a pointer allocated by vmm_alloc.
+        unsafe { vmm_free_region(aspace, self.ptr as usize) };
     }
 }
