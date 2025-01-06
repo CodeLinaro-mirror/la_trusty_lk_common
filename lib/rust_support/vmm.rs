@@ -87,11 +87,12 @@ pub unsafe fn vmm_alloc_physical(
 }
 
 /// A wrapper for an array allocated by Trusty's vmm library.
-pub struct VmmPageArray<'a> {
-    pub arr: &'a mut [u8],
+pub struct VmmPageArray {
+    ptr: *mut c_void,
+    size: usize,
 }
 
-impl VmmPageArray<'_> {
+impl VmmPageArray {
     /// Allocates memory with vmm_allox. size if automatically aligned up to the next page size.
     /// Memory is automatically freed in drop.
     pub fn new(
@@ -118,18 +119,28 @@ impl VmmPageArray<'_> {
         if rc < 0 {
             Error::from_lk(rc)?;
         }
+        Ok(Self { ptr: aligned_ptr, size })
+    }
+
+    pub fn ptr(&self) -> *mut c_void {
+        self.ptr
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
         // SAFETY: Aligned pointer was successfully allocated by vmm_alloc and the same size is
         // being used.
-        let arr: &mut [u8] =
-            unsafe { core::slice::from_raw_parts_mut(aligned_ptr as *mut u8, size) };
-        Ok(Self { arr })
+        unsafe { core::slice::from_raw_parts_mut(self.ptr as *mut u8, self.size) }
     }
 }
 
-impl Drop for VmmPageArray<'_> {
+impl Drop for VmmPageArray {
     fn drop(&mut self) {
         let aspace = vmm_get_kernel_aspace();
         // SAFETY: Freeing a pointer allocated by vmm_alloc.
-        unsafe { vmm_free_region(aspace, self.arr.as_ptr() as usize) };
+        unsafe { vmm_free_region(aspace, self.ptr as usize) };
     }
 }
