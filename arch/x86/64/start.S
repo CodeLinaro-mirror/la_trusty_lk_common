@@ -333,6 +333,11 @@
 
 .global _start
 _start:
+    /* save boot args first, in unused registers */
+    movq %rdi, %r12
+    movq %rsi, %r13
+    movq %rdx, %r14
+    movq %rcx, %r15
 
     /* zero the bss section */
 bss_setup:
@@ -459,6 +464,12 @@ paging_setup:
 
     /* set up the idt */
     call setup_idt
+
+    /* restore boot args to lk_main arguments */
+    movq %r12, %rdi
+    movq %r13, %rsi
+    movq %r14, %rdx
+    movq %r15, %rcx
 
     /* call the main module */
     call lk_main
