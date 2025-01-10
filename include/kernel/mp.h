@@ -66,23 +66,23 @@ extern struct mp_state mp;
 
 static inline int mp_is_cpu_active(uint cpu)
 {
-    return mp.active_cpus & (1 << cpu);
+    return mp.active_cpus & (1U << cpu);
 }
 
 static inline int mp_is_cpu_idle(uint cpu)
 {
-    return mp.idle_cpus & (1 << cpu);
+    return mp.idle_cpus & (1U << cpu);
 }
 
 /* must be called with the thread lock held */
 static inline void mp_set_cpu_idle(uint cpu)
 {
-    mp.idle_cpus |= 1UL << cpu;
+    mp.idle_cpus |= 1U << cpu;
 }
 
 static inline void mp_set_cpu_busy(uint cpu)
 {
-    mp.idle_cpus &= ~(1UL << cpu);
+    mp.idle_cpus &= ~(1U << cpu);
 }
 
 static inline mp_cpu_mask_t mp_get_idle_mask(void)
@@ -92,12 +92,12 @@ static inline mp_cpu_mask_t mp_get_idle_mask(void)
 
 static inline void mp_set_cpu_realtime(uint cpu)
 {
-    mp.realtime_cpus |= 1UL << cpu;
+    mp.realtime_cpus |= 1U << cpu;
 }
 
 static inline void mp_set_cpu_non_realtime(uint cpu)
 {
-    mp.realtime_cpus &= ~(1UL << cpu);
+    mp.realtime_cpus &= ~(1U << cpu);
 }
 
 static inline mp_cpu_mask_t mp_get_realtime_mask(void)
