@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#include <arch/mp.h>
 #include <assert.h>
 #include <bits.h>
 #include <err.h>
@@ -30,6 +31,7 @@
 #include <reg.h>
 #include <kernel/thread.h>
 #include <kernel/debug.h>
+#include <kernel/mp.h>
 #include <kernel/vm.h>
 #include <lk/init.h>
 #include <lk/macros.h>
@@ -918,6 +920,16 @@ status_t sm_intc_fiq_enter(void)
     return fiq_enter_defer_irqs(cpu);
 #else
     return fiq_enter_unexpected_irq(cpu);
+#endif
+}
+
+void sm_intc_raise_doorbell_irq(void)
+{
+    u_int cpu = arch_curr_cpu_num();
+#if ARM_GIC_USE_DOORBELL_NS_IRQ
+    raise_ns_doorbell_irq(cpu);
+#else
+    arch_mp_send_ipi(1U << cpu, MP_IPI_GENERIC);
 #endif
 }
 #endif

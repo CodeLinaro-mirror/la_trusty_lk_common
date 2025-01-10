@@ -28,6 +28,7 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use crate::paddr_t;
 use crate::status_t;
+use crate::Error;
 
 pub use crate::sys::vaddr_to_paddr;
 pub use crate::sys::vmm_alloc;
@@ -86,11 +87,12 @@ pub unsafe fn vmm_alloc_physical(
 }
 
 /// A wrapper for an array allocated by Trusty's vmm library.
-pub struct VmmPageArray<'a> {
-    pub arr: &'a mut [u8],
+pub struct VmmPageArray {
+    ptr: *mut c_void,
+    size: usize,
 }
 
-impl VmmPageArray<'_> {
+impl VmmPageArray {
     /// Allocates memory with vmm_allox. size if automatically aligned up to the next page size.
     /// Memory is automatically freed in drop.
     pub fn new(
@@ -98,7 +100,7 @@ impl VmmPageArray<'_> {
         size: usize,
         align_log2: u8,
         vmm_flags: c_uint,
-    ) -> Result<Self, status_t> {
+    ) -> Result<Self, Error> {
         let aspace = vmm_get_kernel_aspace();
         let mut aligned_ptr: *mut c_void = core::ptr::null_mut();
         // SAFETY: Name is static and will therefore outlive the allocation. The return code is
@@ -115,21 +117,30 @@ impl VmmPageArray<'_> {
             )
         };
         if rc < 0 {
-            Err(rc)
-        } else {
-            // SAFETY: Aligned pointer was successfully allocated by vmm_alloc and the same size is
-            // being used.
-            let arr: &mut [u8] =
-                unsafe { core::slice::from_raw_parts_mut(aligned_ptr as *mut u8, size) };
-            Ok(Self { arr })
+            Error::from_lk(rc)?;
         }
+        Ok(Self { ptr: aligned_ptr, size })
+    }
+
+    pub fn ptr(&self) -> *mut c_void {
+        self.ptr
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
+        // SAFETY: Aligned pointer was successfully allocated by vmm_alloc and the same size is
+        // being used.
+        unsafe { core::slice::from_raw_parts_mut(self.ptr as *mut u8, self.size) }
     }
 }
 
-impl Drop for VmmPageArray<'_> {
+impl Drop for VmmPageArray {
     fn drop(&mut self) {
         let aspace = vmm_get_kernel_aspace();
         // SAFETY: Freeing a pointer allocated by vmm_alloc.
-        unsafe { vmm_free_region(aspace, self.arr.as_ptr() as usize) };
+        unsafe { vmm_free_region(aspace, self.ptr as usize) };
     }
 }
