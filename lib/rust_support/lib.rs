@@ -28,7 +28,8 @@
 // C string literals were stabilized in Rust 1.77
 #![cfg_attr(not(version("1.77")), feature(c_str_literals))]
 #![deny(unsafe_op_in_unsafe_fn)]
-#![feature(new_uninit)]
+// new_uninit is stable as of Rust 1.82
+#![cfg_attr(not(version("1.82")), feature(new_uninit))]
 
 use alloc::format;
 use core::ffi::CStr;
