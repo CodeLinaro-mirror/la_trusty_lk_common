@@ -23,8 +23,6 @@
 
 use log::error;
 
-use num_integer::Integer;
-
 use hypervisor_backends::get_mem_sharer;
 use hypervisor_backends::Error;
 use hypervisor_backends::KvmError;
@@ -54,6 +52,19 @@ fn get_granule() -> KvmResult<usize> {
     })
 }
 
+fn check_alignment(value: usize, alignment: usize) -> KvmResult<()> {
+    // Rust 1.82 adds unsigned_is_multiple_of feature
+    #[cfg(version("1.82"))]
+    let aligned = value.is_multiple_of(alignment);
+    #[cfg(not(version("1.82")))]
+    let aligned = num_integer::Integer::is_multiple_of(&value, &alignment);
+    if !aligned {
+        return Err(KvmError::InvalidParameter);
+    }
+
+    Ok(())
+}
+
 pub(crate) fn share_pages(paddr: usize, size: usize) -> KvmResult<()> {
     let hypervisor = match get_mem_sharer() {
         Some(h) => h,
@@ -62,15 +73,11 @@ pub(crate) fn share_pages(paddr: usize, size: usize) -> KvmResult<()> {
 
     let hypervisor_page_size = get_granule()?;
 
-    if !paddr.is_multiple_of(&hypervisor_page_size) {
-        error!("paddr not aligned");
-        return Err(KvmError::InvalidParameter);
-    }
+    check_alignment(paddr, hypervisor_page_size).inspect_err(|_e| error!("paddr not aligned"))?;
 
-    if !size.is_multiple_of(&hypervisor_page_size) {
-        error!("size ({size}) not aligned to page size ({hypervisor_page_size})");
-        return Err(KvmError::InvalidParameter);
-    }
+    check_alignment(size, hypervisor_page_size).inspect_err(|_e| {
+        error!("size ({size}) not aligned to page size ({hypervisor_page_size})")
+    })?;
 
     for page in (paddr..paddr + size).step_by(hypervisor_page_size) {
         hypervisor.share(page as u64).map_err(|err| {
@@ -101,15 +108,11 @@ pub(crate) fn unshare_pages(paddr: usize, size: usize) -> KvmResult<()> {
 
     let hypervisor_page_size = get_granule()?;
 
-    if !paddr.is_multiple_of(&hypervisor_page_size) {
-        error!("paddr not aligned");
-        return Err(KvmError::InvalidParameter);
-    }
+    check_alignment(paddr, hypervisor_page_size).inspect_err(|_e| error!("paddr not aligned"))?;
 
-    if !size.is_multiple_of(&hypervisor_page_size) {
-        error!("size ({size}) not aligned to page size ({hypervisor_page_size})");
-        return Err(KvmError::InvalidParameter);
-    }
+    check_alignment(size, hypervisor_page_size).inspect_err(|_e| {
+        error!("size ({size}) not aligned to page size ({hypervisor_page_size})")
+    })?;
 
     for page in (paddr..paddr + size).step_by(hypervisor_page_size) {
         hypervisor.unshare(page as u64).map_err(|err| {
