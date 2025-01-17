@@ -30,6 +30,8 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 // new_uninit is stable as of Rust 1.82
 #![cfg_attr(not(version("1.82")), feature(new_uninit))]
+// raw_ref_op is stable as of Rust 1.82
+#![cfg_attr(not(version("1.82")), feature(raw_ref_op))]
 
 use alloc::format;
 use core::ffi::CStr;
