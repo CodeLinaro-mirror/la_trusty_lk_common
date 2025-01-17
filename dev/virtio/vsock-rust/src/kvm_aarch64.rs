@@ -101,11 +101,6 @@ pub(crate) fn unshare_pages(paddr: usize, size: usize) -> KvmResult<()> {
 
     let hypervisor_page_size = get_granule()?;
 
-    if !hypervisor_page_size.is_power_of_two() {
-        error!("invalid memory protection granule");
-        return Err(KvmError::InvalidParameter);
-    }
-
     if !paddr.is_multiple_of(&hypervisor_page_size) {
         error!("paddr not aligned");
         return Err(KvmError::InvalidParameter);
