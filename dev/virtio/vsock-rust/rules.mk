@@ -36,32 +36,32 @@ MODULE_RUSTFLAGS += \
 	-A clippy::upper-case-acronyms \
 	-D clippy::undocumented_unsafe_blocks \
 
-ifeq (false,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_HW_CRYPTO_HAL)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_HW_CRYPTO_HAL)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="hwcrypto_hal"' \
 
 endif
-ifeq (false,$(call TOBOOL,$(TRUSTY_VM_USE_WIDEVINE_AIDL_COMM)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_USE_WIDEVINE_AIDL_COMM)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="widevine_aidl_comm"' \
 
 endif
-ifeq (false,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_GATEKEEPER)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_GATEKEEPER)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="gatekeeper"' \
 
 endif
-ifeq (false,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_KEMINT)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_KEMINT)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="keymint"' \
 
 endif
-ifeq (false,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_SECURE_STORAGE_HAL)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_SECURE_STORAGE_HAL)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="securestorage_hal"' \
 
 endif
-ifeq (false,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_AUTHMGR)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_AUTHMGR)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="authmgr"' \
 
