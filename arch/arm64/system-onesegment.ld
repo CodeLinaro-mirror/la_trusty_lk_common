@@ -13,6 +13,8 @@ SECTIONS
      * compiler-rt that we don't want and that breaks our build. Until we compile
      * our own compiler-rt and either provide getauxval and enable CFI, or remove
      * this function, we can remove it during linking here
+     *
+     * LLVM 19 added init_aarch64_has_sme
      */
     /DISCARD/ : {
         *libclang_rt.builtins-aarch64-android.a:cpu_model.c.o(
@@ -24,6 +26,11 @@ SECTIONS
         *libclang_rt.builtins-aarch64-android.a:aarch64.c.o(
             .text.__init_cpu_features
             .text.init_have_lse_atomics
+            .init_array*
+        )
+
+        *libclang_rt.builtins-aarch64-android.a:sme-abi-init.c.o(
+            .text.init_aarch64_has_sme
             .init_array*
         )
     }
