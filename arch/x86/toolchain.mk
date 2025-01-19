@@ -31,8 +31,10 @@ ARCH_x86_SUPPORTS_RUST := true
 ifeq (true,$(call TOBOOL,$(TRUSTY_USERSPACE)))
 ARCH_x86_RUSTFLAGS := --target=x86_64-unknown-trusty
 else
+# Save the path to custom toolchain so Rust targets targets can depend on it
+ARCH_x86_RUST_TARGET := $(LOCAL_DIR)/x86_64-unknown-trusty-kernel.json
 # Use custom toolchain file that disables hardware floating point
-ARCH_x86_RUSTFLAGS := --target=$(LOCAL_DIR)/x86_64-unknown-trusty-kernel.json
+ARCH_x86_RUSTFLAGS := --target=$(ARCH_x86_RUST_TARGET)
 ARCH_x86_SUPPORTS_RUST_CFI := true
 endif
 
