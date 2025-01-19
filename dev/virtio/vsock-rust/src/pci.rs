@@ -52,6 +52,10 @@ use crate::err::Error;
 use crate::vsock::VsockDevice;
 use hal::TrustyHal;
 
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+mod arch;
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[path = "pci/unimplemented.rs"]
 mod arch;
 mod hal;
 
