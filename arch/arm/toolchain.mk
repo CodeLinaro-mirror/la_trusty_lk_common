@@ -52,6 +52,8 @@ ARCH_arm_SUPPORTS_RUST := true
 ifeq (true,$(call TOBOOL,$(TRUSTY_USERSPACE)))
 ARCH_arm_RUSTFLAGS := --target=armv7-unknown-trusty
 else
-ARCH_arm_RUSTFLAGS := --target=$(LOCAL_DIR)/armv7-unknown-trusty-kernel.json
+# Save the path to custom toolchain so Rust targets targets can depend on it
+ARCH_arm_RUST_TARGET := $(LOCAL_DIR)/armv7-unknown-trusty-kernel.json
+ARCH_arm_RUSTFLAGS := --target=$(ARCH_arm_RUST_TARGET)
 ARCH_arm_SUPPORTS_RUST_CFI := true
 endif

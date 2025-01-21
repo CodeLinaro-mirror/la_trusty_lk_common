@@ -23,12 +23,14 @@
 
 #![deny(unsafe_op_in_unsafe_fn)]
 use core::ffi::c_void;
+use core::ffi::CStr;
 use core::ops::Deref;
 use core::ops::DerefMut;
 use core::ptr::eq;
 use core::ptr::null_mut;
 use core::time::Duration;
 
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::sync::Arc;
@@ -76,6 +78,46 @@ use rust_support::Error as LkError;
 use crate::err::Error;
 
 const ACTIVE_TIMEOUT: Duration = Duration::from_secs(5);
+
+struct TipcPortAcl {
+    name: &'static CStr,
+    enabled: bool,
+}
+
+// macro will generate the variable containing the ACL for all tipc ports. If the feature name is
+// defined, the corresponding port will be enabled; the port will be disabled otherwise. The macro
+// will generate 2 extra ports for connections that send the port name in the first package for port
+// 0 and 1.
+macro_rules! comm_port_feature_enable {
+    ($var_name:ident[$number_ports: literal]={$({port_name: $port_name:literal, feature_name: $feature_name:literal}),+ $(,)*}) => {
+    const $var_name: [TipcPortAcl; $number_ports + 2] = [
+        TipcPortAcl { name: c"", enabled: true }, // connections on port zero must send port name in first packet
+        TipcPortAcl { name: c"", enabled: true }, // temporary workaround to not change the port 1 to port 0
+        $(
+            #[cfg(feature = $feature_name)]
+            TipcPortAcl { name: $port_name, enabled: true },
+            #[cfg(not(feature = $feature_name))]
+            TipcPortAcl { name: $port_name, enabled: false },
+        )+
+    ];
+    }
+}
+
+// Mapping of vsock port numbers to tipc port names.
+//
+// Each tipc port name must be shorter than IPC_PORT_PATH_MAX.
+comm_port_feature_enable! {
+    PORT_MAP[8] = {
+        {port_name: c"com.android.trusty.authmgr", feature_name: "authmgr"},
+        {port_name: c"com.android.trusty.hwcryptooperations", feature_name: "hwcrypto_hal"},
+        {port_name: c"com.android.trusty.rust.hwcryptohal.V1", feature_name: "hwcrypto_hal"},
+        {port_name: c"com.android.trusty.securestorage", feature_name: "securestorage_hal"},
+        {port_name: c"com.android.trusty.widevine.transact", feature_name: "widevine_aidl_comm"},
+        {port_name: c"com.android.trusty.storage.proxy", feature_name: "securestorage_hal"},
+        {port_name: c"com.android.trusty.gatekeeper", feature_name: "gatekeeper"},
+        {port_name: c"com.android.trusty.keymint", feature_name: "keymint"},
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -282,7 +324,7 @@ where
         }
     }
 
-    fn vsock_rx_op_request(&self, peer: VsockAddr, local: VsockAddr) {
+    fn vsock_rx_op_request(&self, peer: VsockAddr, local: VsockAddr) -> Result<(), Error> {
         debug!("dst_port {}, src_port {}", local.port, peer.port);
 
         // do we already have a connection?
@@ -292,19 +334,41 @@ where
             .iter()
             .any(|connection| connection.peer == peer && connection.local_port == local.port)
         {
-            panic!("connection already exists");
+            return Err(LkError::ERR_ALREADY_EXISTS.into());
         };
 
-        guard.deref_mut().push(VsockConnection::new(peer, local.port));
+        let mut c = VsockConnection::new(peer, local.port);
+
+        // ports greater than 1 use port map to determine what tipc port to connect to
+        if [0, 1].contains(&local.port) {
+            // wait on peer to send tipc port name
+        } else if (local.port as usize) < PORT_MAP.len() {
+            if PORT_MAP[local.port as usize].enabled {
+                c.tipc_port_name = Some(PORT_MAP[local.port as usize].name.to_owned());
+                self.vsock_connect_tipc(&mut c)?;
+            } else {
+                return Err(LkError::ERR_NOT_VALID.into());
+            }
+        } else {
+            return Err(LkError::ERR_OUT_OF_RANGE.into());
+        }
+
+        guard.deref_mut().push(c);
+
+        Ok(())
     }
 
-    fn vsock_connect_tipc(
+    fn vsock_connect_on_rx(
         &self,
         c: &mut VsockConnection,
         length: usize,
         source: VsockAddr,
         destination: VsockAddr,
     ) -> Result<(), Error> {
+        // destination port should be zero or one, otherwise, connection should not
+        // be in VsockOnly state (not already connected/connecting to tipc).
+        assert!([0, 1].contains(&destination.port));
+
         let mut buffer = [0; IPC_PORT_PATH_MAX as usize];
         assert!(length < buffer.len());
         let mut data_len = self
@@ -319,8 +383,19 @@ where
             data_len -= 1;
         }
         let port_name = &buffer[0..data_len];
+        info!("port_name is {:?}", port_name);
+
         // should not contain any null bytes
         c.tipc_port_name = CString::new(port_name).ok();
+        info!("tipc port name set to {}", c.tipc_port_name());
+
+        self.vsock_connect_tipc(c)
+    }
+
+    fn vsock_connect_tipc(&self, c: &mut VsockConnection) -> Result<(), Error> {
+        let port_name = c.tipc_port_name.as_ref().expect("tipc port name has been set");
+        // invariant: port_name.count_bytes() + 1 <= IPC_PORT_PATH_MAX
+        debug_assert!(port_name.count_bytes() < IPC_PORT_PATH_MAX as usize);
 
         // Safety:
         // - `cid`` is a valid uuid because we use a bindgen'd constant
@@ -334,8 +409,8 @@ where
         let ret = unsafe {
             ipc_port_connect_async(
                 &zero_uuid,
-                c.tipc_port_name.as_ref().unwrap().as_ptr(),
-                data_len + /* null byte added by CString::new */ 1,
+                port_name.as_ptr(),
+                port_name.count_bytes() + 1, /* count_bytes excludes null-byte */
                 IPC_CONNECT_WAIT_FOR_PORT,
                 &mut (*c.href.as_mut_ptr()).handle,
             )
@@ -411,6 +486,10 @@ where
         Ok(())
     }
 
+    fn vsock_send_reset(&self, peer: VsockAddr, local_port: u32) {
+        let _ = self.connection_manager.lock().deref_mut().force_close(peer, local_port);
+    }
+
     fn print_stats(&self) {
         let guard = self.connections.lock();
         let connections = guard.deref();
@@ -443,12 +522,20 @@ where
     H: Hal,
     T: Transport,
 {
-    let local_port = 1;
     let ten_ms = Duration::from_millis(10);
     let mut pending: Vec<VsockEvent> = vec![];
 
     debug!("starting vsock_rx_loop");
-    device.connection_manager.lock().deref_mut().listen(local_port);
+
+    // Accept connections on port zero and each name port in the port map
+    {
+        let mut connection_manager_guard = device.connection_manager.lock();
+        let connection_manager = connection_manager_guard.deref_mut();
+
+        for port in 0..PORT_MAP.len() as u32 {
+            connection_manager.listen(port);
+        }
+    }
 
     loop {
         // TODO: use interrupts instead of polling
@@ -466,7 +553,10 @@ where
 
         match event_type {
             VsockEventType::ConnectionRequest => {
-                device.vsock_rx_op_request(source, destination);
+                if let Err(e) = device.vsock_rx_op_request(source, destination) {
+                    error!("error during vsock connection request: {e:?}");
+                    device.vsock_send_reset(source, destination.port);
+                }
             }
             VsockEventType::Connected => {
                 panic!("outbound connections not supported");
@@ -479,7 +569,7 @@ where
                     if let Err(e) = match connection {
                         ref mut c @ VsockConnection {
                             state: VsockConnectionState::VsockOnly, ..
-                        } => device.vsock_connect_tipc(c, length, source, destination),
+                        } => device.vsock_connect_on_rx(c, length, source, destination),
                         ref mut c @ VsockConnection {
                             state: VsockConnectionState::Active, ..
                         } => device.vsock_rx_channel(c, length, source, destination),
@@ -509,12 +599,7 @@ where
                         }
                     } {
                         error!("failed to receive data from vsock connection:  {e:?}");
-                        // TODO: add reset function to device or connection?
-                        let _ = device
-                            .connection_manager
-                            .lock()
-                            .deref_mut()
-                            .force_close(connection.peer, connection.local_port);
+                        device.vsock_send_reset(connection.peer, connection.local_port);
 
                         return ConnectionStateAction::Remove;
                     }

@@ -5,6 +5,8 @@
 #![cfg_attr(not(version("1.79")), feature(cstr_count_bytes))]
 // C string literals were stabilized in Rust 1.77
 #![cfg_attr(not(version("1.77")), feature(c_str_literals))]
+// unsigned_is_multiple_of feature was added in Rust 1.82
+#![cfg_attr(version("1.82"), feature(unsigned_is_multiple_of))]
 
 mod err;
 #[cfg(target_arch = "aarch64")]
