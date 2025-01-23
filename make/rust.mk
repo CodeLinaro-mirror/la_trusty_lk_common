@@ -139,11 +139,16 @@ TRUSTY_APP_RUST_MAIN_SRC := $(filter %.rs,$(MODULE_SRCS))
 TRUSTY_APP_RUST_SRCDEPS := $(MODULE_SRCDEPS)
 endif
 
+TRUSTY_SKIP_DOCS ?= false
+ifeq ($(call TOBOOL,$(TRUSTY_SKIP_DOCS)),false)
 ifeq ($(call TOBOOL,$(MODULE_SKIP_DOCS)),false)
 ifneq ($(TRUSTY_SDK_LIB_DIR),)
 MODULE_RUSTDOC_OBJECT := $(TRUSTY_SDK_LIB_DIR)/doc/built/$(MODULE_RUST_STEM)
 endif
-else
+else # MODULE_SKIP_DOCS is true
+MODULE_RUSTDOC_OBJECT :=
+endif
+else # TRUSTY_SKIP_DOCS is true
 MODULE_RUSTDOC_OBJECT :=
 endif
 
