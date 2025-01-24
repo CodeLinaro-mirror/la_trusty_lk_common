@@ -41,6 +41,7 @@ use rust_support::vmm::vmm_get_kernel_aspace;
 
 use static_assertions::const_assert_eq;
 
+use virtio_drivers::transport::pci::bus::ConfigurationAccess;
 use virtio_drivers::transport::pci::bus::DeviceFunction;
 use virtio_drivers::transport::pci::bus::PciRoot;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
@@ -67,7 +68,7 @@ pub struct TrustyHal;
 
 impl TrustyHal {
     pub fn mmio_alloc(
-        pci_root: &mut PciRoot,
+        pci_root: &mut PciRoot<impl ConfigurationAccess>,
         device_function: DeviceFunction,
     ) -> Result<(), Error> {
         for bar in 0..NUM_BARS {
