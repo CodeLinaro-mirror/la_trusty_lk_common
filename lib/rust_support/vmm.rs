@@ -24,7 +24,7 @@
 use core::ffi::c_char;
 use core::ffi::c_uint;
 use core::ffi::c_void;
-use core::ptr::{addr_of, addr_of_mut};
+use core::ptr::addr_of;
 
 use crate::paddr_t;
 use crate::status_t;
@@ -47,12 +47,17 @@ pub use crate::sys::vmm_obj_slice_release;
 
 use core::ffi::CStr;
 
+#[cfg(version("1.82"))]
 #[inline]
 pub fn vmm_get_kernel_aspace() -> *mut vmm_aspace_t {
-    // SAFETY: The returned raw pointer holds the same safety invariants as accessing a `static mut`,
-    // so this `unsafe` is unconditionally sound, and may become safe in edition 2024:
-    // <https://github.com/rust-lang/rust/issues/114447>.
-    unsafe { addr_of_mut!(crate::sys::_kernel_aspace) }
+    &raw mut crate::sys::_kernel_aspace
+}
+
+#[cfg(not(version("1.82")))]
+#[inline]
+pub fn vmm_get_kernel_aspace() -> *mut vmm_aspace_t {
+    // SAFETY: Safe in Rust 1.82; see above.
+    unsafe { core::ptr::addr_of_mut!(crate::sys::_kernel_aspace) }
 }
 
 /// # Safety
