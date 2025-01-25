@@ -33,7 +33,9 @@ use virtio_drivers::device::socket::VirtIOSocket;
 use virtio_drivers::device::socket::VsockConnectionManager;
 use virtio_drivers::transport::pci::bus::Cam;
 use virtio_drivers::transport::pci::bus::Command;
+use virtio_drivers::transport::pci::bus::ConfigurationAccess;
 use virtio_drivers::transport::pci::bus::DeviceFunction;
+use virtio_drivers::transport::pci::bus::MmioCam;
 use virtio_drivers::transport::pci::bus::PciRoot;
 use virtio_drivers::transport::pci::virtio_device_type;
 use virtio_drivers::transport::pci::PciTransport;
@@ -60,8 +62,11 @@ mod arch;
 mod hal;
 
 impl TrustyHal {
-    fn init_vsock(pci_root: &mut PciRoot, device_function: DeviceFunction) -> Result<(), Error> {
-        let transport = PciTransport::new::<Self>(pci_root, device_function)?;
+    fn init_vsock(
+        pci_root: &mut PciRoot<impl ConfigurationAccess>,
+        device_function: DeviceFunction,
+    ) -> Result<(), Error> {
+        let transport = PciTransport::new::<Self, _>(pci_root, device_function)?;
         let driver: VirtIOSocket<TrustyHal, PciTransport, 4096> = VirtIOSocket::new(transport)?;
         let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
 
@@ -95,7 +100,10 @@ impl TrustyHal {
         Ok(())
     }
 
-    fn init_all_vsocks(mut pci_root: PciRoot, pci_size: usize) -> Result<(), Error> {
+    fn init_all_vsocks(
+        mut pci_root: PciRoot<impl ConfigurationAccess>,
+        pci_size: usize,
+    ) -> Result<(), Error> {
         for bus in u8::MIN..=u8::MAX {
             // each bus can use up to one megabyte of address space, make sure we stay in range
             if bus as usize * 0x100000 >= pci_size {
@@ -132,7 +140,7 @@ unsafe fn map_pci_root(
     pci_paddr: paddr_t,
     pci_size: usize,
     cfg_size: usize,
-) -> Result<PciRoot, Error> {
+) -> Result<PciRoot<impl ConfigurationAccess>, Error> {
     // The ECAM is defined in Section 7.2.2 of the PCI Express Base Specification, Revision 2.0.
     // The ECAM size must be a power of two with the exponent between 1 and 8.
     let cam = match cfg_size / /* device functions */ 8 {
@@ -175,7 +183,7 @@ unsafe fn map_pci_root(
     // `pci_paddr` has `'static` lifetime, and `pci_vaddr` is never unmapped,
     // so it, too, has `'static` lifetime.
     // We also check that the `cam` size is valid.
-    let pci_root = unsafe { PciRoot::new(pci_vaddr.cast(), cam) };
+    let pci_root = PciRoot::new(unsafe { MmioCam::new(pci_vaddr.cast(), cam) });
 
     Ok(pci_root)
 }
