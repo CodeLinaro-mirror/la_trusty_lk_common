@@ -41,6 +41,8 @@ use virtio_drivers::transport::pci::virtio_device_type;
 use virtio_drivers::transport::pci::PciTransport;
 use virtio_drivers::transport::DeviceType;
 
+use hypervisor::mmio_map_region;
+
 use rust_support::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE;
 use rust_support::mmu::ARCH_MMU_FLAG_UNCACHED_DEVICE;
 use rust_support::paddr_t;
@@ -176,6 +178,14 @@ unsafe fn map_pci_root(
         )
     };
     LkError::from_lk(e)?;
+
+    // Safety:
+    // `pci_paddr` and `pci_size` are safe by this function's safety requirements.
+    match unsafe { mmio_map_region(pci_paddr, pci_size) } {
+        // Ignore not supported which implies that guard is not used.
+        Ok(()) | Err(LkError::ERR_NOT_SUPPORTED) => {}
+        Err(err) => return Err(Error::Lk(err)),
+    }
 
     // Safety:
     // `pci_paddr` is a valid physical address to the base of the MMIO region.

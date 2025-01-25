@@ -21,9 +21,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #![no_std]
-#![feature(cfg_version)]
-// unsigned_is_multiple_of feature was added in Rust 1.82
-#![cfg_attr(version("1.82"), feature(unsigned_is_multiple_of))]
+#![feature(unsigned_is_multiple_of)]
 
 use core::ffi::c_int;
 
