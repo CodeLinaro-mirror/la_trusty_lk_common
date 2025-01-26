@@ -27,6 +27,8 @@ use core::ptr::NonNull;
 
 use lazy_static::lazy_static;
 
+use hypervisor::mmio_map_region;
+
 use rust_support::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE;
 use rust_support::mmu::ARCH_MMU_FLAG_UNCACHED_DEVICE;
 use rust_support::mmu::PAGE_SIZE_SHIFT;
@@ -38,6 +40,7 @@ use rust_support::vmm::vmm_alloc_contiguous;
 use rust_support::vmm::vmm_alloc_physical;
 use rust_support::vmm::vmm_free_region;
 use rust_support::vmm::vmm_get_kernel_aspace;
+use rust_support::Error as LkError;
 
 use static_assertions::const_assert_eq;
 
@@ -93,7 +96,15 @@ impl TrustyHal {
                         ARCH_MMU_FLAG_PERM_NO_EXECUTE | ARCH_MMU_FLAG_UNCACHED_DEVICE,
                     )
                 };
-                rust_support::Error::from_lk(ret)?;
+                LkError::from_lk(ret)?;
+
+                // Safety:
+                // `bar_paddr` and `bar_size_aligned` are safe by this function's safety requirements.
+                match unsafe { mmio_map_region(bar_paddr as usize, bar_size_aligned) } {
+                    // Ignore not supported which implies that guard is not used.
+                    Ok(()) | Err(LkError::ERR_NOT_SUPPORTED) => {}
+                    Err(err) => return Err(Error::Lk(err)),
+                }
 
                 BARS.lock().deref_mut()[bar] = Some(BarInfo {
                     paddr: bar_paddr as usize,
