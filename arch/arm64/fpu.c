@@ -55,7 +55,8 @@ bool arm64_fpu_load_fpstate(struct fpstate *fpstate, bool force)
 
 
     STATIC_ASSERT(sizeof(fpstate->regs) == 16 * 32);
-    __asm__ volatile("ldp     q0, q1, [%0, #(0 * 32)]\n"
+    __asm__ volatile(".arch_extension fp\n"
+                     "ldp     q0, q1, [%0, #(0 * 32)]\n"
                      "ldp     q2, q3, [%0, #(1 * 32)]\n"
                      "ldp     q4, q5, [%0, #(2 * 32)]\n"
                      "ldp     q6, q7, [%0, #(3 * 32)]\n"
@@ -73,6 +74,7 @@ bool arm64_fpu_load_fpstate(struct fpstate *fpstate, bool force)
                      "ldp     q30, q31, [%0, #(15 * 32)]\n"
                      "msr     fpcr, %1\n"
                      "msr     fpsr, %2\n"
+                     ".arch_extension nofp\n"
                      :: "r"(fpstate),
                      "r"((uint64_t)fpstate->fpcr),
                      "r"((uint64_t)fpstate->fpsr));
@@ -92,7 +94,8 @@ void arm64_fpu_save_fpstate(struct fpstate *fpstate)
 {
     uint64_t fpcr, fpsr;
 
-    __asm__ volatile("stp     q0, q1, [%2, #(0 * 32)]\n"
+    __asm__ volatile(".arch_extension fp\n"
+                     "stp     q0, q1, [%2, #(0 * 32)]\n"
                      "stp     q2, q3, [%2, #(1 * 32)]\n"
                      "stp     q4, q5, [%2, #(2 * 32)]\n"
                      "stp     q6, q7, [%2, #(3 * 32)]\n"
@@ -110,6 +113,7 @@ void arm64_fpu_save_fpstate(struct fpstate *fpstate)
                      "stp     q30, q31, [%2, #(15 * 32)]\n"
                      "mrs %0, fpcr\n"
                      "mrs %1, fpsr\n"
+                     ".arch_extension nofp\n"
                      : "=r"(fpcr), "=r"(fpsr)
                      : "r"(fpstate));
 
