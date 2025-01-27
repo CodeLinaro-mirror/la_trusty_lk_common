@@ -98,7 +98,7 @@ pub struct VmmPageArray {
 }
 
 impl VmmPageArray {
-    /// Allocates memory with vmm_allox. size if automatically aligned up to the next page size.
+    /// Allocates memory with vmm_alloc. size is automatically aligned up to the next page size.
     /// Memory is automatically freed in drop.
     pub fn new(
         name: &'static CStr,
@@ -117,6 +117,38 @@ impl VmmPageArray {
                 size,
                 &mut aligned_ptr,
                 align_log2,
+                vmm_flags,
+                crate::mmu::ARCH_MMU_FLAG_CACHED | crate::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE,
+            )
+        };
+        if rc < 0 {
+            Error::from_lk(rc)?;
+        }
+        Ok(Self { ptr: aligned_ptr, size })
+    }
+
+    /// Allocates address space with vmm_alloc_physical backed by physical memory starting at
+    /// paddr. size is automatically aligned up to the next page size. Mapping is automatically
+    /// freed in drop.
+    pub fn new_physical(
+        name: &'static CStr,
+        paddr: usize,
+        size: usize,
+        align_log2: u8,
+        vmm_flags: c_uint,
+    ) -> Result<Self, Error> {
+        let aspace = vmm_get_kernel_aspace();
+        let aligned_ptr: *mut c_void = core::ptr::null_mut();
+        // SAFETY: Name is static and will therefore outlive the allocation. The return code is
+        // checked before returning the array to the caller.
+        let rc = unsafe {
+            vmm_alloc_physical(
+                aspace,
+                name.as_ptr(),
+                size,
+                &aligned_ptr as *const *mut c_void,
+                align_log2,
+                paddr,
                 vmm_flags,
                 crate::mmu::ARCH_MMU_FLAG_CACHED | crate::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE,
             )
