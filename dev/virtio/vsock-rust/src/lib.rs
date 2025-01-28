@@ -9,11 +9,7 @@
 #![cfg_attr(version("1.82"), feature(unsigned_is_multiple_of))]
 
 mod err;
-#[cfg(target_arch = "aarch64")]
-#[path = "kvm_aarch64.rs"]
-mod kvm;
-#[cfg(target_arch = "x86_64")]
-#[path = "kvm_x86_64.rs"]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 mod kvm;
 mod pci;
 mod vsock;
