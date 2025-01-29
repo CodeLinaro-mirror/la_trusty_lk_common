@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Google Inc. All rights reserved
+ * Copyright (c) 2024 Google Inc. All rights reserved
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -20,34 +20,5 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#![no_std]
-#![feature(unsigned_is_multiple_of)]
 
-use core::ffi::c_int;
-
-use rust_support::paddr_t;
-use rust_support::Error as LkError;
-
-#[cfg(target_arch = "aarch64")]
-mod hyp;
-
-// TODO: Enable for x86_64 once it's supported.
-#[cfg(target_arch = "aarch64")]
-pub use hyp::mmio_map_region;
-
-/// # Safety
-/// Actually not unsafe for targets other then aarch64
-#[cfg(not(target_arch = "aarch64"))]
-pub unsafe fn mmio_map_region(_paddr: usize, _size: usize) -> Result<(), LkError> {
-    Err(LkError::ERR_NOT_SUPPORTED)
-}
-
-/// # Safety
-///  - paddr must be a valid physical address
-///  - paddr + size must be a valid physical address
-///  - the caller must be aware that after the call the [paddr .. paddr + size] memory
-///    is available for reading by the host.
-#[no_mangle]
-pub unsafe extern "C" fn hypervisor_mmio_map_region(paddr: paddr_t, size: usize) -> c_int {
-    crate::mmio_map_region(paddr, size).err().unwrap_or(LkError::NO_ERROR).into()
-}
+pub use crate::sys::ext_mem_map_obj_id;

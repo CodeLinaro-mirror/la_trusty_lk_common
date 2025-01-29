@@ -49,7 +49,7 @@ static inline void list_clear_node(struct list_node *item)
     item->prev = item->next = 0;
 }
 
-static inline bool list_in_list(struct list_node *item)
+static inline bool list_in_list(const struct list_node *item)
 {
     if (item->prev == 0 && item->next == 0)
         return false;
