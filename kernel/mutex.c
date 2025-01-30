@@ -142,7 +142,3 @@ status_t mutex_release(mutex_t *m)
     THREAD_UNLOCK(state);
     return NO_ERROR;
 }
-
-bool extern_is_mutex_held(mutex_t *m) {
-    return is_mutex_held(m);
-}

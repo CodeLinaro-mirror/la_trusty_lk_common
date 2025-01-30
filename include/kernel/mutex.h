@@ -69,8 +69,6 @@ static bool is_mutex_held(mutex_t *m)
     return m->holder == get_current_thread();
 }
 
-bool extern_is_mutex_held(mutex_t *m);
-
 __END_CDECLS;
 #endif
 
