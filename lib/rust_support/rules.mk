@@ -58,6 +58,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	handle_set_create \
 	handle_set_wait \
 	handle_wait \
+	handle_ref_is_attached \
 	ipc_get_msg \
 	ipc_port_connect_async \
 	ipc_put_msg \
