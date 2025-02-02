@@ -37,6 +37,7 @@ MODULE_DEPS := \
 	$(call FIND_CRATE,num-derive) \
 	$(call FIND_CRATE,num-traits) \
 	$(call FIND_CRATE,log) \
+	trusty/kernel/lib/extmem \
 	trusty/kernel/lib/ktipc \
 	trusty/kernel/lib/vmm_obj_service \
 	trusty/user/base/lib/liballoc-rust \
@@ -47,6 +48,7 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
+	ext_mem_.* \
 	fflush \
 	fputs \
 	handle_close \
@@ -56,6 +58,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	handle_set_create \
 	handle_set_wait \
 	handle_wait \
+	handle_ref_is_attached \
 	ipc_get_msg \
 	ipc_port_connect_async \
 	ipc_put_msg \
@@ -87,6 +90,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
+	ext_mem_.* \
 	handle \
 	handle_ref \
 	iovec_kern \
