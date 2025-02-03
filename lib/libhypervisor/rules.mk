@@ -9,7 +9,6 @@ MODULE_EXPORT_INCLUDES += \
 
 MODULE_LIBRARY_DEPS := \
 	$(call FIND_CRATE,log) \
-	$(call FIND_CRATE,num-integer) \
 	$(call FIND_CRATE,spin) \
 
 # hypervisor_backends is arm64-only for now

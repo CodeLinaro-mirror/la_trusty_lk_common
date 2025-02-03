@@ -22,7 +22,6 @@
  */
 
 use log::error;
-use num_integer::Integer;
 use spin::Once;
 
 use rust_support::Error as LkError;
@@ -65,12 +64,12 @@ pub unsafe fn mmio_map_region(paddr: usize, size: usize) -> Result<(), LkError> 
     };
     let hypervisor_page_size = get_mmio_granule()?;
 
-    if !paddr.is_multiple_of(&hypervisor_page_size) {
+    if !paddr.is_multiple_of(hypervisor_page_size) {
         error!("paddr not aligned");
         return Err(LkError::ERR_INVALID_ARGS);
     }
 
-    if !size.is_multiple_of(&hypervisor_page_size) {
+    if !size.is_multiple_of(hypervisor_page_size) {
         error!("size ({size}) not aligned to page size ({hypervisor_page_size})");
         return Err(LkError::ERR_INVALID_ARGS);
     }

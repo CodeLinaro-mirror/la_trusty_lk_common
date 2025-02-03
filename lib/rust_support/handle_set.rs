@@ -58,16 +58,13 @@ impl HandleSet {
     }
 
     pub fn attach(&self, href: &mut HandleRef) -> Result<(), Error> {
-        if href.attached {
-            panic!("HandleRef is already attached.");
-        }
+        assert!(!href.is_attached(), "HandleRef is already attached.");
         // Safety:
         // `self` contains a properly initialized handle
         // `href.inner` is a properly initialized handle_ref that is not attached
         let ret = unsafe { handle_set_attach(self.0, href.as_mut_ptr()) };
         Error::from_lk(ret)?;
 
-        href.attached = true;
         Ok(())
     }
 
