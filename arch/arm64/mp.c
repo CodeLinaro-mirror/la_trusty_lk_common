@@ -33,6 +33,8 @@
 #elif PLATFORM_BCM28XX
 /* bcm28xx has a weird custom interrupt controller for MP */
 extern void bcm28xx_send_ipi(uint irq, uint cpu_mask);
+#elif WITH_DEV_INTERRUPT_HAFNIUM
+#include <dev/interrupt/hafnium.h>
 #else
 #error need other implementation of interrupt controller that can ipi
 #endif
