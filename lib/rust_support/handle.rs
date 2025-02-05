@@ -40,9 +40,9 @@ pub use crate::sys::IPC_HANDLE_POLL_SEND_UNBLOCKED;
 pub use crate::sys::handle;
 pub use crate::sys::handle_ref;
 
-use crate::sys::list_node;
-
 use crate::handle_set::handle_set_detach_ref;
+use crate::sys::handle_ref_is_attached;
+use crate::sys::list_node;
 
 impl Default for list_node {
     fn default() -> Self {
@@ -79,15 +79,19 @@ impl Default for handle_ref {
 pub struct HandleRef {
     // Box the `handle_ref` so it doesn't get moved with the `HandleRef`
     inner: Box<handle_ref>,
-    pub(crate) attached: bool,
 }
 
 impl HandleRef {
+    pub fn is_attached(&self) -> bool {
+        // SAFETY: `self.inner` was initialized, and `handle_ref_is_attached`
+        // is otherwise safe to call no matter the state of the `handle_ref`.
+        unsafe { handle_ref_is_attached(&*self.inner) }
+    }
+
     pub fn detach(&mut self) {
-        if self.attached {
+        if self.is_attached() {
             // Safety: `inner` was initialized and attached to a handle set
             unsafe { handle_set_detach_ref(&mut *self.inner) }
-            self.attached = false;
         }
     }
 
