@@ -24,7 +24,7 @@
 use core::ffi::c_char;
 use core::ffi::c_uint;
 use core::ffi::c_void;
-use core::ptr::{addr_of, addr_of_mut};
+use core::ptr::addr_of;
 
 use crate::paddr_t;
 use crate::status_t;
@@ -47,12 +47,17 @@ pub use crate::sys::vmm_obj_slice_release;
 
 use core::ffi::CStr;
 
+#[cfg(version("1.82"))]
 #[inline]
 pub fn vmm_get_kernel_aspace() -> *mut vmm_aspace_t {
-    // SAFETY: The returned raw pointer holds the same safety invariants as accessing a `static mut`,
-    // so this `unsafe` is unconditionally sound, and may become safe in edition 2024:
-    // <https://github.com/rust-lang/rust/issues/114447>.
-    unsafe { addr_of_mut!(crate::sys::_kernel_aspace) }
+    &raw mut crate::sys::_kernel_aspace
+}
+
+#[cfg(not(version("1.82")))]
+#[inline]
+pub fn vmm_get_kernel_aspace() -> *mut vmm_aspace_t {
+    // SAFETY: Safe in Rust 1.82; see above.
+    unsafe { core::ptr::addr_of_mut!(crate::sys::_kernel_aspace) }
 }
 
 /// # Safety
@@ -93,7 +98,7 @@ pub struct VmmPageArray {
 }
 
 impl VmmPageArray {
-    /// Allocates memory with vmm_allox. size if automatically aligned up to the next page size.
+    /// Allocates memory with vmm_alloc. size is automatically aligned up to the next page size.
     /// Memory is automatically freed in drop.
     pub fn new(
         name: &'static CStr,
@@ -112,6 +117,38 @@ impl VmmPageArray {
                 size,
                 &mut aligned_ptr,
                 align_log2,
+                vmm_flags,
+                crate::mmu::ARCH_MMU_FLAG_CACHED | crate::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE,
+            )
+        };
+        if rc < 0 {
+            Error::from_lk(rc)?;
+        }
+        Ok(Self { ptr: aligned_ptr, size })
+    }
+
+    /// Allocates address space with vmm_alloc_physical backed by physical memory starting at
+    /// paddr. size is automatically aligned up to the next page size. Mapping is automatically
+    /// freed in drop.
+    pub fn new_physical(
+        name: &'static CStr,
+        paddr: usize,
+        size: usize,
+        align_log2: u8,
+        vmm_flags: c_uint,
+    ) -> Result<Self, Error> {
+        let aspace = vmm_get_kernel_aspace();
+        let aligned_ptr: *mut c_void = core::ptr::null_mut();
+        // SAFETY: Name is static and will therefore outlive the allocation. The return code is
+        // checked before returning the array to the caller.
+        let rc = unsafe {
+            vmm_alloc_physical(
+                aspace,
+                name.as_ptr(),
+                size,
+                &aligned_ptr as *const *mut c_void,
+                align_log2,
+                paddr,
                 vmm_flags,
                 crate::mmu::ARCH_MMU_FLAG_CACHED | crate::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE,
             )

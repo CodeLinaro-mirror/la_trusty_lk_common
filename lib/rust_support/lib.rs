@@ -28,7 +28,10 @@
 // C string literals were stabilized in Rust 1.77
 #![cfg_attr(not(version("1.77")), feature(c_str_literals))]
 #![deny(unsafe_op_in_unsafe_fn)]
-#![feature(new_uninit)]
+// new_uninit is stable as of Rust 1.82
+#![cfg_attr(not(version("1.82")), feature(new_uninit))]
+// raw_ref_op is stable as of Rust 1.82
+#![cfg_attr(not(version("1.82")), feature(raw_ref_op))]
 
 use alloc::format;
 use core::ffi::CStr;
@@ -39,11 +42,14 @@ mod sys {
     #![allow(unused)]
     #![allow(non_camel_case_types)]
     #![allow(non_upper_case_globals)]
+    #![allow(unsafe_op_in_unsafe_fn)]
+    #![allow(clippy::missing_safety_doc)]
     use num_derive::FromPrimitive;
     include!(env!("BINDGEN_INC_FILE"));
 }
 
 pub mod err;
+pub mod extmem;
 pub mod handle;
 pub mod handle_set;
 pub mod init;

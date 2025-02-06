@@ -296,7 +296,7 @@ static inline uint arch_curr_cpu_num(void)
  */
 static inline uintptr_t arch_extract_return_addr(uintptr_t lr) {
     if (arch_pac_address_supported()) {
-        __asm__(".arch_extension pauth\n"
+        __asm__ volatile(".arch_extension pauth\n"
                 "\txpaci %0" : "+r" (lr));
     }
     return lr;
