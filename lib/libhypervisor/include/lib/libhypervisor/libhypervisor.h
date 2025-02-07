@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Google Inc. All rights reserved
+ * Copyright (c) 2025 Google Inc. All rights reserved
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -21,27 +21,4 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use core::ptr::NonNull;
-
-use virtio_drivers::BufferDirection;
-use virtio_drivers::PhysAddr;
-
-use rust_support::vmm::vaddr_to_paddr;
-
-pub(crate) fn dma_alloc_share(_paddr: usize, _size: usize) {}
-pub(crate) fn dma_dealloc_unshare(_paddr: PhysAddr, _size: usize) {}
-
-// Safety: buffer must be a valid kernel virtual address for the duration of the call.
-pub(crate) unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
-    // no-op on x86_64
-    // Safety: buffer is a valid kernel virtual address
-    unsafe { vaddr_to_paddr(buffer.as_ptr().cast()) }
-}
-
-// Safety: not actually unsafe.
-pub(crate) unsafe fn unshare(
-    _paddr: PhysAddr,
-    _buffer: NonNull<[u8]>,
-    _direction: BufferDirection,
-) {
-}
+int hypervisor_mmio_map_region(paddr_t paddr, size_t size);

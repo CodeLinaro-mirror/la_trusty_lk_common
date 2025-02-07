@@ -29,6 +29,18 @@ SECTIONS
 {
     . = %KERNEL_BASE% + %KERNEL_LOAD_OFFSET%;
 
+    /*
+     * Discard __cpu_indicator_init since we don't need it, and it touches
+     * xmm registers in clang-r530567 which we don't allow in the kernel
+     */
+    /DISCARD/ : {
+        *libclang_rt.builtins-x86_64-android.a:x86.c.o(
+            .text.__cpu_indicator_init
+            .rodata.__cpu_indicator_init
+            .init_array*
+        )
+    }
+
     .text : AT(%MEMBASE% + %KERNEL_LOAD_OFFSET%) {
         __code_start = .;
         KEEP(*(.text.boot))
