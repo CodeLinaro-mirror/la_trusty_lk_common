@@ -499,24 +499,6 @@ where
     }
 }
 
-// Safety: each field of a `VsockDevice` is safe to transfer across thread boundaries
-// TODO: remove this once https://github.com/rcore-os/virtio-drivers/pull/146 lands
-unsafe impl<H, T> Send for VsockDevice<H, T>
-where
-    H: Hal,
-    T: Transport,
-{
-}
-
-// Safety: each field of a `VsockDevice` is safe to share between threads
-// TODO: remove this once https://github.com/rcore-os/virtio-drivers/pull/146 lands
-unsafe impl<H, T> Sync for VsockDevice<H, T>
-where
-    H: Hal,
-    T: Transport,
-{
-}
-
 pub(crate) fn vsock_rx_loop<H, T>(device: Arc<VsockDevice<H, T>>) -> Result<(), Error>
 where
     H: Hal,
