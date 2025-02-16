@@ -58,7 +58,7 @@ MODULE_RUSTFLAGS += \
 	--cfg 'feature="gatekeeper"' \
 
 endif
-ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_KEMINT)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_KEYMINT)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="keymint"' \
 
