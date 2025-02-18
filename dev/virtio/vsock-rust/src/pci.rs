@@ -22,9 +22,10 @@
  */
 
 #![deny(unsafe_op_in_unsafe_fn)]
-
 use core::ffi::c_int;
 use core::ptr;
+
+use alloc::sync::Arc;
 
 use log::debug;
 
@@ -49,18 +50,25 @@ use rust_support::Error as LkError;
 
 use crate::err::Error;
 use crate::hal::TrustyHal;
+use crate::vsock::VsockDevice;
 
 impl TrustyHal {
     fn init_vsock(pci_root: &mut PciRoot, device_function: DeviceFunction) -> Result<(), Error> {
         let transport = PciTransport::new::<Self>(pci_root, device_function)?;
-        let driver: VirtIOSocket<TrustyHal, PciTransport> = VirtIOSocket::new(transport)?;
-        let _manager = VsockConnectionManager::new(driver); // TODO move
+        let driver: VirtIOSocket<TrustyHal, PciTransport, 4096> = VirtIOSocket::new(transport)?;
+        let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
+
+        let device_for_rx = Arc::new(VsockDevice::new(manager));
+        let device_for_tx = device_for_rx.clone();
 
         Builder::new()
             .name(c"virtio_vsock_rx")
             .priority(Priority::HIGH)
             .spawn(move || {
-                todo!("Call routine for virtio rx worker");
+                crate::vsock::vsock_rx_loop(device_for_rx)
+                    .err()
+                    .unwrap_or(LkError::NO_ERROR.into())
+                    .into_c()
             })
             .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
@@ -68,7 +76,10 @@ impl TrustyHal {
             .name(c"virtio_vsock_tx")
             .priority(Priority::HIGH)
             .spawn(move || {
-                todo!("Call routine for virtio tx worker");
+                crate::vsock::vsock_tx_loop(device_for_tx)
+                    .err()
+                    .unwrap_or(LkError::NO_ERROR.into())
+                    .into_c()
             })
             .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 

@@ -50,7 +50,7 @@ impl lk_init_struct {
     pub const fn new(
         level: lk_init_level,
         flags: lk_init_flags,
-        hook: extern "C" fn(uint),
+        hook: unsafe extern "C" fn(uint),
         name: *const c_char,
     ) -> Self {
         lk_init_struct { level: level.0, flags: flags.0, hook: Option::Some(hook), name: name }

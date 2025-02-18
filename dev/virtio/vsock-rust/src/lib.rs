@@ -7,3 +7,6 @@
 mod err;
 mod hal;
 mod pci;
+mod vsock;
+
+pub use pci::pci_init_mmio;

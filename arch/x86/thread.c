@@ -143,8 +143,16 @@ void arch_context_switch(thread_t *oldthread, thread_t *newthread)
 #if X86_WITH_FPU
     fpu_context_switch(oldthread, newthread);
 #endif
+    /* Exceptions and interrupts from user-space sets RSP to TSS:RSP0 */
     tss_base->rsp0 = stack_top;
+    /* SYSENTER instruction sets RSP to SYSENTER_ESP_MSR */
     write_msr(SYSENTER_ESP_MSR, stack_top);
+    /*
+     * The SYSCALL instruction does not set RSP, so we also store the stack
+     * pointer in GS:SYSCALL_STACK_OFF so the syscall handler can easily get
+     * it.
+     */
+    x86_write_gs_with_offset(SYSCALL_STACK_OFF, stack_top);
 
     /* Switch fs base which used to store tls */
     oldthread->arch.fs_base = read_msr(X86_MSR_FS_BASE);

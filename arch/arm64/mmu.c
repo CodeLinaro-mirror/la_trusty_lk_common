@@ -344,7 +344,7 @@ static pte_t *arm64_mmu_get_page_table(vaddr_t index, uint page_size_shift, pte_
         case MMU_PTE_DESCRIPTOR_INVALID:
             ret = alloc_page_table(&paddr, page_size_shift);
             if (ret) {
-                TRACEF("failed to allocate page table\n");
+                TRACEF("failed to allocate page table, page_size_shift %u\n", page_size_shift);
                 return NULL;
             }
             vaddr = paddr_to_kvaddr(paddr);

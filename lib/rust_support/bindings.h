@@ -2,6 +2,8 @@
 #include <kernel/mutex.h>
 #include <kernel/thread.h>
 #include <kernel/vm.h>
+#include <lib/trusty/handle.h>
+#include <lib/trusty/handle_set.h>
 #include <lib/trusty/ipc.h>
 #include <lib/trusty/uuid.h>
 #include <lk/init.h>
