@@ -242,26 +242,42 @@ enum ConnectionStateAction {
     Remove,
 }
 
-fn vsock_connection_lookup(
+fn vsock_connection_lookup_by(
     connections: &mut Vec<VsockConnection>,
-    remote_port: u32,
+    predicate: impl Fn(&VsockConnection) -> bool,
     f: impl FnOnce(&mut VsockConnection) -> ConnectionStateAction,
 ) -> Result<(), ()> {
-    let (index, connection) = connections
-        .iter_mut()
-        .enumerate()
-        .find(|(_idx, connection)| connection.peer.port == remote_port)
-        .ok_or(())?;
-    let action = f(connection);
+    let index = connections.iter().position(predicate).ok_or(())?;
+    let action = f(&mut connections[index]);
     if action == ConnectionStateAction::None {
         return Ok(());
     }
 
-    if vsock_connection_close(connection, action) {
+    if vsock_connection_close(&mut connections[index], action) {
         connections.swap_remove(index);
     }
 
     Ok(())
+}
+
+fn vsock_connection_lookup_peer(
+    connections: &mut Vec<VsockConnection>,
+    peer: VsockAddr,
+    f: impl FnOnce(&mut VsockConnection) -> ConnectionStateAction,
+) -> Result<(), ()> {
+    vsock_connection_lookup_by(connections, |c: &VsockConnection| c.peer == peer, f)
+}
+
+fn vsock_connection_lookup_cookie(
+    connections: &mut Vec<VsockConnection>,
+    cookie: *mut c_void,
+    f: impl FnOnce(&mut VsockConnection) -> ConnectionStateAction,
+) -> Result<(), ()> {
+    vsock_connection_lookup_by(
+        connections,
+        |c: &VsockConnection| eq(c.href.as_ptr().cast::<c_void>(), cookie),
+        f,
+    )
 }
 
 fn vsock_connection_close(c: &mut VsockConnection, action: ConnectionStateAction) -> bool {
@@ -547,7 +563,7 @@ where
                 debug!("recv destination: {destination:?}");
 
                 let connections = &mut *device.connections.lock();
-                let _ = vsock_connection_lookup(connections, source.port, |mut connection| {
+                let _ = vsock_connection_lookup_peer(connections, source, |mut connection| {
                     if let Err(e) = match connection {
                         ref mut c @ VsockConnection {
                             state: VsockConnectionState::VsockOnly, ..
@@ -594,7 +610,7 @@ where
             VsockEventType::Disconnected { reason } => {
                 debug!("disconnected from peer. reason: {reason:?}");
                 let connections = &mut *device.connections.lock();
-                let _ = vsock_connection_lookup(connections, source.port, |_connection| {
+                let _ = vsock_connection_lookup_peer(connections, source, |_connection| {
                     ConnectionStateAction::Remove
                 })
                 .inspect_err(|_| {
@@ -645,12 +661,13 @@ where
             continue;
         }
 
-        let _ = vsock_connection_lookup(&mut device.connections.lock(), href.id(), |c| {
-            if !eq(c.href.as_mut_ptr() as *mut c_void, href.cookie()) {
+        let cookie = href.cookie();
+        let _ = vsock_connection_lookup_cookie(&mut device.connections.lock(), cookie, |c| {
+            if href.id() != c.href.id() {
                 panic!(
-                    "unexpected cookie {:?} != {:?} for connection {}",
-                    href.cookie(),
-                    c.href.as_mut_ptr(),
+                    "unexpected id {:?} != {:?} for connection {}",
+                    href.id(),
+                    c.href.id(),
                     c.tipc_port_name()
                 );
             }

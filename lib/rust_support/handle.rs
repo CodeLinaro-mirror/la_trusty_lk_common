@@ -112,8 +112,12 @@ impl HandleRef {
         unsafe { handle_decref(self.inner.handle) };
     }
 
+    pub fn as_ptr(&self) -> *const handle_ref {
+        Box::as_ptr(&self.inner)
+    }
+
     pub fn as_mut_ptr(&mut self) -> *mut handle_ref {
-        &mut *self.inner
+        Box::as_mut_ptr(&mut self.inner)
     }
 
     pub fn cookie(&self) -> *mut c_void {
