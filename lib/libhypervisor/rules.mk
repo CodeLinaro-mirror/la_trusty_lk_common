@@ -11,7 +11,12 @@ MODULE_LIBRARY_DEPS := \
 	$(call FIND_CRATE,log) \
 	$(call FIND_CRATE,spin) \
 
-# hypervisor_backends is arm64-only for now
+# hypervisor_backends supports arm64 and x86-64 only for now
+ifeq ($(SUBARCH),x86-64)
+MODULE_LIBRARY_DEPS += \
+	packages/modules/Virtualization/libs/libhypervisor_backends \
+
+endif
 ifeq ($(ARCH),arm64)
 MODULE_LIBRARY_DEPS += \
 	packages/modules/Virtualization/libs/libhypervisor_backends \
