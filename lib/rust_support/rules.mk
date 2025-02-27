@@ -71,6 +71,9 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	lk_interrupt_restore \
 	lk_interrupt_save \
 	lk_ints_disabled \
+	lk_spin_lock \
+	lk_spin_trylock \
+	lk_spin_unlock \
 	lk_stdin \
 	lk_stdout \
 	lk_stderr \
@@ -106,6 +109,7 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	lk_time_.* \
 	spin_lock_save_flags_t \
 	spin_lock_saved_state_t \
+	spin_lock_t \
 	trusty_ipc_event_type \
 	uuid \
 	vmm_obj_service \
@@ -130,6 +134,7 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	SPIN_LOCK_FLAG_INTERRUPTS \
 	SPIN_LOCK_FLAG_IRQ \
 	SPIN_LOCK_FLAG_IRQ_FIQ \
+	SPIN_LOCK_INITIAL_VALUE \
 	zero_uuid \
 
 MODULE_BINDGEN_FLAGS := \

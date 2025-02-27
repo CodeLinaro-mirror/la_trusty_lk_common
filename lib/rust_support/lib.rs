@@ -60,6 +60,7 @@ pub mod ktipc;
 pub mod log;
 pub mod macros;
 pub mod mmu;
+pub mod spinlock;
 pub mod sync;
 pub mod thread;
 pub mod vmm;

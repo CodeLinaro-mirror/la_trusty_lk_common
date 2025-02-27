@@ -51,3 +51,30 @@ bool lk_ints_disabled(void);
  */
 bool lk_fiqs_disabled(void);
 #endif
+
+/**
+ * Interrupts must be disabled ([`InterruptState::save`]) before calling this,
+ * or else this might deadlock.
+ *
+ * # Safety
+ *
+ * `lock` must have been initialized with [`SPIN_LOCK_INITIAL_VALUE`].
+ *
+ * This function is thread-safe and can be called concurrently from multiple threads.
+ * Only one thread is guaranteed to successfully lock it at a time.
+ */
+void lk_spin_lock(spin_lock_t *lock);
+
+/**
+ * # Safety
+ *
+ * Same as `lk_spin_lock`.
+ */
+int lk_spin_trylock(spin_lock_t *lock);
+
+/**
+ * # Safety
+ *
+ * `lock` must already be locked by either `lk_spin_lock` or `lk_spin_trylock`.
+ */
+void lk_spin_unlock(spin_lock_t *lock);

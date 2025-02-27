@@ -40,3 +40,15 @@ bool lk_fiqs_disabled(void) {
     return arch_fiqs_disabled();
 }
 #endif
+
+void lk_spin_lock(spin_lock_t *lock) {
+    spin_lock(lock);
+}
+
+int lk_spin_trylock(spin_lock_t *lock) {
+    return spin_trylock(lock);
+}
+
+void lk_spin_unlock(spin_lock_t *lock) {
+    spin_unlock(lock);
+}
