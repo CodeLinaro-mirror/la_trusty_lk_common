@@ -34,6 +34,7 @@ MODULE_SRCS := \
 MODULE_ADD_IMPLICIT_DEPS := false
 
 MODULE_DEPS := \
+	$(call FIND_CRATE,bitflags) \
 	$(call FIND_CRATE,num-derive) \
 	$(call FIND_CRATE,num-traits) \
 	$(call FIND_CRATE,log) \
@@ -66,6 +67,10 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	ipc_send_msg \
 	ktipc_server_init \
 	ktipc_server_start \
+	lk_fiqs_disabled \
+	lk_interrupt_restore \
+	lk_interrupt_save \
+	lk_ints_disabled \
 	lk_stdin \
 	lk_stdout \
 	lk_stderr \
@@ -99,6 +104,8 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	ktipc_server \
 	lk_init_.* \
 	lk_time_.* \
+	spin_lock_save_flags_t \
+	spin_lock_saved_state_t \
 	trusty_ipc_event_type \
 	uuid \
 	vmm_obj_service \
@@ -119,6 +126,10 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
+	SPIN_LOCK_FLAG_FIQ \
+	SPIN_LOCK_FLAG_INTERRUPTS \
+	SPIN_LOCK_FLAG_IRQ \
+	SPIN_LOCK_FLAG_IRQ_FIQ \
 	zero_uuid \
 
 MODULE_BINDGEN_FLAGS := \
