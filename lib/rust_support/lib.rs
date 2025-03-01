@@ -32,6 +32,7 @@
 #![cfg_attr(not(version("1.82")), feature(new_uninit))]
 // raw_ref_op is stable as of Rust 1.82
 #![cfg_attr(not(version("1.82")), feature(raw_ref_op))]
+#![feature(box_as_ptr)]
 
 use alloc::format;
 use core::ffi::CStr;
@@ -53,11 +54,13 @@ pub mod extmem;
 pub mod handle;
 pub mod handle_set;
 pub mod init;
+pub mod interrupt;
 pub mod ipc;
 pub mod ktipc;
 pub mod log;
 pub mod macros;
 pub mod mmu;
+pub mod spinlock;
 pub mod sync;
 pub mod thread;
 pub mod vmm;
