@@ -34,11 +34,17 @@ use virtio_drivers::device::socket::VsockConnectionManager;
 use virtio_drivers::transport::pci::bus::Cam;
 use virtio_drivers::transport::pci::bus::Command;
 use virtio_drivers::transport::pci::bus::ConfigurationAccess;
-use virtio_drivers::transport::pci::bus::DeviceFunction;
 use virtio_drivers::transport::pci::bus::MmioCam;
 use virtio_drivers::transport::pci::bus::PciRoot;
 use virtio_drivers::transport::pci::virtio_device_type;
 use virtio_drivers::transport::pci::PciTransport;
+use virtio_drivers::transport::SomeTransport;
+#[cfg(target_arch = "x86_64")]
+use {
+    hypervisor_backends::get_mem_sharer,
+    virtio_drivers::transport::x86_64::{HypCam, HypPciTransport},
+};
+
 use virtio_drivers::transport::DeviceType;
 
 use hypervisor::mmio_map_region;
@@ -64,14 +70,10 @@ mod arch;
 mod hal;
 
 impl TrustyHal {
-    fn init_vsock(
-        pci_root: &mut PciRoot<impl ConfigurationAccess>,
-        device_function: DeviceFunction,
+    fn init_vsock<T: virtio_drivers::transport::Transport + 'static + Send>(
+        driver: virtio_drivers::device::socket::VirtIOSocket<TrustyHal, T, 4096>,
     ) -> Result<(), Error> {
-        let transport = PciTransport::new::<Self, _>(pci_root, device_function)?;
-        let driver: VirtIOSocket<TrustyHal, PciTransport, 4096> = VirtIOSocket::new(transport)?;
         let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
-
         let device_for_rx = Arc::new(VsockDevice::new(manager));
         let device_for_tx = device_for_rx.clone();
 
@@ -105,6 +107,7 @@ impl TrustyHal {
     fn init_all_vsocks(
         mut pci_root: PciRoot<impl ConfigurationAccess>,
         pci_size: usize,
+        use_hyp_transport: bool,
     ) -> Result<(), Error> {
         for bus in u8::MIN..=u8::MAX {
             // each bus can use up to one megabyte of address space, make sure we stay in range
@@ -127,7 +130,36 @@ impl TrustyHal {
                     Command::IO_SPACE | Command::MEMORY_SPACE | Command::BUS_MASTER,
                 );
 
-                Self::init_vsock(&mut pci_root, device_function)?;
+                // In contrast to arm64, when Trusty runs as a protected VM on x86_64, emulated
+                // MMIO accesses require special handling. On x86_64, the host needs to read and
+                // decode guest instructions that caused the MMIO access trap to determine the
+                // address and access type. However, due to pKVM nature, the host cannot read
+                // protected VM memory. To address this, pKVM supports hypercalls for IOREAD and
+                // IOWRITE, which the guest can use.
+                //
+                // The virtio-drivers' HypPciTransport is based on mentioned hypercalls and
+                // therefore is used for x86 protected Trusty, while PciTransport is used
+                // otherwise.
+                let transport = if use_hyp_transport {
+                    #[cfg(target_arch = "x86_64")]
+                    {
+                        SomeTransport::HypPci(HypPciTransport::new::<_>(
+                            &mut pci_root,
+                            device_function,
+                        )?)
+                    }
+
+                    #[cfg(not(target_arch = "x86_64"))]
+                    panic!("HypPciTransport is x86_64 specific");
+                } else {
+                    SomeTransport::Pci(PciTransport::new::<Self, _>(
+                        &mut pci_root,
+                        device_function,
+                    )?)
+                };
+
+                let driver = VirtIOSocket::new(transport)?;
+                Self::init_vsock(driver)?;
             }
         }
         Ok(())
@@ -138,11 +170,11 @@ impl TrustyHal {
 ///
 /// `pci_paddr` must be a valid physical address with `'static` lifetime to the base of the MMIO region,
 /// which must have a size of `pci_size`.
-unsafe fn map_pci_root(
+unsafe fn map_pci_root_and_init_vsock(
     pci_paddr: paddr_t,
     pci_size: usize,
     cfg_size: usize,
-) -> Result<PciRoot<impl ConfigurationAccess>, Error> {
+) -> Result<(), Error> {
     // The ECAM is defined in Section 7.2.2 of the PCI Express Base Specification, Revision 2.0.
     // The ECAM size must be a power of two with the exponent between 1 and 8.
     let cam = match cfg_size / /* device functions */ 8 {
@@ -187,20 +219,35 @@ unsafe fn map_pci_root(
         Err(err) => return Err(Error::Lk(err)),
     }
 
-    // Safety:
-    // `pci_paddr` is a valid physical address to the base of the MMIO region.
-    // `pci_vaddr` is the mapped virtual address of that.
-    // `pci_paddr` has `'static` lifetime, and `pci_vaddr` is never unmapped,
-    // so it, too, has `'static` lifetime.
-    // We also check that the `cam` size is valid.
-    let pci_root = PciRoot::new(unsafe { MmioCam::new(pci_vaddr.cast(), cam) });
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_hyp_transport = false;
 
-    Ok(pci_root)
+    // x86 when running in protected mode requires hyp transport
+    #[cfg(target_arch = "x86_64")]
+    let use_hyp_transport = get_mem_sharer().is_some();
+
+    if use_hyp_transport {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let pci_root = PciRoot::new(HypCam::new(pci_paddr, cam));
+            TrustyHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport)?;
+        }
+    } else {
+        // Safety:
+        // `pci_paddr` is a valid physical address to the base of the MMIO region.
+        // `pci_vaddr` is the mapped virtual address of that.
+        // `pci_paddr` has `'static` lifetime, and `pci_vaddr` is never unmapped,
+        // so it, too, has `'static` lifetime.
+        // We also check that the `cam` size is valid.
+        let pci_root = PciRoot::new(unsafe { MmioCam::new(pci_vaddr.cast(), cam) });
+        TrustyHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport)?;
+    }
+    Ok(())
 }
 
 /// # Safety
 ///
-/// See [`map_pci_root`].
+/// See [`map_pci_root_and_init_vsock`].
 #[no_mangle]
 pub unsafe extern "C" fn pci_init_mmio(
     pci_paddr: paddr_t,
@@ -209,9 +256,8 @@ pub unsafe extern "C" fn pci_init_mmio(
 ) -> c_int {
     debug!("initializing vsock: pci_paddr 0x{pci_paddr:x}, pci_size 0x{pci_size:x}");
     || -> Result<(), Error> {
-        // Safety: Delegated to `map_pci_root`.
-        let pci_root = unsafe { map_pci_root(pci_paddr, pci_size, cfg_size) }?;
-        TrustyHal::init_all_vsocks(pci_root, pci_size)?;
+        // Safety: Delegated to `map_pci_root_and_init_vsock`.
+        unsafe { map_pci_root_and_init_vsock(pci_paddr, pci_size, cfg_size) }?;
         Ok(())
     }()
     .err()
