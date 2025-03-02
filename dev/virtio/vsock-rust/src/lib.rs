@@ -9,8 +9,6 @@
 #![cfg_attr(version("1.82"), feature(unsigned_is_multiple_of))]
 
 mod err;
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-mod kvm;
 mod pci;
 mod vsock;
 

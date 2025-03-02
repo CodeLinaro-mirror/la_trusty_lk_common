@@ -30,8 +30,8 @@ use core::ops::DerefMut;
 use core::ptr::copy_nonoverlapping;
 use core::ptr::NonNull;
 
-use crate::kvm::share_pages;
-use crate::kvm::unshare_pages;
+use hypervisor::share_pages;
+use hypervisor::unshare_pages;
 
 use crate::pci::hal::TrustyHal;
 
