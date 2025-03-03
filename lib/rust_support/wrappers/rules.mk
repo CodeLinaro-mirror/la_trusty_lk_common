@@ -26,6 +26,7 @@ LOCAL_DIR := $(GET_LOCAL_DIR)
 MODULE := $(LOCAL_DIR)
 
 MODULE_SRCS := \
+	$(LOCAL_DIR)/spinlock.c \
 	$(LOCAL_DIR)/streams.c \
 
 MODULE_EXPORT_INCLUDES := \

@@ -24,15 +24,24 @@
 use log::error;
 use spin::Once;
 
-use rust_support::Error as LkError;
-
-use hypervisor_backends::get_mmio_guard;
+use hypervisor_backends::get_mem_sharer;
 use hypervisor_backends::Error as HypError;
 use hypervisor_backends::KvmError;
 
+#[cfg(target_arch = "aarch64")]
+use hypervisor_backends::get_mmio_guard;
+
+#[cfg(target_arch = "aarch64")]
+use rust_support::Error as LkError;
+
+/// Result type with kvm error.
+pub type KvmResult<T> = Result<T, KvmError>;
+
 /// The mmio granule size used by the hypervisor
+#[cfg(target_arch = "aarch64")]
 static MMIO_GRANULE: Once<Result<usize, LkError>> = Once::new();
 
+#[cfg(target_arch = "aarch64")]
 fn get_mmio_granule() -> Result<usize, LkError> {
     *MMIO_GRANULE.call_once(|| {
         let hypervisor = get_mmio_guard()
@@ -58,6 +67,7 @@ fn get_mmio_granule() -> Result<usize, LkError> {
 ///  - paddr + size must be a valid physical address
 ///  - the caller must be aware that after the call the [paddr .. paddr + size] memory
 ///    is available for reading by the host.
+#[cfg(target_arch = "aarch64")]
 pub unsafe fn mmio_map_region(paddr: usize, size: usize) -> Result<(), LkError> {
     let Some(hypervisor) = get_mmio_guard() else {
         return Ok(());
@@ -90,6 +100,97 @@ pub unsafe fn mmio_map_region(paddr: usize, size: usize) -> Result<(), LkError> 
                 HypError::KvmError(KvmError::InvalidParameter, _) => LkError::ERR_INVALID_ARGS,
                 HypError::KvmError(_, _) => LkError::ERR_GENERIC,
                 _ => panic!("MMIO Guard unmap returned unexpected error: {err:?}"),
+            }
+        })?;
+    }
+
+    Ok(())
+}
+
+/// The granule size used by the hypervisor
+static GRANULE: Once<KvmResult<usize>> = Once::new();
+
+fn get_granule() -> KvmResult<usize> {
+    *GRANULE.call_once(|| {
+        let hypervisor = get_mem_sharer()
+            .ok_or(KvmError::NotSupported)
+            .inspect_err(|_| error!("failed to get hypervisor"))?;
+        let granule = hypervisor
+            .granule()
+            .inspect_err(|e| error!("failed to get granule: {e:?}"))
+            .map_err(|_| KvmError::NotSupported)?;
+        if !granule.is_power_of_two() {
+            error!("invalid memory protection granule");
+            return Err(KvmError::InvalidParameter);
+        }
+        Ok(granule)
+    })
+}
+
+pub fn share_pages(paddr: usize, size: usize) -> KvmResult<()> {
+    let hypervisor = match get_mem_sharer() {
+        Some(h) => h,
+        None => return Ok(()), // not in a protected vm
+    };
+
+    let hypervisor_page_size = get_granule()?;
+
+    if !paddr.is_multiple_of(hypervisor_page_size) {
+        error!("paddr not aligned");
+        return Err(KvmError::InvalidParameter);
+    }
+
+    if !size.is_multiple_of(hypervisor_page_size) {
+        error!("size ({size}) not aligned to page size ({hypervisor_page_size})");
+        return Err(KvmError::InvalidParameter);
+    }
+
+    for page in (paddr..paddr + size).step_by(hypervisor_page_size) {
+        hypervisor.share(page as u64).map_err(|err| {
+            error!("failed to share page 0x{page:x}: {err}");
+
+            // unmap any previously shared pages on error
+            // if sharing fail on the first page, the half-open range below is empty
+            for prev in (paddr..page).step_by(hypervisor_page_size) {
+                // keep going even if we fail
+                let _ = hypervisor.unshare(prev as u64);
+            }
+
+            match err {
+                HypError::KvmError(e, _) => e,
+                _ => panic!("unexpected share error: {err:?}"),
+            }
+        })?;
+    }
+
+    Ok(())
+}
+
+pub fn unshare_pages(paddr: usize, size: usize) -> KvmResult<()> {
+    let hypervisor = match get_mem_sharer() {
+        Some(h) => h,
+        None => return Ok(()), // not in a protected vm
+    };
+
+    let hypervisor_page_size = get_granule()?;
+
+    if !paddr.is_multiple_of(hypervisor_page_size) {
+        error!("paddr not aligned");
+        return Err(KvmError::InvalidParameter);
+    }
+
+    if !size.is_multiple_of(hypervisor_page_size) {
+        error!("size ({size}) not aligned to page size ({hypervisor_page_size})");
+        return Err(KvmError::InvalidParameter);
+    }
+
+    for page in (paddr..paddr + size).step_by(hypervisor_page_size) {
+        hypervisor.unshare(page as u64).map_err(|err| {
+            error!("failed to unshare page 0x{page:x}: {err:?}");
+
+            match err {
+                HypError::KvmError(e, _) => e,
+                _ => panic!("unexpected unshare error: {err:?}"),
             }
         })?;
     }
