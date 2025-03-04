@@ -50,7 +50,6 @@ mod sys {
 }
 
 pub mod err;
-pub mod extmem;
 pub mod handle;
 pub mod handle_set;
 pub mod init;
