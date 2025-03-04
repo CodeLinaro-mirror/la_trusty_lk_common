@@ -27,7 +27,6 @@
 #include <kernel/mutex.h>
 #include <kernel/thread.h>
 #include <kernel/vm.h>
-#include <lib/extmem/extmem.h>
 #include <lib/ktipc/ktipc.h>
 #include <lib/trusty/handle.h>
 #include <lib/trusty/handle_set.h>
