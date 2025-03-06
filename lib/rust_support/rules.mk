@@ -62,7 +62,10 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	handle_wait \
 	handle_ref_is_attached \
 	ipc_get_msg \
+	ipc_port_accept \
 	ipc_port_connect_async \
+	ipc_port_create \
+	ipc_port_publish \
 	ipc_put_msg \
 	ipc_read_msg \
 	ipc_send_msg \
@@ -128,6 +131,7 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	IPC_PORT_ALLOW_NS_CONNECT \
 	IPC_PORT_ALLOW_TA_CONNECT \
 	IPC_PORT_PATH_MAX \
+	kernel_uuid \
 	LK_LOGLEVEL_RUST \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
