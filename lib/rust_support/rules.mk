@@ -48,6 +48,9 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
+	event_init \
+	event_signal \
+	event_wait_timeout \
 	fflush \
 	fputs \
 	handle_close \
@@ -96,6 +99,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
+	event_t \
 	handle \
 	handle_ref \
 	iovec_kern \
@@ -117,6 +121,7 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
 	DEFAULT_STACK_SIZE \
+	EVENT_FLAG_AUTOUNSIGNAL \
 	FILE \
 	IPC_CONNECT_WAIT_FOR_PORT \
 	IPC_HANDLE_POLL_.* \
