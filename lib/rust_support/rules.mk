@@ -116,6 +116,7 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	spin_lock_t \
 	trusty_ipc_event_type \
 	uuid \
+	uuid_t \
 	vmm_obj_service \
 	vmm_obj_slice \
 
