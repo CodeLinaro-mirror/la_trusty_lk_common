@@ -34,10 +34,10 @@ MODULE_SRCS := \
 MODULE_ADD_IMPLICIT_DEPS := false
 
 MODULE_DEPS := \
+	$(call FIND_CRATE,bitflags) \
 	$(call FIND_CRATE,num-derive) \
 	$(call FIND_CRATE,num-traits) \
 	$(call FIND_CRATE,log) \
-	trusty/kernel/lib/extmem \
 	trusty/kernel/lib/ktipc \
 	trusty/kernel/lib/vmm_obj_service \
 	trusty/user/base/lib/liballoc-rust \
@@ -48,7 +48,9 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
-	ext_mem_.* \
+	event_init \
+	event_signal \
+	event_wait_timeout \
 	fflush \
 	fputs \
 	handle_close \
@@ -66,6 +68,13 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	ipc_send_msg \
 	ktipc_server_init \
 	ktipc_server_start \
+	lk_fiqs_disabled \
+	lk_interrupt_restore \
+	lk_interrupt_save \
+	lk_ints_disabled \
+	lk_spin_lock \
+	lk_spin_trylock \
+	lk_spin_unlock \
 	lk_stdin \
 	lk_stdout \
 	lk_stderr \
@@ -90,7 +99,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
-	ext_mem_.* \
+	event_t \
 	handle \
 	handle_ref \
 	iovec_kern \
@@ -99,6 +108,9 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	ktipc_server \
 	lk_init_.* \
 	lk_time_.* \
+	spin_lock_save_flags_t \
+	spin_lock_saved_state_t \
+	spin_lock_t \
 	trusty_ipc_event_type \
 	uuid \
 	vmm_obj_service \
@@ -109,6 +121,7 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
 	DEFAULT_STACK_SIZE \
+	EVENT_FLAG_AUTOUNSIGNAL \
 	FILE \
 	IPC_CONNECT_WAIT_FOR_PORT \
 	IPC_HANDLE_POLL_.* \
@@ -119,6 +132,11 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
+	SPIN_LOCK_FLAG_FIQ \
+	SPIN_LOCK_FLAG_INTERRUPTS \
+	SPIN_LOCK_FLAG_IRQ \
+	SPIN_LOCK_FLAG_IRQ_FIQ \
+	SPIN_LOCK_INITIAL_VALUE \
 	zero_uuid \
 
 MODULE_BINDGEN_FLAGS := \

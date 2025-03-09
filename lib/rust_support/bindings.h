@@ -24,10 +24,10 @@
 #pragma once
 
 #include <arch/mmu.h>
+#include <kernel/event.h>
 #include <kernel/mutex.h>
 #include <kernel/thread.h>
 #include <kernel/vm.h>
-#include <lib/extmem/extmem.h>
 #include <lib/ktipc/ktipc.h>
 #include <lib/trusty/handle.h>
 #include <lib/trusty/handle_set.h>
@@ -36,6 +36,7 @@
 #include <lib/vmm_obj_service/vmm_obj_service.h>
 #include <lk/init.h>
 #include <panic.h>
+#include <spinlock.h>
 #include <stdio.h>
 #include <streams.h> /* stubs for stdin, stdout, stderr */
 

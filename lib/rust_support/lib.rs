@@ -50,15 +50,17 @@ mod sys {
 }
 
 pub mod err;
-pub mod extmem;
+pub mod event;
 pub mod handle;
 pub mod handle_set;
 pub mod init;
+pub mod interrupt;
 pub mod ipc;
 pub mod ktipc;
 pub mod log;
 pub mod macros;
 pub mod mmu;
+pub mod spinlock;
 pub mod sync;
 pub mod thread;
 pub mod vmm;
