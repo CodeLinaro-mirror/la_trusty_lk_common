@@ -50,7 +50,7 @@ mod sys {
 }
 
 pub mod err;
-pub mod extmem;
+pub mod event;
 pub mod handle;
 pub mod handle_set;
 pub mod init;
@@ -63,10 +63,12 @@ pub mod mmu;
 pub mod spinlock;
 pub mod sync;
 pub mod thread;
+pub mod uuid;
 pub mod vmm;
 
 pub use sys::paddr_t;
 pub use sys::status_t;
+pub use sys::uuid_t;
 pub use sys::vaddr_t;
 pub use sys::Error;
 
