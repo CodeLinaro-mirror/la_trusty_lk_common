@@ -142,7 +142,7 @@ pub struct Builder<'a> {
     pub stack_size: usize,
 }
 
-impl<'a> Default for Builder<'a> {
+impl Default for Builder<'_> {
     fn default() -> Self {
         Self::new()
     }
