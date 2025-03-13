@@ -9,6 +9,7 @@
 #![cfg_attr(version("1.82"), feature(unsigned_is_multiple_of))]
 
 mod err;
+mod hal;
 mod pci;
 mod vsock;
 
