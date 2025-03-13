@@ -28,12 +28,15 @@ use core::ffi::c_int;
 use rust_support::paddr_t;
 use rust_support::Error as LkError;
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 mod hyp;
 
 // TODO: Enable for x86_64 once it's supported.
 #[cfg(target_arch = "aarch64")]
 pub use hyp::mmio_map_region;
+
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+pub use hyp::{share_pages, unshare_pages};
 
 /// # Safety
 /// Actually not unsafe for targets other then aarch64
