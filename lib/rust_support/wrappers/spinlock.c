@@ -21,24 +21,34 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#pragma once
-
-#include <arch/mmu.h>
-#include <kernel/mutex.h>
-#include <kernel/thread.h>
-#include <kernel/vm.h>
-#include <lib/extmem/extmem.h>
-#include <lib/ktipc/ktipc.h>
-#include <lib/trusty/handle.h>
-#include <lib/trusty/handle_set.h>
-#include <lib/trusty/ipc.h>
-#include <lib/trusty/uuid.h>
-#include <lib/vmm_obj_service/vmm_obj_service.h>
-#include <lk/init.h>
-#include <panic.h>
 #include <spinlock.h>
-#include <stdio.h>
-#include <streams.h> /* stubs for stdin, stdout, stderr */
 
-#include "error.h"
-#include "config.h" /* for LK_LOGLEVEL_RUST */
+void lk_interrupt_save(spin_lock_saved_state_t *statep, spin_lock_save_flags_t flags) {
+    arch_interrupt_save(statep, flags);
+}
+
+void lk_interrupt_restore(spin_lock_saved_state_t old_state, spin_lock_save_flags_t flags) {
+    arch_interrupt_restore(old_state, flags);
+}
+
+bool lk_ints_disabled(void) {
+    return arch_ints_disabled();
+}
+
+#if defined(__arm__) || defined(__aarch64__)
+bool lk_fiqs_disabled(void) {
+    return arch_fiqs_disabled();
+}
+#endif
+
+void lk_spin_lock(spin_lock_t *lock) {
+    spin_lock(lock);
+}
+
+int lk_spin_trylock(spin_lock_t *lock) {
+    return spin_trylock(lock);
+}
+
+void lk_spin_unlock(spin_lock_t *lock) {
+    spin_unlock(lock);
+}
