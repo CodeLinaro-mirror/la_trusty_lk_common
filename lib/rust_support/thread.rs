@@ -34,9 +34,12 @@ use core::ptr::NonNull;
 use core::time::Duration;
 
 use crate::Error;
+use crate::INFINITE_TIME;
 
 use crate::sys::lk_time_ns_t;
+use crate::sys::lk_time_t;
 use crate::sys::thread_create;
+use crate::sys::thread_join;
 use crate::sys::thread_resume;
 use crate::sys::thread_sleep_ns;
 use crate::sys::thread_t;
@@ -132,7 +135,24 @@ impl Sub<c_int> for Priority {
 }
 
 pub struct JoinHandle {
-    _thread: NonNull<thread_t>,
+    thread: NonNull<thread_t>,
+}
+
+impl JoinHandle {
+    /// Waits a given amount of time for the associated thread to finish. Waits indefinitely if
+    /// timeout is None.
+    pub fn join(self, timeout: Option<Duration>) -> Result<c_int, Error> {
+        let timeout_ms: lk_time_t = timeout.map_or(INFINITE_TIME, |t| {
+            t.as_millis().try_into().expect("could not convert timeout to milliseconds")
+        });
+        let mut rc = 0;
+        // SAFETY: The thread pointer came from a call to thread_create and must be non-null. The
+        // retcode pointer points to the stack of the calling thread which will live as long as
+        // needed since thread_join blocks.
+        let status = unsafe { thread_join(self.thread.as_ptr(), &raw mut rc, timeout_ms) };
+        Error::from_lk(status)?;
+        Ok(rc)
+    }
 }
 
 #[derive(Debug)]
@@ -210,7 +230,7 @@ impl<'a> Builder<'a> {
         // SAFETY: `thread` is non-null, so `thread_create` initialized it properly.
         let status = unsafe { thread_resume(thread.as_ptr()) };
         if status == Error::NO_ERROR.into() {
-            Ok(JoinHandle { _thread: thread })
+            Ok(JoinHandle { thread })
         } else {
             Err(status)
         }

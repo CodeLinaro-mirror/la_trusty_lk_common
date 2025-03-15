@@ -86,6 +86,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	mutex_init \
 	mutex_release \
 	thread_create \
+	thread_join \
 	thread_resume \
 	thread_sleep_ns \
 	vaddr_to_paddr \
