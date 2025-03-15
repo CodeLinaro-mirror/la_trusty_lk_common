@@ -66,6 +66,8 @@ pub mod thread;
 pub mod uuid;
 pub mod vmm;
 
+pub use sys::lk_obj_ref_init;
+pub use sys::obj_ref;
 pub use sys::paddr_t;
 pub use sys::status_t;
 pub use sys::uuid_t;
