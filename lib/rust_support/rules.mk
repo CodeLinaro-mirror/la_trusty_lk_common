@@ -75,6 +75,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	lk_interrupt_restore \
 	lk_interrupt_save \
 	lk_ints_disabled \
+	lk_obj_ref_init \
 	lk_spin_lock \
 	lk_spin_trylock \
 	lk_spin_unlock \
@@ -91,10 +92,12 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	thread_sleep_ns \
 	vaddr_to_paddr \
 	vmm_alloc \
+	vmm_alloc_obj \
 	vmm_alloc_physical_etc \
 	vmm_alloc_contiguous \
 	vmm_free_region \
 	vmm_get_obj \
+	vmm_obj_del_ref \
 	vmm_obj_slice_init \
 	vmm_obj_slice_release \
 	vmm_obj_service_add \
@@ -112,12 +115,14 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	ktipc_server \
 	lk_init_.* \
 	lk_time_.* \
+	obj_ref \
 	spin_lock_save_flags_t \
 	spin_lock_saved_state_t \
 	spin_lock_t \
 	trusty_ipc_event_type \
 	uuid \
 	uuid_t \
+	vmm_obj \
 	vmm_obj_service \
 	vmm_obj_slice \
 
@@ -155,6 +160,10 @@ MODULE_BINDGEN_FLAGS := \
 	--with-derive-custom ipc_msg_info=Default \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
+
+# This lets us include wrappers/include/reflist.h instead of the wrapped header:
+# trusty/kernel/shared/lk/reflist.h.
+MODULE_INCLUDES := $(LOCAL_DIR)
 
 MODULE_RUSTFLAGS += \
 	-A clippy::disallowed_names \
