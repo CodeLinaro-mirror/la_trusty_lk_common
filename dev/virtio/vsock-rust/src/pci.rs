@@ -25,12 +25,9 @@
 use core::ffi::c_int;
 use core::ptr;
 
-use alloc::sync::Arc;
-
-use log::{debug, error};
+use log::debug;
 
 use virtio_drivers::device::socket::VirtIOSocket;
-use virtio_drivers::device::socket::VsockConnectionManager;
 use virtio_drivers::transport::pci::bus::Cam;
 use virtio_drivers::transport::pci::bus::Command;
 use virtio_drivers::transport::pci::bus::ConfigurationAccess;
@@ -52,14 +49,12 @@ use hypervisor::mmio_map_region;
 use rust_support::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE;
 use rust_support::mmu::ARCH_MMU_FLAG_UNCACHED_DEVICE;
 use rust_support::paddr_t;
-use rust_support::thread::Builder;
-use rust_support::thread::Priority;
 use rust_support::vmm::vmm_alloc_physical;
 use rust_support::vmm::vmm_get_kernel_aspace;
 use rust_support::Error as LkError;
 
 use crate::err::Error;
-use crate::vsock::VsockDevice;
+use crate::vsock::vsock_init;
 use hal::TrustyHal;
 
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
@@ -70,40 +65,6 @@ mod arch;
 mod hal;
 
 impl TrustyHal {
-    fn init_vsock<T: virtio_drivers::transport::Transport + 'static + Send>(
-        driver: virtio_drivers::device::socket::VirtIOSocket<TrustyHal, T, 4096>,
-    ) -> Result<(), Error> {
-        let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
-        let device_for_rx = Arc::new(VsockDevice::new(manager));
-        let device_for_tx = device_for_rx.clone();
-
-        // In some builds, stack overflows can occur on both threads when using 4k stacks
-        let stack_size = 8192usize;
-        Builder::new()
-            .name(c"virtio_vsock_rx")
-            .priority(Priority::HIGH)
-            .stack_size(stack_size)
-            .spawn(move || {
-                let ret = crate::vsock::vsock_rx_loop(device_for_rx);
-                error!("vsock_rx_loop returned {:?}", ret);
-                ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
-            })
-            .map_err(|e| LkError::from_lk(e).unwrap_err())?;
-
-        Builder::new()
-            .name(c"virtio_vsock_tx")
-            .priority(Priority::HIGH)
-            .stack_size(stack_size)
-            .spawn(move || {
-                let ret = crate::vsock::vsock_tx_loop(device_for_tx);
-                error!("vsock_tx_loop returned {:?}", ret);
-                ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
-            })
-            .map_err(|e| LkError::from_lk(e).unwrap_err())?;
-
-        Ok(())
-    }
-
     fn init_all_vsocks(
         mut pci_root: PciRoot<impl ConfigurationAccess>,
         pci_size: usize,
@@ -120,7 +81,7 @@ impl TrustyHal {
                 };
 
                 // Map the BARs of the device into virtual memory. Since the mappings must
-                // outlive the `PciTransport` constructed in `init_vsock` we no make no
+                // outlive the `PciTransport` constructed in `vsock_init` we no make no
                 // attempt to deallocate them.
                 Self::mmio_alloc(&mut pci_root, device_function)?;
 
@@ -158,8 +119,9 @@ impl TrustyHal {
                     )?)
                 };
 
-                let driver = VirtIOSocket::new(transport)?;
-                Self::init_vsock(driver)?;
+                let driver: VirtIOSocket<TrustyHal, SomeTransport, 4096> =
+                    VirtIOSocket::new(transport)?;
+                vsock_init(driver)?;
             }
         }
         Ok(())

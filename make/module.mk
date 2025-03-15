@@ -263,7 +263,9 @@ MODULE_ALL_DEPS += \
 # external/rust/android-crates-io/crates.
 ifeq ($(filter external/rust/crates/%,$(MODULE)),)
 ifeq ($(filter external/rust/android-crates-io/crates/%,$(MODULE)),)
+ifeq ($(filter external/rust/android-crates-io/extra_versions/crates/%,$(MODULE)),)
 MODULE_ALL_DEPS += $(LKROOT)/lib/rust_support
+endif
 endif
 endif
 
