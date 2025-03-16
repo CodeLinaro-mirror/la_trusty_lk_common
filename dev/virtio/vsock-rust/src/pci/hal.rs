@@ -31,14 +31,10 @@ use hypervisor::mmio_map_region;
 
 use rust_support::mmu::ARCH_MMU_FLAG_PERM_NO_EXECUTE;
 use rust_support::mmu::ARCH_MMU_FLAG_UNCACHED_DEVICE;
-use rust_support::mmu::PAGE_SIZE_SHIFT;
 use rust_support::paddr_t;
 use rust_support::sync::Mutex;
 use rust_support::vaddr_t;
-use rust_support::vmm::vaddr_to_paddr;
-use rust_support::vmm::vmm_alloc_contiguous;
 use rust_support::vmm::vmm_alloc_physical;
-use rust_support::vmm::vmm_free_region;
 use rust_support::vmm::vmm_get_kernel_aspace;
 use rust_support::Error as LkError;
 
@@ -128,48 +124,11 @@ unsafe impl Hal for TrustyHal {
     // Safety:
     // Function either returns a non-null, properly aligned pointer or panics the kernel.
     // The call to `vmm_alloc_contiguous` ensures that the pointed to memory is zeroed.
-    fn dma_alloc(pages: usize, _direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
-        let name = c"vsock-rust";
-        // dma_alloc requests num pages but vmm_alloc_contiguous expects bytes.
+    fn dma_alloc(pages: usize, direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
         let size = pages * PAGE_SIZE;
-        let mut vaddr = core::ptr::null_mut(); // stores pointer to virtual memory
-        let align_pow2 = PAGE_SIZE_SHIFT as u8;
-        let vmm_flags = 0;
-        let arch_mmu_flags = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
-        let aspace = vmm_get_kernel_aspace();
-
-        // NOTE: the allocated memory will be zeroed since vmm_alloc_contiguous
-        // calls vmm_alloc_pmm which does not set the PMM_ALLOC_FLAG_NO_CLEAR
-        // flag.
-        //
-        // Safety:
-        // `aspace` is `vmm_get_kernel_aspace()`.
-        // `name` is a `&'static CStr`.
-        // `size` is validated by the callee
-        let rc = unsafe {
-            vmm_alloc_contiguous(
-                aspace,
-                name.as_ptr(),
-                size,
-                &mut vaddr,
-                align_pow2,
-                vmm_flags,
-                arch_mmu_flags,
-            )
-        };
-        if rc != 0 {
-            panic!("error {} allocating physical memory", rc);
-        }
-        if vaddr as usize & (PAGE_SIZE - 1usize) != 0 {
-            panic!("error page-aligning allocation {:#x}", vaddr as usize);
-        }
-
-        // Safety: `vaddr` is valid because the call to `vmm_alloc_continuous` succeeded
-        let paddr = unsafe { vaddr_to_paddr(vaddr) };
-
+        let (paddr, vaddr) = crate::hal::dma_alloc(pages, direction);
         arch::dma_alloc_share(paddr, size);
-
-        (paddr, NonNull::<u8>::new(vaddr as *mut u8).unwrap())
+        (paddr, vaddr)
     }
 
     // Safety: `vaddr` was returned by `dma_alloc` and hasn't been deallocated.
@@ -177,13 +136,9 @@ unsafe impl Hal for TrustyHal {
         let size = pages * PAGE_SIZE;
         arch::dma_dealloc_unshare(paddr, size);
 
-        let aspace = vmm_get_kernel_aspace();
-        let vaddr = vaddr.as_ptr();
         // Safety:
-        // - function-level requirements
-        // - `aspace` points to the kernel address space object
-        // - `vaddr` is a region in `aspace`
-        unsafe { vmm_free_region(aspace, vaddr as usize) }
+        // `vaddr` was returned by `dma_alloc` and hasn't been deallocated.
+        unsafe { crate::hal::dma_dealloc(paddr, vaddr, pages) }
     }
 
     // Only used for MMIO addresses within BARs read from the device,
