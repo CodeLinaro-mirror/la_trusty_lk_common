@@ -63,10 +63,12 @@ pub mod mmu;
 pub mod spinlock;
 pub mod sync;
 pub mod thread;
+pub mod uuid;
 pub mod vmm;
 
 pub use sys::paddr_t;
 pub use sys::status_t;
+pub use sys::uuid_t;
 pub use sys::vaddr_t;
 pub use sys::Error;
 
