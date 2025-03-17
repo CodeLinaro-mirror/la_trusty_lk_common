@@ -16,7 +16,7 @@ MODULE_LIBRARY_DEPS := \
 	$(call FIND_CRATE,num-integer) \
 	$(call FIND_CRATE,spin) \
 	$(call FIND_CRATE,static_assertions) \
-	$(call FIND_CRATE,virtio-drivers) \
+	$(call FIND_CRATE,virtio-drivers-and-devices) \
 	lib/libhypervisor \
 
 # `trusty-std` is for its `#[global_allocator]`.
