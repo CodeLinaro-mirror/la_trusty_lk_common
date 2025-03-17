@@ -40,10 +40,10 @@ use rust_support::Error as LkError;
 
 use static_assertions::const_assert_eq;
 
-use virtio_drivers::transport::pci::bus::ConfigurationAccess;
-use virtio_drivers::transport::pci::bus::DeviceFunction;
-use virtio_drivers::transport::pci::bus::PciRoot;
-use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
+use virtio_drivers_and_devices::transport::pci::bus::ConfigurationAccess;
+use virtio_drivers_and_devices::transport::pci::bus::DeviceFunction;
+use virtio_drivers_and_devices::transport::pci::bus::PciRoot;
+use virtio_drivers_and_devices::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 
 use crate::err::Error;
 use crate::pci::arch;

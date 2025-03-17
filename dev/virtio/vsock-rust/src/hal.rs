@@ -29,9 +29,9 @@ use rust_support::vmm::vaddr_to_paddr;
 use rust_support::vmm::vmm_alloc_contiguous;
 use rust_support::vmm::vmm_free_region;
 use rust_support::vmm::vmm_get_kernel_aspace;
-use virtio_drivers::BufferDirection;
-use virtio_drivers::PhysAddr;
-use virtio_drivers::PAGE_SIZE;
+use virtio_drivers_and_devices::BufferDirection;
+use virtio_drivers_and_devices::PhysAddr;
+use virtio_drivers_and_devices::PAGE_SIZE;
 
 pub(crate) fn dma_alloc(pages: usize, _direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
     const NAME: &CStr = c"vsock-rust";
