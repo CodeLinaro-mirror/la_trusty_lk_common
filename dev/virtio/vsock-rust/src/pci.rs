@@ -27,22 +27,22 @@ use core::ptr;
 
 use log::debug;
 
-use virtio_drivers::device::socket::VirtIOSocket;
-use virtio_drivers::transport::pci::bus::Cam;
-use virtio_drivers::transport::pci::bus::Command;
-use virtio_drivers::transport::pci::bus::ConfigurationAccess;
-use virtio_drivers::transport::pci::bus::MmioCam;
-use virtio_drivers::transport::pci::bus::PciRoot;
-use virtio_drivers::transport::pci::virtio_device_type;
-use virtio_drivers::transport::pci::PciTransport;
-use virtio_drivers::transport::SomeTransport;
+use virtio_drivers_and_devices::device::socket::VirtIOSocket;
+use virtio_drivers_and_devices::transport::pci::bus::Cam;
+use virtio_drivers_and_devices::transport::pci::bus::Command;
+use virtio_drivers_and_devices::transport::pci::bus::ConfigurationAccess;
+use virtio_drivers_and_devices::transport::pci::bus::MmioCam;
+use virtio_drivers_and_devices::transport::pci::bus::PciRoot;
+use virtio_drivers_and_devices::transport::pci::virtio_device_type;
+use virtio_drivers_and_devices::transport::pci::PciTransport;
+use virtio_drivers_and_devices::transport::SomeTransport;
 #[cfg(target_arch = "x86_64")]
 use {
     hypervisor_backends::get_mem_sharer,
-    virtio_drivers::transport::x86_64::{HypCam, HypPciTransport},
+    virtio_drivers_and_devices::transport::x86_64::{HypCam, HypPciTransport},
 };
 
-use virtio_drivers::transport::DeviceType;
+use virtio_drivers_and_devices::transport::DeviceType;
 
 use hypervisor::mmio_map_region;
 
