@@ -21,12 +21,12 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use virtio_drivers::transport::pci::VirtioPciError;
+use virtio_drivers_and_devices::transport::pci::VirtioPciError;
 
 #[cfg(target_arch = "aarch64")]
 use hypervisor_backends::KvmError;
 use rust_support::Error as LkError;
-use virtio_drivers::Error as VirtioError;
+use virtio_drivers_and_devices::Error as VirtioError;
 
 #[derive(Debug)]
 pub enum Error {
