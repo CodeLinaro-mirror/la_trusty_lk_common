@@ -68,6 +68,7 @@ use virtio_drivers_and_devices::device::socket::VsockAddr;
 use virtio_drivers_and_devices::device::socket::VsockConnectionManager;
 use virtio_drivers_and_devices::device::socket::VsockEvent;
 use virtio_drivers_and_devices::device::socket::VsockEventType;
+use virtio_drivers_and_devices::device::socket::VsockManager;
 use virtio_drivers_and_devices::transport::Transport;
 use virtio_drivers_and_devices::Error as VirtioError;
 use virtio_drivers_and_devices::Hal;
@@ -325,22 +326,20 @@ fn vsock_connection_close(c: &mut VsockConnection, action: ConnectionStateAction
     false // keep connection
 }
 
-pub struct VsockDevice<H, T>
+pub struct VsockDevice<M>
 where
-    H: Hal,
-    T: Transport,
+    M: VsockManager,
 {
     connections: Mutex<Vec<VsockConnection>>,
     handle_set: HandleSet,
-    connection_manager: Mutex<VsockConnectionManager<H, T, 4096>>,
+    connection_manager: Mutex<M>,
 }
 
-impl<H, T> VsockDevice<H, T>
+impl<M> VsockDevice<M>
 where
-    H: Hal,
-    T: Transport,
+    M: VsockManager,
 {
-    pub(crate) fn new(manager: VsockConnectionManager<H, T, 4096>) -> Self {
+    pub(crate) fn new(manager: M) -> Self {
         Self {
             connections: Mutex::new(Vec::new()),
             handle_set: HandleSet::new(),
@@ -523,10 +522,9 @@ where
     }
 }
 
-pub(crate) fn vsock_rx_loop<H, T>(device: Arc<VsockDevice<H, T>>) -> Result<(), Error>
+pub(crate) fn vsock_rx_loop<M>(device: Arc<VsockDevice<M>>) -> Result<(), Error>
 where
-    H: Hal,
-    T: Transport,
+    M: VsockManager,
 {
     let ten_ms = Duration::from_millis(10);
     let mut pending: Vec<VsockEvent> = vec![];
@@ -636,10 +634,9 @@ where
     }
 }
 
-pub(crate) fn vsock_tx_loop<H, T>(device: Arc<VsockDevice<H, T>>) -> Result<(), Error>
+pub(crate) fn vsock_tx_loop<M>(device: Arc<VsockDevice<M>>) -> Result<(), Error>
 where
-    H: Hal,
-    T: Transport,
+    M: VsockManager,
 {
     let mut timeout = Duration::MAX;
     let ten_secs = Duration::from_secs(10);
