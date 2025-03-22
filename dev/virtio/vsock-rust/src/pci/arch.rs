@@ -41,10 +41,10 @@ use rust_support::vaddr_t;
 
 use static_assertions::assert_cfg;
 
-use virtio_drivers::BufferDirection;
-use virtio_drivers::Hal;
-use virtio_drivers::PhysAddr;
-use virtio_drivers::PAGE_SIZE;
+use virtio_drivers_and_devices::BufferDirection;
+use virtio_drivers_and_devices::Hal;
+use virtio_drivers_and_devices::PhysAddr;
+use virtio_drivers_and_devices::PAGE_SIZE;
 
 // This code will only work on x86_64 or aarch64
 assert_cfg!(any(target_arch = "x86_64", target_arch = "aarch64"), "Must target x86_64 or aarch64");
