@@ -69,6 +69,16 @@ static inline void bst_root_initialize(struct bst_root *root) {
 }
 
 /**
+ * bst_is_empty - Check if the binary search tree is empty.
+ * @root:       Tree to check
+ *
+ * Return: %true if there are no nodes in the tree, %false otherwise.
+ */
+static inline bool bst_is_empty(struct bst_root *root) {
+    return !root->root;
+}
+
+/**
  * bst_compare_t - Compare function provided by caller
  * @a: First node to compare
  * @b: Second node to compare

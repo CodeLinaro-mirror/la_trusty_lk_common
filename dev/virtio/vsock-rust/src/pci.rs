@@ -215,8 +215,11 @@ unsafe fn map_pci_root_and_init_vsock(
     // `pci_paddr` and `pci_size` are safe by this function's safety requirements.
     match unsafe { mmio_map_region(pci_paddr, pci_size) } {
         // Ignore not supported which implies that guard is not used.
-        Ok(()) | Err(LkError::ERR_NOT_SUPPORTED) => {}
-        Err(err) => return Err(Error::Lk(err)),
+        Ok(()) | Err(LkError::ERR_NOT_SUPPORTED) | Err(LkError::ERR_INVALID_ARGS) => {}
+        Err(err) => {
+            log::error!("mmio_map_region returned unexpected error: {:?}", err);
+            return Err(Error::Lk(err));
+        }
     }
 
     #[cfg(not(target_arch = "x86_64"))]
