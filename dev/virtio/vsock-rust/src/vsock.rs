@@ -111,7 +111,7 @@ macro_rules! comm_port_feature_enable {
 //
 // Each tipc port name must be shorter than IPC_PORT_PATH_MAX.
 comm_port_feature_enable! {
-    PORT_MAP[8] = {
+    PORT_MAP[9] = {
         {port_name: c"com.android.trusty.authmgr", feature_name: "authmgr"},
         {port_name: c"com.android.trusty.hwcryptooperations", feature_name: "hwcrypto_hal"},
         {port_name: c"com.android.trusty.rust.hwcryptohal.V1", feature_name: "hwcrypto_hal"},
@@ -120,6 +120,7 @@ comm_port_feature_enable! {
         {port_name: c"com.android.trusty.storage.proxy", feature_name: "securestorage_hal"},
         {port_name: c"com.android.trusty.gatekeeper", feature_name: "gatekeeper"},
         {port_name: c"com.android.trusty.keymint", feature_name: "keymint"},
+        {port_name: c"com.android.trusty.vintf", feature_name: "vintf_ta"},
     }
 }
 
