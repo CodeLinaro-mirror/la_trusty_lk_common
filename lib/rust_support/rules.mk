@@ -38,7 +38,6 @@ MODULE_DEPS := \
 	$(call FIND_CRATE,num-derive) \
 	$(call FIND_CRATE,num-traits) \
 	$(call FIND_CRATE,log) \
-	trusty/kernel/lib/extmem \
 	trusty/kernel/lib/ktipc \
 	trusty/kernel/lib/vmm_obj_service \
 	trusty/user/base/lib/liballoc-rust \
@@ -49,7 +48,9 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
-	ext_mem_.* \
+	event_init \
+	event_signal \
+	event_wait_timeout \
 	fflush \
 	fputs \
 	handle_close \
@@ -61,7 +62,10 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	handle_wait \
 	handle_ref_is_attached \
 	ipc_get_msg \
+	ipc_port_accept \
 	ipc_port_connect_async \
+	ipc_port_create \
+	ipc_port_publish \
 	ipc_put_msg \
 	ipc_read_msg \
 	ipc_send_msg \
@@ -98,7 +102,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
-	ext_mem_.* \
+	event_t \
 	handle \
 	handle_ref \
 	iovec_kern \
@@ -112,6 +116,7 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	spin_lock_t \
 	trusty_ipc_event_type \
 	uuid \
+	uuid_t \
 	vmm_obj_service \
 	vmm_obj_slice \
 
@@ -120,12 +125,14 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
 	DEFAULT_STACK_SIZE \
+	EVENT_FLAG_AUTOUNSIGNAL \
 	FILE \
 	IPC_CONNECT_WAIT_FOR_PORT \
 	IPC_HANDLE_POLL_.* \
 	IPC_PORT_ALLOW_NS_CONNECT \
 	IPC_PORT_ALLOW_TA_CONNECT \
 	IPC_PORT_PATH_MAX \
+	kernel_uuid \
 	LK_LOGLEVEL_RUST \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
