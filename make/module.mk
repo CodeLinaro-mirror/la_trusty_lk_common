@@ -263,7 +263,9 @@ MODULE_ALL_DEPS += \
 # external/rust/android-crates-io/crates.
 ifeq ($(filter external/rust/crates/%,$(MODULE)),)
 ifeq ($(filter external/rust/android-crates-io/crates/%,$(MODULE)),)
+ifeq ($(filter external/rust/android-crates-io/extra_versions/crates/%,$(MODULE)),)
 MODULE_ALL_DEPS += $(LKROOT)/lib/rust_support
+endif
 endif
 endif
 
@@ -363,7 +365,7 @@ endif # kernel/userspace rust
 MODULE_RUSTFLAGS_CONFIG := $(MODULE_BUILDDIR)/rustflags.config
 
 # TODO(b/383631031): properly include $(GLOBAL_RUSTFLAGS) as set in rust.mk in MODULE_RUSTFLAGS
-$(MODULE_RUSTFLAGS_CONFIG): MODULE_RUSTFLAGS:=$(ARCH_RUSTFLAGS) $(MODULE_RUSTFLAGS)
+$(MODULE_RUSTFLAGS_CONFIG): MODULE_RUSTFLAGS:=$(ARCH_$(ARCH)_RUSTFLAGS) $(MODULE_RUSTFLAGS)
 $(MODULE_RUSTFLAGS_CONFIG): MODULE:=$(MODULE)
 $(MODULE_RUSTFLAGS_CONFIG): configheader
 	@$(call INFO_DONE,$(MODULE),generating module rustflags.config, $@)

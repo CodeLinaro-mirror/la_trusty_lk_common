@@ -21,10 +21,8 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#pragma once
+#include <reflist.h>
 
-#include <stdio.h>
-
-FILE* lk_stdin(void);
-FILE* lk_stdout(void);
-FILE* lk_stderr(void);
+void lk_obj_ref_init(struct obj_ref* ref) {
+    obj_ref_init(ref);
+}

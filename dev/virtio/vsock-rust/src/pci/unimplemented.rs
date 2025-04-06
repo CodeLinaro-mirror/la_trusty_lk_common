@@ -1,6 +1,6 @@
 use core::ptr::NonNull;
-use virtio_drivers::BufferDirection;
-use virtio_drivers::PhysAddr;
+use virtio_drivers_and_devices::BufferDirection;
+use virtio_drivers_and_devices::PhysAddr;
 
 pub(crate) fn dma_alloc_share(_paddr: usize, _size: usize) {
     unimplemented!();

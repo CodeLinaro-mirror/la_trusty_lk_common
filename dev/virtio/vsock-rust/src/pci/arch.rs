@@ -30,8 +30,8 @@ use core::ops::DerefMut;
 use core::ptr::copy_nonoverlapping;
 use core::ptr::NonNull;
 
-use crate::kvm::share_pages;
-use crate::kvm::unshare_pages;
+use hypervisor::share_pages;
+use hypervisor::unshare_pages;
 
 use crate::pci::hal::TrustyHal;
 
@@ -41,10 +41,10 @@ use rust_support::vaddr_t;
 
 use static_assertions::assert_cfg;
 
-use virtio_drivers::BufferDirection;
-use virtio_drivers::Hal;
-use virtio_drivers::PhysAddr;
-use virtio_drivers::PAGE_SIZE;
+use virtio_drivers_and_devices::BufferDirection;
+use virtio_drivers_and_devices::Hal;
+use virtio_drivers_and_devices::PhysAddr;
+use virtio_drivers_and_devices::PAGE_SIZE;
 
 // This code will only work on x86_64 or aarch64
 assert_cfg!(any(target_arch = "x86_64", target_arch = "aarch64"), "Must target x86_64 or aarch64");

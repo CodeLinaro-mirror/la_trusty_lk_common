@@ -1,8 +1,33 @@
+/*
+ * Copyright (c) 2025 Google Inc. All rights reserved
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files
+ * (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge,
+ * publish, distribute, sublicense, and/or sell copies of the Software,
+ * and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+#pragma once
+
 #include <arch/mmu.h>
+#include <kernel/event.h>
 #include <kernel/mutex.h>
 #include <kernel/thread.h>
 #include <kernel/vm.h>
-#include <lib/extmem/extmem.h>
 #include <lib/ktipc/ktipc.h>
 #include <lib/trusty/handle.h>
 #include <lib/trusty/handle_set.h>
@@ -11,8 +36,10 @@
 #include <lib/vmm_obj_service/vmm_obj_service.h>
 #include <lk/init.h>
 #include <panic.h>
+#include <spinlock.h>
 #include <stdio.h>
 #include <streams.h> /* stubs for stdin, stdout, stderr */
+#include "wrappers/include/reflist.h"
 
 #include "error.h"
 #include "config.h" /* for LK_LOGLEVEL_RUST */

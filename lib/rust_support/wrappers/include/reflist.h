@@ -23,8 +23,6 @@
 
 #pragma once
 
-#include <stdio.h>
+#include <shared/lk/reflist.h>
 
-FILE* lk_stdin(void);
-FILE* lk_stdout(void);
-FILE* lk_stderr(void);
+void lk_obj_ref_init(struct obj_ref* ref);

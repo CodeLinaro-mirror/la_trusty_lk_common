@@ -60,15 +60,19 @@ use rust_support::ipc::IPC_PORT_PATH_MAX;
 use rust_support::sync::Mutex;
 use rust_support::thread;
 use rust_support::thread::sleep;
-use virtio_drivers::device::socket::SocketError;
-use virtio_drivers::device::socket::VsockAddr;
-use virtio_drivers::device::socket::VsockConnectionManager;
-use virtio_drivers::device::socket::VsockEvent;
-use virtio_drivers::device::socket::VsockEventType;
-use virtio_drivers::transport::Transport;
-use virtio_drivers::Error as VirtioError;
-use virtio_drivers::Hal;
-use virtio_drivers::PAGE_SIZE;
+use rust_support::thread::Builder;
+use rust_support::thread::Priority;
+use virtio_drivers_and_devices::device::socket::SocketError;
+use virtio_drivers_and_devices::device::socket::VirtIOSocket;
+use virtio_drivers_and_devices::device::socket::VsockAddr;
+use virtio_drivers_and_devices::device::socket::VsockConnectionManager;
+use virtio_drivers_and_devices::device::socket::VsockEvent;
+use virtio_drivers_and_devices::device::socket::VsockEventType;
+use virtio_drivers_and_devices::device::socket::VsockManager;
+use virtio_drivers_and_devices::transport::Transport;
+use virtio_drivers_and_devices::Error as VirtioError;
+use virtio_drivers_and_devices::Hal;
+use virtio_drivers_and_devices::PAGE_SIZE;
 
 use rust_support::handle::HandleRef;
 use rust_support::handle_set::HandleSet;
@@ -263,9 +267,14 @@ fn vsock_connection_lookup_by(
 fn vsock_connection_lookup_peer(
     connections: &mut Vec<VsockConnection>,
     peer: VsockAddr,
+    local_port: u32,
     f: impl FnOnce(&mut VsockConnection) -> ConnectionStateAction,
 ) -> Result<(), ()> {
-    vsock_connection_lookup_by(connections, |c: &VsockConnection| c.peer == peer, f)
+    vsock_connection_lookup_by(
+        connections,
+        |c: &VsockConnection| c.peer == peer && c.local_port == local_port,
+        f,
+    )
 }
 
 fn vsock_connection_lookup_cookie(
@@ -317,22 +326,20 @@ fn vsock_connection_close(c: &mut VsockConnection, action: ConnectionStateAction
     false // keep connection
 }
 
-pub struct VsockDevice<H, T>
+pub struct VsockDevice<M>
 where
-    H: Hal,
-    T: Transport,
+    M: VsockManager,
 {
     connections: Mutex<Vec<VsockConnection>>,
     handle_set: HandleSet,
-    connection_manager: Mutex<VsockConnectionManager<H, T, 4096>>,
+    connection_manager: Mutex<M>,
 }
 
-impl<H, T> VsockDevice<H, T>
+impl<M> VsockDevice<M>
 where
-    H: Hal,
-    T: Transport,
+    M: VsockManager,
 {
-    pub(crate) fn new(manager: VsockConnectionManager<H, T, 4096>) -> Self {
+    pub(crate) fn new(manager: M) -> Self {
         Self {
             connections: Mutex::new(Vec::new()),
             handle_set: HandleSet::new(),
@@ -515,10 +522,9 @@ where
     }
 }
 
-pub(crate) fn vsock_rx_loop<H, T>(device: Arc<VsockDevice<H, T>>) -> Result<(), Error>
+pub(crate) fn vsock_rx_loop<M>(device: Arc<VsockDevice<M>>) -> Result<(), Error>
 where
-    H: Hal,
-    T: Transport,
+    M: VsockManager,
 {
     let ten_ms = Duration::from_millis(10);
     let mut pending: Vec<VsockEvent> = vec![];
@@ -563,7 +569,8 @@ where
                 debug!("recv destination: {destination:?}");
 
                 let connections = &mut *device.connections.lock();
-                let _ = vsock_connection_lookup_peer(connections, source, |mut connection| {
+                let lp = destination.port;
+                let _ = vsock_connection_lookup_peer(connections, source, lp, |mut connection| {
                     if let Err(e) = match connection {
                         ref mut c @ VsockConnection {
                             state: VsockConnectionState::VsockOnly, ..
@@ -610,7 +617,8 @@ where
             VsockEventType::Disconnected { reason } => {
                 debug!("disconnected from peer. reason: {reason:?}");
                 let connections = &mut *device.connections.lock();
-                let _ = vsock_connection_lookup_peer(connections, source, |_connection| {
+                let lp = destination.port;
+                let _ = vsock_connection_lookup_peer(connections, source, lp, |_connection| {
                     ConnectionStateAction::Remove
                 })
                 .inspect_err(|_| {
@@ -626,10 +634,9 @@ where
     }
 }
 
-pub(crate) fn vsock_tx_loop<H, T>(device: Arc<VsockDevice<H, T>>) -> Result<(), Error>
+pub(crate) fn vsock_tx_loop<M>(device: Arc<VsockDevice<M>>) -> Result<(), Error>
 where
-    H: Hal,
-    T: Transport,
+    M: VsockManager,
 {
     let mut timeout = Duration::MAX;
     let ten_secs = Duration::from_secs(10);
@@ -772,4 +779,38 @@ where
         });
         href.handle_decref();
     }
+}
+
+pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
+    driver: VirtIOSocket<H, T, 4096>,
+) -> Result<(), Error> {
+    let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
+    let device_for_rx = Arc::new(VsockDevice::new(manager));
+    let device_for_tx = device_for_rx.clone();
+
+    // In some builds, stack overflows can occur on both threads when using 4k stacks
+    let stack_size = 8192usize;
+    Builder::new()
+        .name(c"virtio_vsock_rx")
+        .priority(Priority::HIGH)
+        .stack_size(stack_size)
+        .spawn(move || {
+            let ret = vsock_rx_loop(device_for_rx);
+            error!("vsock_rx_loop returned {:?}", ret);
+            ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
+        })
+        .map_err(|e| LkError::from_lk(e).unwrap_err())?;
+
+    Builder::new()
+        .name(c"virtio_vsock_tx")
+        .priority(Priority::HIGH)
+        .stack_size(stack_size)
+        .spawn(move || {
+            let ret = vsock_tx_loop(device_for_tx);
+            error!("vsock_tx_loop returned {:?}", ret);
+            ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
+        })
+        .map_err(|e| LkError::from_lk(e).unwrap_err())?;
+
+    Ok(())
 }

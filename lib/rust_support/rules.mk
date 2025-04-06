@@ -34,10 +34,10 @@ MODULE_SRCS := \
 MODULE_ADD_IMPLICIT_DEPS := false
 
 MODULE_DEPS := \
+	$(call FIND_CRATE,bitflags) \
 	$(call FIND_CRATE,num-derive) \
 	$(call FIND_CRATE,num-traits) \
 	$(call FIND_CRATE,log) \
-	trusty/kernel/lib/extmem \
 	trusty/kernel/lib/ktipc \
 	trusty/kernel/lib/vmm_obj_service \
 	trusty/user/base/lib/liballoc-rust \
@@ -48,7 +48,9 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
-	ext_mem_.* \
+	event_init \
+	event_signal \
+	event_wait_timeout \
 	fflush \
 	fputs \
 	handle_close \
@@ -60,12 +62,23 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	handle_wait \
 	handle_ref_is_attached \
 	ipc_get_msg \
+	ipc_port_accept \
 	ipc_port_connect_async \
+	ipc_port_create \
+	ipc_port_publish \
 	ipc_put_msg \
 	ipc_read_msg \
 	ipc_send_msg \
 	ktipc_server_init \
 	ktipc_server_start \
+	lk_fiqs_disabled \
+	lk_interrupt_restore \
+	lk_interrupt_save \
+	lk_ints_disabled \
+	lk_obj_ref_init \
+	lk_spin_lock \
+	lk_spin_trylock \
+	lk_spin_unlock \
 	lk_stdin \
 	lk_stdout \
 	lk_stderr \
@@ -74,14 +87,17 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	mutex_init \
 	mutex_release \
 	thread_create \
+	thread_join \
 	thread_resume \
 	thread_sleep_ns \
 	vaddr_to_paddr \
 	vmm_alloc \
+	vmm_alloc_obj \
 	vmm_alloc_physical_etc \
 	vmm_alloc_contiguous \
 	vmm_free_region \
 	vmm_get_obj \
+	vmm_obj_del_ref \
 	vmm_obj_slice_init \
 	vmm_obj_slice_release \
 	vmm_obj_service_add \
@@ -90,7 +106,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 
 MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
-	ext_mem_.* \
+	event_t \
 	handle \
 	handle_ref \
 	iovec_kern \
@@ -99,8 +115,14 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	ktipc_server \
 	lk_init_.* \
 	lk_time_.* \
+	obj_ref \
+	spin_lock_save_flags_t \
+	spin_lock_saved_state_t \
+	spin_lock_t \
 	trusty_ipc_event_type \
 	uuid \
+	uuid_t \
+	vmm_obj \
 	vmm_obj_service \
 	vmm_obj_slice \
 
@@ -109,16 +131,23 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	_kernel_aspace \
 	ARCH_MMU_FLAG_.* \
 	DEFAULT_STACK_SIZE \
+	EVENT_FLAG_AUTOUNSIGNAL \
 	FILE \
 	IPC_CONNECT_WAIT_FOR_PORT \
 	IPC_HANDLE_POLL_.* \
 	IPC_PORT_ALLOW_NS_CONNECT \
 	IPC_PORT_ALLOW_TA_CONNECT \
 	IPC_PORT_PATH_MAX \
+	kernel_uuid \
 	LK_LOGLEVEL_RUST \
 	NUM_PRIORITIES \
 	PAGE_SIZE \
 	PAGE_SIZE_SHIFT \
+	SPIN_LOCK_FLAG_FIQ \
+	SPIN_LOCK_FLAG_INTERRUPTS \
+	SPIN_LOCK_FLAG_IRQ \
+	SPIN_LOCK_FLAG_IRQ_FIQ \
+	SPIN_LOCK_INITIAL_VALUE \
 	zero_uuid \
 
 MODULE_BINDGEN_FLAGS := \
@@ -131,6 +160,10 @@ MODULE_BINDGEN_FLAGS := \
 	--with-derive-custom ipc_msg_info=Default \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
+
+# This lets us include wrappers/include/reflist.h instead of the wrapped header:
+# trusty/kernel/shared/lk/reflist.h.
+MODULE_INCLUDES := $(LOCAL_DIR)
 
 MODULE_RUSTFLAGS += \
 	-A clippy::disallowed_names \
