@@ -23,22 +23,55 @@
 
 // TODO: replace with `trusty-log` crate once it is `no_std`-compatible
 
-use alloc::ffi::CString;
-use alloc::format;
 use core::ffi::c_uint;
+use core::ffi::c_ulong;
+use core::ffi::c_void;
+use core::fmt;
+use core::fmt::Result;
+use core::fmt::Write;
+use core::format_args;
 use log::{LevelFilter, Log, Metadata, Record};
 
 use crate::init::lk_init_level;
 use crate::LK_INIT_HOOK;
 
 use crate::sys::fflush;
-use crate::sys::fputs;
+use crate::sys::fwrite;
 use crate::sys::lk_stderr;
 use crate::sys::LK_LOGLEVEL_RUST;
 
 static TRUSTY_LOGGER: TrustyKernelLogger = TrustyKernelLogger;
 
 pub struct TrustyKernelLogger;
+
+// The core::fmt::Write methods used to print formatted logs take a `&mut Self` so if
+// TrustyKernelLogger were to implement them they could not be called from Log::log. Instead we
+// define a private, stateless type to implement Write.
+struct TrustyKernelWriter;
+
+impl Write for TrustyKernelWriter {
+    fn write_str(&mut self, msg: &str) -> Result {
+        let msg = msg.as_bytes();
+        // rust formatting should not insert nulls into msg, but avoid printing messages with
+        // internal null bytes in case the fwrite implementation assumes that the pointer contains
+        // no internal null bytes.
+        if msg.contains(&0) {
+            return Err(fmt::Error);
+        }
+        // Safety: The pointer returned by `msg.as_ptr()` is valid for the duration of the `fwrite`
+        // call and it doesn't need to be null-terminated since we're passing the message length as
+        // the `count` argument to `fwrite`.
+        unsafe {
+            fwrite(
+                msg.as_ptr().cast::<c_void>(),
+                size_of::<u8>() as c_ulong,
+                msg.len().try_into().unwrap(),
+                lk_stderr(),
+            );
+        }
+        Ok(())
+    }
+}
 
 impl Log for TrustyKernelLogger {
     fn enabled(&self, _metadata: &Metadata) -> bool {
@@ -47,12 +80,10 @@ impl Log for TrustyKernelLogger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            let cstr = CString::new(format!("{} - {}\n", record.level(), record.args())).unwrap();
-            // Safety:
-            // The pointer returned by `cstr.as_ptr()` is valid because the lifetime of the
-            // `CString` encompasses the lifetime of the unsafe block.
-            // `lk_stderr()` returns a FILE pointer that is valid or null.
-            unsafe { fputs(cstr.as_ptr(), lk_stderr()) };
+            let mut writer = TrustyKernelWriter;
+            // Use format_args! instead of format! and print with a method from the Write trait to
+            // avoid heap allocations.
+            writer.write_fmt(format_args!("{} - {}\n", record.level(), record.args())).ok();
         }
     }
 
