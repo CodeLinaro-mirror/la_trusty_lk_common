@@ -74,7 +74,11 @@ MODULE_RUSTFLAGS += \
 	--cfg 'feature="authmgr"' \
 
 endif
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_VINTF_TA)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="vintf_ta"' \
 
+endif
 
 MODULE_RUST_USE_CLIPPY := true
 
