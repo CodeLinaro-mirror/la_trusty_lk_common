@@ -8,6 +8,7 @@ MODULE_EXPORT_INCLUDES += \
 	$(LOCAL_DIR)/include
 
 MODULE_LIBRARY_DEPS := \
+	trusty/kernel/lib/rand/rust \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/trusty-std \
 	$(call FIND_CRATE,cfg-if) \
@@ -79,6 +80,10 @@ ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_VINTF_TA)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="vintf_ta"' \
 
+endif
+
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_TIPC_VSOCK_AUTHMGR)))
+MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_authmgr"'
 endif
 
 MODULE_RUST_USE_CLIPPY := true
