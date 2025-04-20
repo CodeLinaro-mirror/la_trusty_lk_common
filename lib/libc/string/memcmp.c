@@ -46,4 +46,8 @@ memcmp(const void *cs, const void *ct, size_t count)
  * sometimes generates bcmp calls, and we do not have a specialized bcmp
  * implementation.
  */
-int bcmp(const void *cs, const void *ct, size_t count) __WEAK_ALIAS("memcmp");
+int __WEAK bcmp(const void *cs, const void *ct, size_t count) {
+    return memcmp(cs, ct, count);
+}
+
+
