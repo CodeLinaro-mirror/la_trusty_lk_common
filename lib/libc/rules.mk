@@ -4,7 +4,6 @@ MODULE := $(LOCAL_DIR)
 
 MODULE_DEPS := \
 	lib/io \
-	lib/libc/rand
 
 ifndef WITH_CUSTOM_MALLOC
 MODULE_DEPS += lib/heap
@@ -18,6 +17,7 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/ctype.c \
 	$(LOCAL_DIR)/errno.c \
 	$(LOCAL_DIR)/printf.c \
+	$(LOCAL_DIR)/rand.c \
 	$(LOCAL_DIR)/strtol.c \
 	$(LOCAL_DIR)/strtoll.c \
 	$(LOCAL_DIR)/stdio.c \
