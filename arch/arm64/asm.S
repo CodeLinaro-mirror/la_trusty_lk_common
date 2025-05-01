@@ -125,20 +125,20 @@ FUNCTION(arm64_elX_to_el1)
 
 .confEL1:
     /* disable EL2 coprocessor traps */
-    mov x0, #0x33ff
-    msr cptr_el2, x0
+    mov x4, #0x33ff
+    msr cptr_el2, x4
 
     /* set EL1 to 64bit */
-    mov x0, #(1<<31)
-    msr hcr_el2, x0
+    mov x4, #(1<<31)
+    msr hcr_el2, x4
 
     /* disable EL1 FPU traps */
-    mov x0, #(0b11<<20)
-    msr cpacr_el1, x0
+    mov x4, #(0b11<<20)
+    msr cpacr_el1, x4
 
     /* set up the EL1 bounce interrupt */
-    mov x0, sp
-    msr sp_el1, x0
+    mov x4, sp
+    msr sp_el1, x4
 
     isb
     eret
