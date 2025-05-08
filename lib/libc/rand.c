@@ -23,7 +23,7 @@
 #include <rand.h>
 #include <sys/types.h>
 
-static unsigned int randseed = KERNEL_LIBC_RANDSEED;
+static unsigned int randseed = 12345;
 
 void srand(unsigned int seed)
 {
