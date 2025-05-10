@@ -52,7 +52,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	event_signal \
 	event_wait_timeout \
 	fflush \
-	fputs \
+	fwrite \
 	handle_close \
 	handle_decref \
 	handle_set_detach_ref \
