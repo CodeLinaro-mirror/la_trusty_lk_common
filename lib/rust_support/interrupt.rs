@@ -32,6 +32,12 @@ use crate::sys::SPIN_LOCK_FLAG_INTERRUPTS;
 use crate::sys::SPIN_LOCK_FLAG_IRQ;
 use crate::sys::SPIN_LOCK_FLAG_IRQ_FIQ;
 
+// TODO: expose safe interface?
+pub use crate::sys::handler_return;
+pub use crate::sys::mask_interrupt;
+pub use crate::sys::register_int_handler;
+pub use crate::sys::unmask_interrupt;
+
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 use crate::sys::{lk_fiqs_disabled, SPIN_LOCK_FLAG_FIQ};
 
