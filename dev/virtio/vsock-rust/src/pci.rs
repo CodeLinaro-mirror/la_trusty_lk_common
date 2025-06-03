@@ -55,6 +55,7 @@ use rust_support::Error as LkError;
 
 use crate::err::Error;
 use crate::vsock::vsock_init;
+use crate::vsock::TransportKind;
 use hal::TrustyHal;
 
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
@@ -121,7 +122,7 @@ impl TrustyHal {
 
                 let driver: VirtIOSocket<TrustyHal, SomeTransport, 4096> =
                     VirtIOSocket::new(transport)?;
-                vsock_init(driver, None)?;
+                vsock_init(driver, TransportKind::DriverPCI)?;
             }
         }
         Ok(())

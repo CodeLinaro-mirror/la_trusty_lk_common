@@ -31,6 +31,7 @@ use crate::msg::BusAddress;
 use crate::msg::MAX_NUM_SHM;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
 use crate::sys::VIRTIO_CONFIG_S_DRIVER_OK;
+use crate::vsock::TransportKind;
 use crate::vsock::VsockDevice;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -240,7 +241,7 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: ClientI
         .name(c"virtio_vsock_tx")
         .priority(Priority::HIGH)
         .spawn(move || {
-            let ret = crate::vsock::vsock_tx_loop(device_for_tx, None);
+            let ret = crate::vsock::vsock_tx_loop(device_for_tx, TransportKind::DeviceFFAMsg);
             debug!("vsock_tx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
