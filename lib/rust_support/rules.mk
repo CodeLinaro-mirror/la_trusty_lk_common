@@ -158,6 +158,7 @@ MODULE_BINDGEN_FLAGS := \
 	--with-derive-custom Error=FromPrimitive \
 	--with-derive-custom handle_waiter=Default \
 	--with-derive-custom ipc_msg_info=Default \
+	--with-derive-eq \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
 
