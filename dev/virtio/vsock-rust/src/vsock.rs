@@ -42,6 +42,7 @@ use log::error;
 use log::info;
 use log::warn;
 
+use rand::rand_get_bytes;
 use rust_support::handle::IPC_HANDLE_POLL_HUP;
 use rust_support::handle::IPC_HANDLE_POLL_MSG;
 use rust_support::handle::IPC_HANDLE_POLL_READY;
@@ -50,18 +51,23 @@ use rust_support::ipc::iovec_kern;
 use rust_support::ipc::ipc_get_msg;
 use rust_support::ipc::ipc_msg_info;
 use rust_support::ipc::ipc_msg_kern;
+use rust_support::ipc::ipc_port_accept;
 use rust_support::ipc::ipc_port_connect_async;
+use rust_support::ipc::ipc_port_create;
+use rust_support::ipc::ipc_port_publish;
 use rust_support::ipc::ipc_put_msg;
 use rust_support::ipc::ipc_read_msg;
 use rust_support::ipc::ipc_send_msg;
 use rust_support::ipc::zero_uuid;
 use rust_support::ipc::IPC_CONNECT_WAIT_FOR_PORT;
+use rust_support::ipc::IPC_PORT_ALLOW_TA_CONNECT;
 use rust_support::ipc::IPC_PORT_PATH_MAX;
 use rust_support::sync::Mutex;
 use rust_support::thread;
 use rust_support::thread::sleep;
 use rust_support::thread::Builder;
 use rust_support::thread::Priority;
+use rust_support::uuid::Uuid;
 use virtio_drivers_and_devices::device::socket::SocketError;
 use virtio_drivers_and_devices::device::socket::VirtIOSocket;
 use virtio_drivers_and_devices::device::socket::VsockAddr;
@@ -124,6 +130,47 @@ comm_port_feature_enable! {
         {port_name: c"com.android.trusty.keymint.commservice", feature_name: "keymint_commservice"},
     }
 }
+
+struct TipcToVsockMapping {
+    /// Local port name to listen on.
+    name: &'static CStr,
+
+    /// Secure partition ID to connect to using virtio-msg-ffa,
+    /// or `None` to use any other transport.
+    sp_id: Option<u16>,
+
+    /// Destination address to connect to.
+    addr: VsockAddr,
+
+    /// List of allowed UUIDs that can connect to this port.
+    /// All clients are allowed if this list is empty.
+    allowed_uuids: &'static [Uuid],
+}
+
+#[allow(dead_code)]
+const TRUSTY_SP_ID: u16 = 0x8001u16;
+
+const TIPC_TO_VSOCK_MAPPINGS: &[TipcToVsockMapping] = &[
+    #[cfg(TEST_BUILD)]
+    TipcToVsockMapping {
+        name: c"com.android.trusty.vsock.forwarder",
+        sp_id: Some(TRUSTY_SP_ID),
+        addr: VsockAddr { cid: 2, port: 0 },
+        allowed_uuids: &[],
+    },
+    #[cfg(feature = "tipc_vsock_authmgr")]
+    TipcToVsockMapping {
+        name: c"ahss.authmgr.IAuthManagerAuthorization/default.bnd",
+        sp_id: Some(TRUSTY_SP_ID),
+        addr: VsockAddr { cid: 2, port: 1 },
+        allowed_uuids: &[Uuid::new(
+            0x9b3c1e9e,
+            0x1808,
+            0x4b98,
+            [0x8f, 0xa9, 0x85, 0x92, 0xdf, 0xf3, 0xa3, 0x37],
+        )],
+    },
+];
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -307,6 +354,7 @@ fn vsock_connection_close(c: &mut VsockConnection, action: ConnectionStateAction
     if c.state == VsockConnectionState::Active
         || c.state == VsockConnectionState::TipcConnecting
         || c.state == VsockConnectionState::TipcSendBlocked
+        || c.state == VsockConnectionState::TipcOnly
     {
         // The handle set owns the only reference we have to the handle and
         // handle_set_wait might have already returned a pointer to c
@@ -347,6 +395,11 @@ where
             handle_set: HandleSet::new(),
             connection_manager: Mutex::new(manager),
         }
+    }
+
+    fn port_is_listening(&self, port: u32) -> bool {
+        // We listen on ports in the range 0..PORT_MAP.len()
+        port < PORT_MAP.len().try_into().unwrap()
     }
 
     fn vsock_rx_op_request(&self, peer: VsockAddr, local: VsockAddr) -> Result<(), Error> {
@@ -415,6 +468,132 @@ where
         info!("tipc port name set to {}", c.tipc_port_name());
 
         self.vsock_connect_tipc(c)
+    }
+
+    fn create_tipc_ports(&self, sp_id: Option<u16>) -> [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] {
+        let mut port_hrefs: [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] = Default::default();
+        for (port, phref) in TIPC_TO_VSOCK_MAPPINGS.iter().zip(port_hrefs.iter_mut()) {
+            if port.sp_id != sp_id {
+                continue;
+            }
+
+            // Safety:
+            // - `sid` is a valid uuid because we use a bindgen'd constant
+            // - `path` points to a null-terminated C-string. The null byte was appended by
+            //   `CString::new`.
+            // - `num_recv_bufs` is a primitive value.
+            // - `recv_buf_size` is a primitive value.
+            // - `flags` contains a flag value accepted by the callee
+            // - `phandle_ptr` points to memory that the kernel can store a pointer into
+            //   after the callee returns.
+            let ret = unsafe {
+                ipc_port_create(
+                    &zero_uuid,
+                    port.name.as_ptr(),
+                    1,
+                    PAGE_SIZE,
+                    IPC_PORT_ALLOW_TA_CONNECT,
+                    &raw mut (*phref.as_mut_ptr()).handle,
+                )
+            };
+            if ret != 0 {
+                warn!("failed to create {:?}, remote {:?}, err {ret}", port.name, port.addr);
+                continue;
+            }
+
+            // Safety:
+            // - `phandle` is a valid port handle from ipc_port_create
+            let ret = unsafe { ipc_port_publish(phref.handle()) };
+            if ret != 0 {
+                warn!("failed to publish {:?}, remote {:?}, err {ret}", port.name, port.addr);
+                phref.handle_close();
+                continue;
+            }
+
+            phref.set_emask(!0);
+            if let Err(e) = self.handle_set.attach(phref) {
+                warn!("failed to attach port {:?}, remote {:?}, err {e}", port.name, port.addr);
+                phref.handle_close();
+                continue;
+            };
+
+            debug!("tipc to vsock mapping enabled on port {:?}", port.name);
+        }
+
+        port_hrefs
+    }
+
+    fn tipc_connect_vsock(
+        &self,
+        port: &TipcToVsockMapping,
+        href: &mut HandleRef,
+    ) -> Result<VsockConnection, Error> {
+        debug!("got tipc connection on {:?}", port.name);
+
+        // Pick a random unused 32-bit source port; the probability
+        // of collision should be pretty low if we pick randomly.
+        let mut cm = self.connection_manager.lock();
+        let mut src_port;
+        loop {
+            let mut src_port_bytes = [0; 4];
+            rand_get_bytes(&mut src_port_bytes[..]);
+            src_port = u32::from_ne_bytes(src_port_bytes);
+            if self.port_is_listening(src_port) {
+                // Don't use listening port numbers for outgoing connections
+                // to avoid conflicts with incoming connections.
+                continue;
+            }
+
+            match cm.connect(port.addr, src_port) {
+                Ok(()) => break,
+                Err(VirtioError::SocketDeviceError(SocketError::ConnectionExists)) => continue,
+                Err(e) => return Err(Error::Virtio(e)),
+            }
+        }
+
+        let mut c = VsockConnection::new(port.addr, src_port);
+        c.tipc_port_name = Some(port.name.to_owned());
+        c.state = VsockConnectionState::TipcOnly;
+
+        let mut peer_uuid_ptr = core::ptr::null();
+        // Safety:
+        // - `phandle` is a valid port from href
+        // - `chandle` is a zeroed HandleRef from c
+        // - `peer` is the zero-initialized pointer from above
+        let ret = unsafe {
+            ipc_port_accept(
+                href.handle(),
+                &raw mut (*c.href.as_mut_ptr()).handle,
+                &raw mut peer_uuid_ptr,
+            )
+        };
+        if ret < 0 {
+            error!("failed to accept connection on {:?}: {ret} ", port.name);
+            let _ = cm.force_close(c.peer, c.local_port);
+            LkError::from_lk(ret)?;
+        }
+
+        debug_assert!(!peer_uuid_ptr.is_null());
+        // Safety: `peer_uuid` is non-null and should point to a valid UUID by now
+        let peer_uuid = unsafe { Uuid(*peer_uuid_ptr) };
+        if !port.allowed_uuids.is_empty() && !port.allowed_uuids.contains(&peer_uuid) {
+            error!("client {:?} not allowed on {:?}: {ret} ", peer_uuid, port.name);
+            c.href.handle_close();
+            let _ = cm.force_close(c.peer, c.local_port);
+            return Err(LkError::ERR_NOT_ALLOWED.into());
+        }
+
+        // Initialize the cookie here so vsock_connection_lookup_cookie works
+        // correctly past this point. See comment in vsock_connect_tipc w.r.t.
+        // the choice of what to use as the cookie.
+        let cookie = c.href.as_mut_ptr() as *mut c_void;
+        c.href.set_cookie(cookie);
+        c.href.set_emask(!0);
+        c.href.set_id(c.peer.port);
+
+        debug!("accepted tipc connection on {:?}", port.name);
+
+        Ok(c)
     }
 
     fn vsock_connect_tipc(&self, c: &mut VsockConnection) -> Result<(), Error> {
@@ -565,7 +744,25 @@ where
                 }
             }
             VsockEventType::Connected => {
-                panic!("outbound connections not supported");
+                debug!("connected destination: {destination:?}");
+
+                let connections = &mut *device.connections.lock();
+                let lp = destination.port;
+                let _ = vsock_connection_lookup_peer(connections, source, lp, |connection| {
+                    debug_assert!(connection.state == VsockConnectionState::TipcOnly);
+
+                    if let Err(e) = device.handle_set.attach(&mut connection.href) {
+                        error!("failed to attach connection: {:?}", e);
+                        device.vsock_send_reset(connection.peer, connection.local_port);
+                        return ConnectionStateAction::Remove;
+                    }
+
+                    connection.state = VsockConnectionState::Active;
+                    ConnectionStateAction::None
+                })
+                .inspect_err(|_| {
+                    warn!("got packet for unknown connection");
+                });
             }
             VsockEventType::Received { length } => {
                 debug!("recv destination: {destination:?}");
@@ -636,10 +833,13 @@ where
     }
 }
 
-pub(crate) fn vsock_tx_loop<M>(device: Arc<VsockDevice<M>>) -> Result<(), Error>
+pub(crate) fn vsock_tx_loop<M>(device: Arc<VsockDevice<M>>, sp_id: Option<u16>) -> Result<(), Error>
 where
     M: VsockManager,
 {
+    debug!("starting vsock_tx_loop");
+
+    let mut port_hrefs = device.create_tipc_ports(sp_id);
     let mut timeout = Duration::MAX;
     let ten_secs = Duration::from_secs(10);
     let mut tx_buffer = vec![0u8; PAGE_SIZE].into_boxed_slice();
@@ -670,8 +870,9 @@ where
             continue;
         }
 
+        let connections = &mut *device.connections.lock();
         let cookie = href.cookie();
-        let _ = vsock_connection_lookup_cookie(&mut device.connections.lock(), cookie, |c| {
+        let _ = vsock_connection_lookup_cookie(connections, cookie, |c| {
             if href.id() != c.href.id() {
                 panic!(
                     "unexpected id {:?} != {:?} for connection {}",
@@ -777,6 +978,20 @@ where
             ConnectionStateAction::None
         })
         .inspect_err(|_| {
+            if let Some(idx) =
+                port_hrefs.iter_mut().position(|phref| phref.handle() == href.handle())
+            {
+                if href.emask() & IPC_HANDLE_POLL_READY != 0 {
+                    match device.tipc_connect_vsock(&TIPC_TO_VSOCK_MAPPINGS[idx], &mut href) {
+                        Ok(c) => connections.push(c),
+                        Err(e) => error!("failed to accept tipc connection {e:?})"),
+                    }
+                } else if href.emask() != 0 {
+                    warn!("unexpected port emask {:x}", href.emask());
+                }
+                return;
+            }
+
             warn!("got event for non-existent remote {}, was it closed?", href.id());
         });
         href.handle_decref();
@@ -785,6 +1000,7 @@ where
 
 pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
     driver: VirtIOSocket<H, T, 4096>,
+    sp_id: Option<u16>,
 ) -> Result<(), Error> {
     let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
     let device_for_rx = Arc::new(VsockDevice::new(manager));
@@ -808,7 +1024,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_tx_loop(device_for_tx);
+            let ret = vsock_tx_loop(device_for_tx, sp_id);
             error!("vsock_tx_loop returned {:?}", ret);
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })

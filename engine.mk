@@ -260,6 +260,16 @@ GLOBAL_KERNEL_RUSTFLAGS += -Z branch-protection=pac-ret
 endif
 endif
 
+# add some automatic rust configuration flags
+GLOBAL_SHARED_RUSTFLAGS += \
+	--cfg='PLAT_$(call normalize-rust-cfg,$(PLATFORM))' \
+	--cfg='TARGET_$(call normalize-rust-cfg,$(TARGET))'
+
+# Add configuration flag if this is a test build
+ifeq (true,$(call TOBOOL,$(TEST_BUILD)))
+GLOBAL_SHARED_RUSTFLAGS += --cfg='TEST_BUILD'
+endif
+
 ifneq ($(GLOBAL_COMPILEFLAGS),)
 $(error Setting GLOBAL_COMPILEFLAGS directly from project or platform makefiles is no longer supported. Please use either GLOBAL_SHARED_COMPILEFLAGS or GLOBAL_KERNEL_COMPILEFLAGS.)
 endif
@@ -319,16 +329,6 @@ GLOBAL_DEFINES += \
 	LK_LOGLEVEL=$(LOG_LEVEL_KERNEL) \
 	LK_LOGLEVEL_RUST=$(LOG_LEVEL_KERNEL_RUST) \
 	TLOG_LVL_DEFAULT=$$(($(LOG_LEVEL_USER)+2)) \
-
-# add some automatic rust configuration flags
-GLOBAL_SHARED_RUSTFLAGS += \
-	--cfg='PLAT_$(call normalize-rust-cfg,$(PLATFORM))' \
-	--cfg='TARGET_$(call normalize-rust-cfg,$(TARGET))'
-
-# Add configuration flag if this is a test build
-ifeq (true,$(call TOBOOL,$(TEST_BUILD)))
-GLOBAL_SHARED_RUSTFLAGS += --cfg='TEST_BUILD'
-endif
 
 GLOBAL_USER_INCLUDES += $(addsuffix /arch/$(ARCH)/include,$(LKINC))
 
