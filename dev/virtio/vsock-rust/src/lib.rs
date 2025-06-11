@@ -10,6 +10,8 @@
 
 mod err;
 mod hal;
+#[cfg(target_arch = "aarch64")]
+mod msg;
 mod pci;
 mod vsock;
 
