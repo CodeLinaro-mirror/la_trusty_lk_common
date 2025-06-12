@@ -9,6 +9,7 @@ MODULE_EXPORT_INCLUDES += \
 
 MODULE_LIBRARY_DEPS := \
 	trusty/kernel/lib/rand/rust \
+	trusty/kernel/lib/trusty/rust \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/trusty-std \
 	$(call FIND_CRATE,cfg-if) \

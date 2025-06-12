@@ -22,12 +22,14 @@
  */
 
 use crate::msg::area_id_and_offset;
+use crate::msg::device::virtio_msg_cleanup;
 use crate::msg::device::VirtioMsgDevice;
 use crate::msg::device::TRANSPORT;
 use crate::msg::BusAddress;
 use crate::msg::MAX_NUM_SHM;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
+use core::sync::atomic::Ordering;
 use extmem::ExtMemObj;
 use log::debug;
 use log::error;
@@ -140,8 +142,13 @@ impl DeviceHal for TrustyDeviceHal {
 
 pub fn memory_unmap(device: &'static VirtioMsgDevice) -> i32 {
     loop {
-        // Start waiting for unshare requests
-        device.unshare.wait();
+        // Start waiting to get woken up for unshare requests or because the peer was torn down
+        device.wake_memory_unmap.wait();
+        if device.peer_dying.load(Ordering::Relaxed) {
+            debug!("stopping memory unmap thread");
+            // Wait for the other vsock threads to stop in this same thread
+            return virtio_msg_cleanup(device);
+        }
 
         // There may be up to MAX_NUM_SHM requests to handle so
         // pre-allocate temporary space before taking the lock
