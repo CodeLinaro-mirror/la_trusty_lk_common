@@ -24,7 +24,7 @@
 use crate::sys::uuid_t;
 
 // TODO: split this into a separate trusty module to share bindings with userspace
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Uuid(pub uuid_t);
 
 impl Uuid {
