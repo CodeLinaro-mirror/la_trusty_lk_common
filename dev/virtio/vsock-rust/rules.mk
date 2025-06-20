@@ -8,6 +8,7 @@ MODULE_EXPORT_INCLUDES += \
 	$(LOCAL_DIR)/include
 
 MODULE_LIBRARY_DEPS := \
+	trusty/kernel/lib/rand/rust \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/trusty-std \
 	$(call FIND_CRATE,cfg-if) \
@@ -32,6 +33,13 @@ endif
 ifeq ($(ARCH),arm64)
 MODULE_LIBRARY_DEPS += \
 	packages/modules/Virtualization/libs/libhypervisor_backends \
+	trusty/kernel/lib/arm_ffa/rust \
+
+ifeq (false,$(call TOBOOL,$(TRUSTY_VM_GUEST)))
+MODULE_LIBRARY_DEPS += \
+	trusty/kernel/lib/extmem/rust \
+
+endif
 
 endif
 
@@ -79,6 +87,19 @@ ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_VINTF_TA)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="vintf_ta"' \
 
+endif
+ifeq (false,$(call TOBOOL,$(TRUSTY_VM_GUEST)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="virtio_device_side"' \
+
+else
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="virtio_driver_side"' \
+
+endif
+
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_TIPC_VSOCK_AUTHMGR)))
+MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_authmgr"'
 endif
 
 MODULE_RUST_USE_CLIPPY := true

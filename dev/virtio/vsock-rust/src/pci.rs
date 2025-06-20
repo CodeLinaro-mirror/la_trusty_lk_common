@@ -121,7 +121,7 @@ impl TrustyHal {
 
                 let driver: VirtIOSocket<TrustyHal, SomeTransport, 4096> =
                     VirtIOSocket::new(transport)?;
-                vsock_init(driver)?;
+                vsock_init(driver, None)?;
             }
         }
         Ok(())
