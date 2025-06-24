@@ -63,7 +63,7 @@ mod arch;
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 #[path = "pci/unimplemented.rs"]
 mod arch;
-mod hal;
+pub(crate) mod hal;
 
 impl PciHal {
     fn init_all_vsocks(
