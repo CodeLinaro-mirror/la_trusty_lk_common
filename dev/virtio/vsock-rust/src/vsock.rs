@@ -89,46 +89,44 @@ use crate::err::Error;
 
 const ACTIVE_TIMEOUT: Duration = Duration::from_secs(5);
 
-struct TipcPortAcl {
+#[derive(Debug, Clone, Copy)]
+struct TipcPort {
+    port: u32,
     name: &'static CStr,
-    enabled: bool,
 }
 
-// macro will generate the variable containing the ACL for all tipc ports. If the feature name is
-// defined, the corresponding port will be enabled; the port will be disabled otherwise. The macro
-// will generate 2 extra ports for connections that send the port name in the first package for port
-// 0 and 1.
-macro_rules! comm_port_feature_enable {
-    ($var_name:ident[$number_ports: literal]={$({port_name: $port_name:literal, feature_name: $feature_name:literal}),+ $(,)*}) => {
-    const $var_name: [TipcPortAcl; $number_ports + 2] = [
-        TipcPortAcl { name: c"", enabled: true }, // connections on port zero must send port name in first packet
-        TipcPortAcl { name: c"", enabled: true }, // temporary workaround to not change the port 1 to port 0
-        $(
-            #[cfg(feature = $feature_name)]
-            TipcPortAcl { name: $port_name, enabled: true },
-            #[cfg(not(feature = $feature_name))]
-            TipcPortAcl { name: $port_name, enabled: false },
-        )+
-    ];
-    }
-}
+const PORT_MAP: &[TipcPort] = &[
+    // Reserved privileged ports
+    // connections on port zero must send port name in first packet
+    TipcPort { port: 0, name: c"" },
+    // temporary workaround to not change the port 1 to port 0
+    TipcPort { port: 1, name: c"" },
+    // Privileged ports
+    #[cfg(feature = "authmgr")]
+    TipcPort { port: 2, name: c"com.android.trusty.authmgr" },
+    #[cfg(feature = "hwcrypto_hal")]
+    TipcPort { port: 3, name: c"com.android.trusty.hwcryptooperations" },
+    #[cfg(feature = "hwcrypto_hal")]
+    TipcPort { port: 4, name: c"com.android.trusty.rust.hwcryptohal.V1" },
+    #[cfg(feature = "securestorage_hal")]
+    TipcPort { port: 5, name: c"com.android.trusty.securestorage" },
+    #[cfg(feature = "widevine_aidl_comm")]
+    TipcPort { port: 6, name: c"com.android.trusty.widevine.transact" },
+    #[cfg(feature = "securestorage_hal")]
+    TipcPort { port: 7, name: c"com.android.trusty.storage.proxy" },
+    #[cfg(feature = "gatekeeper")]
+    TipcPort { port: 8, name: c"com.android.trusty.gatekeeper" },
+    #[cfg(feature = "keymint")]
+    TipcPort { port: 9, name: c"com.android.trusty.keymint" },
+    #[cfg(feature = "vintf_ta")]
+    TipcPort { port: 10, name: c"com.android.trusty.vintf" },
+    #[cfg(feature = "keymint_commservice")]
+    TipcPort { port: 11, name: c"com.android.trusty.keymint.commservice" },
+];
 
-// Mapping of vsock port numbers to tipc port names.
-//
-// Each tipc port name must be shorter than IPC_PORT_PATH_MAX.
-comm_port_feature_enable! {
-    PORT_MAP[10] = {
-        {port_name: c"com.android.trusty.authmgr", feature_name: "authmgr"},
-        {port_name: c"com.android.trusty.hwcryptooperations", feature_name: "hwcrypto_hal"},
-        {port_name: c"com.android.trusty.rust.hwcryptohal.V1", feature_name: "hwcrypto_hal"},
-        {port_name: c"com.android.trusty.securestorage", feature_name: "securestorage_hal"},
-        {port_name: c"com.android.trusty.widevine.transact", feature_name: "widevine_aidl_comm"},
-        {port_name: c"com.android.trusty.storage.proxy", feature_name: "securestorage_hal"},
-        {port_name: c"com.android.trusty.gatekeeper", feature_name: "gatekeeper"},
-        {port_name: c"com.android.trusty.keymint", feature_name: "keymint"},
-        {port_name: c"com.android.trusty.vintf", feature_name: "vintf_ta"},
-        {port_name: c"com.android.trusty.keymint.commservice", feature_name: "keymint_commservice"},
-    }
+/// Finds the TIPC name associated with a given vsock port number.
+fn get_port_name(port: u32) -> Option<&'static CStr> {
+    PORT_MAP.iter().find(|entry| entry.port == port).map(|entry| entry.name)
 }
 
 struct TipcToVsockMapping {
@@ -398,8 +396,7 @@ where
     }
 
     fn port_is_listening(&self, port: u32) -> bool {
-        // We listen on ports in the range 0..PORT_MAP.len()
-        port < PORT_MAP.len().try_into().unwrap()
+        get_port_name(port).is_some()
     }
 
     fn vsock_rx_op_request(&self, peer: VsockAddr, local: VsockAddr) -> Result<(), Error> {
@@ -416,21 +413,11 @@ where
         };
 
         let mut c = VsockConnection::new(peer, local.port);
-
-        // ports greater than 1 use port map to determine what tipc port to connect to
-        if [0, 1].contains(&local.port) {
-            // wait on peer to send tipc port name
-        } else if (local.port as usize) < PORT_MAP.len() {
-            if PORT_MAP[local.port as usize].enabled {
-                c.tipc_port_name = Some(PORT_MAP[local.port as usize].name.to_owned());
-                self.vsock_connect_tipc(&mut c)?;
-            } else {
-                return Err(LkError::ERR_NOT_VALID.into());
-            }
-        } else {
-            return Err(LkError::ERR_OUT_OF_RANGE.into());
+        let port_name = get_port_name(local.port).ok_or(LkError::ERR_OUT_OF_RANGE)?;
+        if port_name != c"" {
+            c.tipc_port_name = Some(port_name.to_owned());
+            self.vsock_connect_tipc(&mut c)?;
         }
-
         guard.deref_mut().push(c);
 
         Ok(())
@@ -445,7 +432,7 @@ where
     ) -> Result<(), Error> {
         // destination port should be zero or one, otherwise, connection should not
         // be in VsockOnly state (not already connected/connecting to tipc).
-        assert!([0, 1].contains(&destination.port));
+        assert!(get_port_name(destination.port) == Some(c""));
 
         let mut buffer = [0; IPC_PORT_PATH_MAX as usize];
         assert!(length < buffer.len());
@@ -717,8 +704,8 @@ where
         let mut connection_manager_guard = device.connection_manager.lock();
         let connection_manager = connection_manager_guard.deref_mut();
 
-        for port in 0..PORT_MAP.len() as u32 {
-            connection_manager.listen(port);
+        for entry in PORT_MAP {
+            connection_manager.listen(entry.port);
         }
     }
 
