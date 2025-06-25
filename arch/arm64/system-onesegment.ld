@@ -15,6 +15,9 @@ SECTIONS
      * this function, we can remove it during linking here
      *
      * LLVM 19 added init_aarch64_has_sme
+     *
+     * LLVM 20 added get_aarch64_cpu_features depending on
+     * __init_cpu_features, so discard it, too.
      */
     /DISCARD/ : {
         *libclang_rt.builtins-aarch64-android.a:cpu_model.c.o(
@@ -31,6 +34,11 @@ SECTIONS
 
         *libclang_rt.builtins-aarch64-android.a:sme-abi-init.c.o(
             .text.init_aarch64_has_sme
+            .init_array*
+        )
+
+        *libclang_rt.builtins-aarch64-android.a:sme-abi-vg.c.o(
+            .text.get_aarch64_cpu_features
             .init_array*
         )
     }
