@@ -86,6 +86,12 @@ ifeq ($(MODULE_RUST_EDITION),)
 MODULE_RUST_EDITION := 2021
 endif
 
+# Details of Edition 2024 don't change from current compiler until release
+# TODO remove this once Trusty is on 1.85+
+ifeq ($(MODULE_RUST_EDITION),2024)
+MODULE_RUSTFLAGS += -Z unstable-options
+endif
+
 MODULE_RUSTFLAGS += --edition $(MODULE_RUST_EDITION)
 
 # Specify paths of dependency libraries because we are not going through Cargo
