@@ -96,14 +96,13 @@ struct TipcPortAcl {
 
 // macro will generate the variable containing the ACL for all tipc ports. If the feature name is
 // defined, the corresponding port will be enabled; the port will be disabled otherwise. The macro
-// will generate 2 extra entries:
-// - one for connections that send the port name in the first package on port zero, and
-// - one for port 1 as a placeholder.
+// will generate 2 extra ports for connections that send the port name in the first package for port
+// 0 and 1.
 macro_rules! comm_port_feature_enable {
     ($var_name:ident[$number_ports: literal]={$({port_name: $port_name:literal, feature_name: $feature_name:literal}),+ $(,)*}) => {
     const $var_name: [TipcPortAcl; $number_ports + 2] = [
-        TipcPortAcl { name: c"", enabled: cfg!(TEST_BUILD) }, // connections on port zero must send port name in first packet
-        TipcPortAcl { name: c"", enabled: false }, // preserve port numbering for now
+        TipcPortAcl { name: c"", enabled: true }, // connections on port zero must send port name in first packet
+        TipcPortAcl { name: c"", enabled: true }, // temporary workaround to not change the port 1 to port 0
         $(
             #[cfg(feature = $feature_name)]
             TipcPortAcl { name: $port_name, enabled: true },
@@ -418,18 +417,18 @@ where
 
         let mut c = VsockConnection::new(peer, local.port);
 
-        if (local.port as usize) > PORT_MAP.len() {
+        // ports greater than 1 use port map to determine what tipc port to connect to
+        if [0, 1].contains(&local.port) {
+            // wait on peer to send tipc port name
+        } else if (local.port as usize) < PORT_MAP.len() {
+            if PORT_MAP[local.port as usize].enabled {
+                c.tipc_port_name = Some(PORT_MAP[local.port as usize].name.to_owned());
+                self.vsock_connect_tipc(&mut c)?;
+            } else {
+                return Err(LkError::ERR_NOT_VALID.into());
+            }
+        } else {
             return Err(LkError::ERR_OUT_OF_RANGE.into());
-        }
-
-        if !PORT_MAP[local.port as usize].enabled {
-            return Err(LkError::ERR_NOT_VALID.into());
-        }
-
-        // for port zero, wait on peer to send tipc port name, otherwise use map
-        if local.port != 0 {
-            c.tipc_port_name = Some(PORT_MAP[local.port as usize].name.to_owned());
-            self.vsock_connect_tipc(&mut c)?;
         }
 
         guard.deref_mut().push(c);
@@ -444,9 +443,9 @@ where
         source: VsockAddr,
         destination: VsockAddr,
     ) -> Result<(), Error> {
-        // destination port should be zero, otherwise, connection should not
+        // destination port should be zero or one, otherwise, connection should not
         // be in VsockOnly state (not already connected/connecting to tipc).
-        assert!(destination.port == 0);
+        assert!([0, 1].contains(&destination.port));
 
         let mut buffer = [0; IPC_PORT_PATH_MAX as usize];
         assert!(length < buffer.len());
