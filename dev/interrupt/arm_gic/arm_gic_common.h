@@ -142,6 +142,26 @@ GEN_CP15_REG64_FUNCS(icc_sgi0r_el1, 2, c12);
 
 #else /* GIC_VERSION > 2 */
 
+#define GICV2_IRQ_GROUP_GRP0S   0
+#define GICV2_IRQ_GROUP_GRP1NS  1
+
+#ifndef ARM_GIC_SELECTED_IRQ_GROUP
+#define ARM_GIC_SELECTED_IRQ_GROUP GRP1NS
+#endif
+
+#define COMBINE2(a, b)  a ## b
+#define XCOMBINE2(a, b) COMBINE2(a,b)
+#define GICV2_IRQ_GROUP XCOMBINE2(GICV2_IRQ_GROUP_, ARM_GIC_SELECTED_IRQ_GROUP)
+
+#if GICV2_IRQ_GROUP == GICV2_IRQ_GROUP_GRP0S && !ARM_MERGE_FIQ_IRQ
+#error "GICv2 Group 0 interrupts require merged FIQs"
+#endif
+
+#if WITH_LIB_SM && GICV2_IRQ_GROUP == GICV2_IRQ_GROUP_GRP0S
+#define ARM_GIC_USE_DOORBELL_NS_IRQ 1
+#define ARM_GIC_DOORBELL_IRQ 13
+#endif
+
 #ifndef GICC_OFFSET
 #define GICC_OFFSET (0x0000)
 #endif
@@ -173,13 +193,11 @@ GEN_CP15_REG64_FUNCS(icc_sgi0r_el1, 2, c12);
 #define GICC_APR(n)             (GICC_OFFSET + 0x00d0 + (n) * 4)
 #define GICC_NSAPR(n)           (GICC_OFFSET + 0x00e0 + (n) * 4)
 #define GICC_IIDR               (GICC_OFFSET + 0x00fc)
-#if 0 /* GICC_DIR is not currently used by anything */
 #define GICC_DIR                (GICC_OFFSET + 0x1000)
-#endif
-#define GICC_LIMIT              (GICC_OFFSET + 0x1000)
+#define GICC_LIMIT              (GICC_OFFSET + 0x2000)
 #define GICC_MIN_SIZE           (GICC_LIMIT - GICC_OFFSET)
 
-#if WITH_LIB_SM
+#if GICV2_IRQ_GROUP == GICV2_IRQ_GROUP_GRP1NS
 #define GICC_PRIMARY_HPPIR      GICC_AHPPIR
 #define GICC_PRIMARY_IAR        GICC_AIAR
 #define GICC_PRIMARY_EOIR       GICC_AEOIR
