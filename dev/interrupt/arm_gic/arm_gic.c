@@ -929,6 +929,15 @@ void sm_intc_raise_doorbell_irq(void)
 #if ARM_GIC_USE_DOORBELL_NS_IRQ
     raise_ns_doorbell_irq(cpu);
 #else
+    if (!arm_gic_non_secure_interrupts_frozen) {
+        /*
+         * We cannot send any SGIs to the non-secure world
+         * before the Trusty drivers come up because the arm-gic
+         * driver in Linux not only rejects unknown interrupts,
+         * but also disables and prevents Trusty from handling them.
+         */
+        return;
+    }
     arch_mp_send_ipi(1U << cpu, MP_IPI_GENERIC);
 #endif
 }
