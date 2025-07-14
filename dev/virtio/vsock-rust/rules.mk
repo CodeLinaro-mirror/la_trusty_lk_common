@@ -43,6 +43,26 @@ endif
 
 endif
 
+# Size in bytes of the shared memory region over FFA by the virtio-msg vsock
+# driver. This is rounded up to be a multiple of the page size.
+# Virtio-msg needs at least 14 pages = 56KiB for the following:
+# * 6 pages for the vqueues: 2 pages per vqueue (per the spec) times 3 queues
+# * 8 pages for the RX buffers (one page per buffer, see src/msg/driver.rs).
+VSOCK_VIRTIO_MSG_SHARED_MEMORY_SIZE ?= 65536 # 64 KiB
+
+# The guest context ID of the virtio-msg vsock device. Setting this to a value
+# reserved by the virtio specification will trigger a compiler error.
+VSOCK_VIRTIO_MSG_DEVICE_GUEST_CID ?= 10
+
+# The maximum number of VMs supported by the virtio-msg transport. Only one vsock device per VM is
+# currently supported.
+VSOCK_VIRTIO_MSG_NUM_VMS ?= 4
+
+MODULE_RUST_ENV += \
+	VSOCK_VIRTIO_MSG_SHARED_MEMORY_SIZE=$(VSOCK_VIRTIO_MSG_SHARED_MEMORY_SIZE) \
+	VSOCK_VIRTIO_MSG_DEVICE_GUEST_CID=$(VSOCK_VIRTIO_MSG_DEVICE_GUEST_CID) \
+	VSOCK_VIRTIO_MSG_NUM_VMS=$(VSOCK_VIRTIO_MSG_NUM_VMS) \
+
 MODULE_RUSTFLAGS += \
 	-A clippy::disallowed_names \
 	-A clippy::type-complexity \
