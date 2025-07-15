@@ -264,7 +264,7 @@ static status_t defer_active_irq(unsigned int vector, uint cpu)
         panic("deferred active irq list is full on cpu %u\n", cpu);
 
     deferred_active_irqs[cpu][idx] = vector;
-    GICCREG_WRITE(0, icc_eoir1_el1, vector);
+    GICCREG_WRITE(0, GICC_PRIMARY_EOIR, vector);
     LTRACEF_LEVEL(2, "deferred irq %u on cpu %u\n", vector, cpu);
     return NO_ERROR;
 }
@@ -284,7 +284,7 @@ static status_t fiq_enter_defer_irqs(uint cpu)
     bool inject = false;
 
     do {
-        u_int irq = GICCREG_READ(0, icc_iar1_el1) & 0x3ff;
+        u_int irq = GICCREG_READ(0, GICC_PRIMARY_IAR) & 0x3ff;
 
         if (irq >= 1020)
             break;
@@ -318,7 +318,7 @@ static enum handler_return handle_deferred_irqs(void)
             ret = INT_RESCHEDULE;
 
         deferred_active_irqs[cpu][idx] = 0;
-        GICCREG_WRITE(0, icc_dir_el1, irq);
+        GICCREG_WRITE(0, GICC_DIR, irq);
         LTRACEF_LEVEL(2, "handled deferred irq %u on cpu %u\n", irq, cpu);
     }
 
@@ -764,7 +764,7 @@ enum handler_return __platform_irq(struct iframe *frame)
 
     GICCREG_WRITE(0, GICC_PRIMARY_EOIR, iar);
 #if ARM_GIC_USE_DOORBELL_NS_IRQ
-    GICCREG_WRITE(0, icc_dir_el1, iar);
+    GICCREG_WRITE(0, GICC_DIR, iar);
 #endif
 
     LTRACEF_LEVEL(2, "cpu %u exit %d\n", cpu, ret);
