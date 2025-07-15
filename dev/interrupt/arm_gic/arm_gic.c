@@ -689,6 +689,9 @@ status_t arm_gic_sgi(u_int irq, u_int flags, u_int cpu_mask)
 
 #else /* else GIC_VERSION > 2 */
 
+    /* In GICv2 non-doorbell mode, all interrupts are in Group 1 */
+    flags |= ARM_GIC_SGI_FLAG_NS;
+
     u_int val =
         ((flags & ARM_GIC_SGI_FLAG_TARGET_FILTER_MASK) << 24) |
         ((cpu_mask & 0xff) << 16) |
