@@ -631,14 +631,6 @@ where
         })
     }
 
-    fn vsock_tx_tipc_ready(&self, c: &mut VsockConnection) {
-        if c.state != VsockConnectionState::TipcConnecting {
-            panic!("warning, got poll ready in unexpected state: {:?}", c.state);
-        }
-        info!("connected to {}, remote {:?}", c.tipc_port_name(), c.peer.port);
-        c.state = VsockConnectionState::Active;
-    }
-
     fn vsock_rx_channel(
         &self,
         c: &mut VsockConnection,
@@ -869,7 +861,14 @@ where
             }
 
             if href.emask() & IPC_HANDLE_POLL_READY != 0 {
-                device.vsock_tx_tipc_ready(c);
+                assert_eq!(
+                    c.state,
+                    VsockConnectionState::TipcConnecting,
+                    "got poll ready in unexpected state: {:?}",
+                    c.state
+                );
+                info!("connected to {}, remote {:?}", c.tipc_port_name(), c.peer.port);
+                c.state = VsockConnectionState::Active;
             }
             if href.emask() & IPC_HANDLE_POLL_MSG != 0 {
                 // Print stats if we don't send any more packets for a while
