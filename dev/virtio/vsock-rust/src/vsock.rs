@@ -32,6 +32,7 @@ use core::time::Duration;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
+use alloc::collections::VecDeque;
 use alloc::ffi::CString;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -681,7 +682,7 @@ where
     M: VsockManager,
 {
     let ten_ms = Duration::from_millis(10);
-    let mut pending: Vec<VsockEvent> = vec![];
+    let mut pending: VecDeque<VsockEvent> = VecDeque::new();
 
     debug!("starting vsock_rx_loop");
 
@@ -699,7 +700,7 @@ where
         // TODO: use interrupts instead of polling
         // TODO: handle case where poll returns SocketError::OutputBufferTooShort
         let event = pending
-            .pop()
+            .pop_front()
             .or_else(|| device.connection_manager.lock().deref_mut().poll().expect("poll failed"));
 
         if event.is_none() {
@@ -762,7 +763,7 @@ where
                             state: VsockConnectionState::TipcSendBlocked, ..
                         } => {
                             // requeue pending event.
-                            pending.push(VsockEvent {
+                            pending.push_back(VsockEvent {
                                 source,
                                 destination,
                                 event_type,
