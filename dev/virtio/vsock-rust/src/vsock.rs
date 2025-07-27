@@ -637,12 +637,6 @@ where
         }
         info!("connected to {}, remote {:?}", c.tipc_port_name(), c.peer.port);
         c.state = VsockConnectionState::Active;
-
-        let buffer = [0u8];
-        let res = self.connection_manager.lock().send(c.peer, c.local_port, &buffer);
-        if res.is_err() {
-            warn!("failed to send connected status message");
-        }
     }
 
     fn vsock_rx_channel(
@@ -764,7 +758,15 @@ where
                         ref mut c @ VsockConnection {
                             state: VsockConnectionState::Active, ..
                         } => device.vsock_rx_channel(c, length, source, destination),
-                        VsockConnection {
+                        // We requeue a vsock event in these two connection states:
+                        // 1. `TipcConnecting`: The underlying TIPC connection is not yet ready.
+                        //    Requeuing the event here fixes a race condition (b/406418102) and
+                        //    allows the client to use the standard vsock protocol which does not
+                        //    include a way to tell the peer to retry the connection attempt.
+                        // 2. `TipcSendBlocked`: The TIPC connection is ready but last attempt to
+                        //    send data on the connection blocked due to lack of buffer space.
+                        VsockConnection { state: VsockConnectionState::TipcConnecting, .. }
+                        | VsockConnection {
                             state: VsockConnectionState::TipcSendBlocked, ..
                         } => {
                             // requeue pending event.
@@ -774,15 +776,12 @@ where
                                 event_type,
                                 buffer_status,
                             });
-                            // TODO: on one hand, we want to wait for the tipc connection to unblock
-                            // on the other, we want to pick up incoming events as soon as we can...
-                            // NOTE: Adding support for interrupts means we no longer have to sleep.
+                            // NOTE: on one hand, we want to wait for the tipc connection to become ready
+                            // or unblocked. on the other, we want to pick up incoming events as soon as we
+                            // can...
+                            // TODO: We could wait on an event here rather than sleeping until tipc is ready.
                             sleep(ten_ms);
                             Ok(())
-                        }
-                        VsockConnection { state: VsockConnectionState::TipcConnecting, .. } => {
-                            warn!("got data while still waiting for tipc connection");
-                            Err(LkError::ERR_BAD_STATE.into())
                         }
                         VsockConnection { state: s, .. } => {
                             error!("got data for connection in state {s:?}");
