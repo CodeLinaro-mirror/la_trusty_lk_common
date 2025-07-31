@@ -32,6 +32,7 @@ use core::time::Duration;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
+use alloc::collections::VecDeque;
 use alloc::ffi::CString;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -631,14 +632,6 @@ where
         })
     }
 
-    fn vsock_tx_tipc_ready(&self, c: &mut VsockConnection) {
-        if c.state != VsockConnectionState::TipcConnecting {
-            panic!("warning, got poll ready in unexpected state: {:?}", c.state);
-        }
-        info!("connected to {}, remote {:?}", c.tipc_port_name(), c.peer.port);
-        c.state = VsockConnectionState::Active;
-    }
-
     fn vsock_rx_channel(
         &self,
         c: &mut VsockConnection,
@@ -689,7 +682,7 @@ where
     M: VsockManager,
 {
     let ten_ms = Duration::from_millis(10);
-    let mut pending: Vec<VsockEvent> = vec![];
+    let mut pending: VecDeque<VsockEvent> = VecDeque::new();
 
     debug!("starting vsock_rx_loop");
 
@@ -707,7 +700,7 @@ where
         // TODO: use interrupts instead of polling
         // TODO: handle case where poll returns SocketError::OutputBufferTooShort
         let event = pending
-            .pop()
+            .pop_front()
             .or_else(|| device.connection_manager.lock().deref_mut().poll().expect("poll failed"));
 
         if event.is_none() {
@@ -770,7 +763,7 @@ where
                             state: VsockConnectionState::TipcSendBlocked, ..
                         } => {
                             // requeue pending event.
-                            pending.push(VsockEvent {
+                            pending.push_back(VsockEvent {
                                 source,
                                 destination,
                                 event_type,
@@ -869,7 +862,14 @@ where
             }
 
             if href.emask() & IPC_HANDLE_POLL_READY != 0 {
-                device.vsock_tx_tipc_ready(c);
+                assert_eq!(
+                    c.state,
+                    VsockConnectionState::TipcConnecting,
+                    "got poll ready in unexpected state: {:?}",
+                    c.state
+                );
+                info!("connected to {}, remote {:?}", c.tipc_port_name(), c.peer.port);
+                c.state = VsockConnectionState::Active;
             }
             if href.emask() & IPC_HANDLE_POLL_MSG != 0 {
                 // Print stats if we don't send any more packets for a while
