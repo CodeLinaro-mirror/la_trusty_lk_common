@@ -34,3 +34,21 @@ pub use crate::sys::ARCH_MMU_FLAG_UNCACHED_DEVICE;
 
 pub use crate::sys::PAGE_SIZE;
 pub use crate::sys::PAGE_SIZE_SHIFT;
+
+use bitflags::bitflags;
+
+bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct ArchMmuFlags: u32 {
+        // ARCH_MMU_FLAG_CACHED is intentionally omitted since it's zero which interacts in
+        // unexpected ways with methods defined by bitflags!
+        const UNCACHED = ARCH_MMU_FLAG_UNCACHED;
+        const UNCACHED_DEVICE = ARCH_MMU_FLAG_UNCACHED_DEVICE;
+        const PERM_USER = ARCH_MMU_FLAG_PERM_USER;
+        const PERM_RO = ARCH_MMU_FLAG_PERM_RO;
+        const PERM_NO_EXECUTE = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
+        const NS = ARCH_MMU_FLAG_NS;
+        const TAGGED = ARCH_MMU_FLAG_TAGGED;
+        const INVALID = ARCH_MMU_FLAG_INVALID;
+    }
+}
