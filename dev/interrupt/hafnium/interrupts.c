@@ -23,8 +23,10 @@
 
 #define LOCAL_TRACE 0
 
+#include <arch/mp.h>
 #include <arch/ops.h>
 #include <err.h>
+#include <kernel/mp.h>
 #include <lib/sm.h>
 #include <lib/sm/sm_err.h>
 #include <lib/smc/smc.h>
@@ -82,6 +84,16 @@ enum handler_return sm_intc_enable_interrupts(void)
 }
 
 void sm_intc_raise_doorbell_irq(void)
+{
+    PANIC_UNIMPLEMENTED;
+}
+
+status_t arch_mp_send_ipi(mp_cpu_mask_t target, mp_ipi_t ipi)
+{
+    PANIC_UNIMPLEMENTED;
+}
+
+void arch_mp_register_ipi_handler(mp_ipi_t ipi, int_handler handler, void *arg)
 {
     PANIC_UNIMPLEMENTED;
 }
