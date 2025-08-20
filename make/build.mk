@@ -33,7 +33,7 @@ $(OUTELF).dump: $(OUTELF)
 
 $(OUTELF).lst: $(OUTELF)
 	@echo generating listing: $@
-	$(NOECHO)$(OBJDUMP) -dS $< > $@
+	$(NOECHO)$(OBJDUMP) -dSC $< > $@
 
 $(OUTELF).size: $(OUTELF)
 	@echo generating size map: $@
