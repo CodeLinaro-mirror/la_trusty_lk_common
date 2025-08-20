@@ -38,6 +38,7 @@ MODULE_LIBRARY_DEPS += \
 ifeq (false,$(call TOBOOL,$(TRUSTY_VM_GUEST)))
 MODULE_LIBRARY_DEPS += \
 	trusty/kernel/lib/extmem/rust \
+	trusty/kernel/lib/sm/rust \
 
 endif
 
