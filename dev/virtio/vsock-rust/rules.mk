@@ -119,8 +119,14 @@ MODULE_RUSTFLAGS += \
 
 endif
 
-ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_TIPC_VSOCK_AUTHMGR)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_AUTHMGR_VIA_VSOCK)))
 MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_authmgr"'
+
+endif
+
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_TIPC_PORT_VIA_VSOCK)))
+MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_forwarder"'
+
 endif
 
 MODULE_RUST_USE_CLIPPY := true

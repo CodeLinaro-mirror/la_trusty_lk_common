@@ -150,7 +150,7 @@ struct TipcToVsockMapping {
 const TRUSTY_SP_ID: u16 = 0x8001u16;
 
 const TIPC_TO_VSOCK_MAPPINGS: &[TipcToVsockMapping] = &[
-    #[cfg(TEST_BUILD)]
+    #[cfg(feature = "tipc_vsock_forwarder")]
     TipcToVsockMapping {
         name: c"com.android.trusty.vsock.forwarder",
         sp_id: Some(TRUSTY_SP_ID),
@@ -159,15 +159,25 @@ const TIPC_TO_VSOCK_MAPPINGS: &[TipcToVsockMapping] = &[
     },
     #[cfg(feature = "tipc_vsock_authmgr")]
     TipcToVsockMapping {
-        name: c"ahss.authmgr.IAuthManagerAuthorization/default.bnd",
+        name: c"ahss.authmgr.IAuthMgrAuthorization/default.bnd",
         sp_id: Some(TRUSTY_SP_ID),
         addr: VsockAddr { cid: 2, port: 1 },
-        allowed_uuids: &[Uuid::new(
-            0x9b3c1e9e,
-            0x1808,
-            0x4b98,
-            [0x8f, 0xa9, 0x85, 0x92, 0xdf, 0xf3, 0xa3, 0x37],
-        )],
+        allowed_uuids: &[
+            Uuid::new(
+                // trusty/user/app/authmgr/authmgr-fe/app/manifest.json
+                0x9b3c1e9e,
+                0x1808,
+                0x4b98,
+                [0x8f, 0xa9, 0x85, 0x92, 0xdf, 0xf3, 0xa3, 0x37],
+            ),
+            Uuid::new(
+                // trusty/user/app/authmgr/authmgr-be/lib/manifest.json
+                0x1c966e25,
+                0x7729,
+                0x4122,
+                [0x8f, 0xb6, 0xcc, 0xd2, 0xb6, 0x12, 0x43, 0x0c],
+            ),
+        ],
     },
 ];
 
