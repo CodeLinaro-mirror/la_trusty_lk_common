@@ -120,13 +120,24 @@
 
 #if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || defined(__clang__)
 #ifdef __cplusplus
-#define STATIC_ASSERT(e) static_assert(e, #e)
+#define __STATIC_ASSERT(cond, msg) static_assert(cond, msg)
 #else
-#define STATIC_ASSERT(e) _Static_assert(e, #e)
+#define __STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #endif
 #else
-#define STATIC_ASSERT(e) extern char (*ct_assert(void)) [sizeof(char[1 - 2*!(e)])]
+/* Discard msg; no way to guarantee it's displayed. */
+#define __STATIC_ASSERT(cond, _msg) \
+    extern char (*ct_assert(void))[sizeof(char[1 - 2 * !(cond)])]
 #endif
+
+/*
+ * Invoke __STATIC_ASSERT with the first 2 args.
+ * It will either be (cond, msg) if user passed both or (cond, #cond) if they
+ * didn't provide a custom message.
+ */
+#define __CALL_STATIC_ASSERT(cond, msg, ...) __STATIC_ASSERT(cond, msg)
+#define STATIC_ASSERT(cond_and_opt_msg...) \
+    __CALL_STATIC_ASSERT(cond_and_opt_msg, #cond_and_opt_msg)
 
 /* compiler fence */
 #define CF do { __asm__ volatile("" ::: "memory"); } while(0)
