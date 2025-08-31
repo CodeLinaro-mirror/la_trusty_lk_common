@@ -100,21 +100,11 @@ const PORT_MAP: &[TipcPort] = &[
     // Reserved privileged ports
     // connections on port zero must send port name in first packet
     TipcPort { port: 0, name: c"" },
-    // temporary workaround to not change the port 1 to port 0
-    TipcPort { port: 1, name: c"" },
     // Privileged ports
     #[cfg(feature = "authmgr")]
-    TipcPort { port: 2, name: c"com.android.trusty.authmgr" },
-    #[cfg(feature = "hwcrypto_hal")]
-    TipcPort { port: 3, name: c"com.android.trusty.hwcryptooperations" },
-    #[cfg(feature = "hwcrypto_hal")]
-    TipcPort { port: 4, name: c"com.android.trusty.rust.hwcryptohal.V1" },
-    #[cfg(feature = "securestorage_hal")]
-    TipcPort { port: 5, name: c"com.android.trusty.securestorage" },
+    TipcPort { port: 1, name: c"ahss.authmgr.IAuthMgrAuthorization/default.bnd" },
     #[cfg(feature = "widevine_aidl_comm")]
     TipcPort { port: 6, name: c"com.android.trusty.widevine.transact" },
-    #[cfg(feature = "securestorage_hal")]
-    TipcPort { port: 7, name: c"com.android.trusty.storage.proxy" },
     #[cfg(feature = "gatekeeper")]
     TipcPort { port: 8, name: c"com.android.trusty.gatekeeper" },
     #[cfg(feature = "keymint")]

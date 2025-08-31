@@ -73,11 +73,6 @@ MODULE_RUSTFLAGS += \
 	-A clippy::upper-case-acronyms \
 	-D clippy::undocumented_unsafe_blocks \
 
-ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_HW_CRYPTO_HAL)))
-MODULE_RUSTFLAGS += \
-	--cfg 'feature="hwcrypto_hal"' \
-
-endif
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_USE_WIDEVINE_AIDL_COMM)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="widevine_aidl_comm"' \
@@ -92,11 +87,6 @@ ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_KEYMINT)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="keymint"' \
 	--cfg 'feature="keymint_commservice"' \
-
-endif
-ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_SECURE_STORAGE_HAL)))
-MODULE_RUSTFLAGS += \
-	--cfg 'feature="securestorage_hal"' \
 
 endif
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_AUTHMGR)))
