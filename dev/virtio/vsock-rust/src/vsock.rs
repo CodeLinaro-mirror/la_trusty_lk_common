@@ -743,14 +743,14 @@ where
 
                 let connections = &mut *device.connections.lock();
                 let lp = destination.port;
-                let _ = vsock_connection_lookup_peer(connections, source, lp, |mut connection| {
-                    if let Err(e) = match connection {
-                        ref mut c @ VsockConnection {
-                            state: VsockConnectionState::VsockOnly, ..
-                        } => device.vsock_connect_on_rx(c, length, source, destination),
-                        ref mut c @ VsockConnection {
-                            state: VsockConnectionState::Active, ..
-                        } => device.vsock_rx_channel(c, length, source, destination),
+                let _ = vsock_connection_lookup_peer(connections, source, lp, |connection| {
+                    let res = match connection {
+                        VsockConnection { state: VsockConnectionState::VsockOnly, .. } => {
+                            device.vsock_connect_on_rx(connection, length, source, destination)
+                        }
+                        VsockConnection { state: VsockConnectionState::Active, .. } => {
+                            device.vsock_rx_channel(connection, length, source, destination)
+                        }
                         // We requeue a vsock event in these two connection states:
                         // 1. `TipcConnecting`: The underlying TIPC connection is not yet ready.
                         //    Requeuing the event here fixes a race condition (b/406418102) and
@@ -780,7 +780,8 @@ where
                             error!("got data for connection in state {s:?}");
                             Err(LkError::ERR_BAD_STATE.into())
                         }
-                    } {
+                    };
+                    if let Err(e) = res {
                         error!("failed to receive data from vsock connection:  {e:?}");
                         device.vsock_send_reset(connection.peer, connection.local_port);
 
