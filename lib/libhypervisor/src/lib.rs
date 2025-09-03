@@ -21,7 +21,8 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #![no_std]
-#![feature(unsigned_is_multiple_of)]
+#![feature(cfg_version)]
+#![cfg_attr(not(version("1.87")), feature(unsigned_is_multiple_of))]
 
 use core::ffi::c_int;
 
