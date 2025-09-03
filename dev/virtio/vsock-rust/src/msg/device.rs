@@ -231,7 +231,7 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: ClientI
         .priority(Priority::HIGH)
         .spawn(move || {
             let ret = crate::vsock::vsock_rx_loop(device_for_rx);
-            debug!("vsock_rx_loop returned {:?}", ret);
+            debug!("vsock_rx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
         .expect("Failed to spawn thread for virtio_vsock_rx loop");
@@ -241,7 +241,7 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: ClientI
         .priority(Priority::HIGH)
         .spawn(move || {
             let ret = crate::vsock::vsock_tx_loop(device_for_tx, None);
-            debug!("vsock_tx_loop returned {:?}", ret);
+            debug!("vsock_tx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
         .expect("Failed to spawn thread for virtio_vsock_tx loop");

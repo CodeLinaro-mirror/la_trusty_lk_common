@@ -459,7 +459,7 @@ where
             data_len -= 1;
         }
         let port_name = &buffer[0..data_len];
-        info!("port_name is {:?}", port_name);
+        info!("port_name is {port_name:?}");
 
         // should not contain any null bytes
         c.tipc_port_name = CString::new(port_name).ok();
@@ -736,7 +736,7 @@ where
                     debug_assert!(connection.state == VsockConnectionState::TipcOnly);
 
                     if let Err(e) = device.handle_set.attach(&mut connection.href) {
-                        error!("failed to attach connection: {:?}", e);
+                        error!("failed to attach connection: {e:?}");
                         device.vsock_send_reset(connection.peer, connection.local_port);
                         return ConnectionStateAction::Remove;
                     }
@@ -1011,7 +1011,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .stack_size(stack_size)
         .spawn(move || {
             let ret = vsock_rx_loop(device_for_rx);
-            error!("vsock_rx_loop returned {:?}", ret);
+            error!("vsock_rx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;
@@ -1022,7 +1022,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .stack_size(stack_size)
         .spawn(move || {
             let ret = vsock_tx_loop(device_for_tx, sp_id);
-            error!("vsock_tx_loop returned {:?}", ret);
+            error!("vsock_tx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;
