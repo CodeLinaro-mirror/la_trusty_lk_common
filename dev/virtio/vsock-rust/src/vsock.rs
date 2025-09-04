@@ -100,21 +100,11 @@ const PORT_MAP: &[TipcPort] = &[
     // Reserved privileged ports
     // connections on port zero must send port name in first packet
     TipcPort { port: 0, name: c"" },
-    // temporary workaround to not change the port 1 to port 0
-    TipcPort { port: 1, name: c"" },
     // Privileged ports
     #[cfg(feature = "authmgr")]
-    TipcPort { port: 2, name: c"com.android.trusty.authmgr" },
-    #[cfg(feature = "hwcrypto_hal")]
-    TipcPort { port: 3, name: c"com.android.trusty.hwcryptooperations" },
-    #[cfg(feature = "hwcrypto_hal")]
-    TipcPort { port: 4, name: c"com.android.trusty.rust.hwcryptohal.V1" },
-    #[cfg(feature = "securestorage_hal")]
-    TipcPort { port: 5, name: c"com.android.trusty.securestorage" },
+    TipcPort { port: 1, name: c"ahss.authmgr.IAuthMgrAuthorization/default.bnd" },
     #[cfg(feature = "widevine_aidl_comm")]
     TipcPort { port: 6, name: c"com.android.trusty.widevine.transact" },
-    #[cfg(feature = "securestorage_hal")]
-    TipcPort { port: 7, name: c"com.android.trusty.storage.proxy" },
     #[cfg(feature = "gatekeeper")]
     TipcPort { port: 8, name: c"com.android.trusty.gatekeeper" },
     #[cfg(feature = "keymint")]
@@ -130,13 +120,22 @@ fn get_port_name(port: u32) -> Option<&'static CStr> {
     PORT_MAP.iter().find(|entry| entry.port == port).map(|entry| entry.name)
 }
 
+// Different targets may support different vsock transports so we need this attribute to avoid
+// breaking the build for targets that only construct a subset of them.
+#[allow(dead_code)]
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub(crate) enum TransportKind {
+    DriverFFAMsg(u16),
+    DeviceFFAMsg,
+    DriverPCI,
+}
+
 struct TipcToVsockMapping {
     /// Local port name to listen on.
     name: &'static CStr,
 
-    /// Secure partition ID to connect to using virtio-msg-ffa,
-    /// or `None` to use any other transport.
-    sp_id: Option<u16>,
+    /// Kind of transport used to connect to the destination.
+    transport_kind: TransportKind,
 
     /// Destination address to connect to.
     addr: VsockAddr,
@@ -146,28 +145,39 @@ struct TipcToVsockMapping {
     allowed_uuids: &'static [Uuid],
 }
 
+// TODO (b/433489263): get this from FFA_PARTITION_INFO_GET
 #[allow(dead_code)]
 const TRUSTY_SP_ID: u16 = 0x8001u16;
 
 const TIPC_TO_VSOCK_MAPPINGS: &[TipcToVsockMapping] = &[
-    #[cfg(TEST_BUILD)]
+    #[cfg(feature = "tipc_vsock_forwarder")]
     TipcToVsockMapping {
         name: c"com.android.trusty.vsock.forwarder",
-        sp_id: Some(TRUSTY_SP_ID),
+        transport_kind: TransportKind::DriverFFAMsg(TRUSTY_SP_ID),
         addr: VsockAddr { cid: 2, port: 0 },
         allowed_uuids: &[],
     },
     #[cfg(feature = "tipc_vsock_authmgr")]
     TipcToVsockMapping {
-        name: c"ahss.authmgr.IAuthManagerAuthorization/default.bnd",
-        sp_id: Some(TRUSTY_SP_ID),
+        name: c"ahss.authmgr.IAuthMgrAuthorization/default.bnd",
+        transport_kind: TransportKind::DriverFFAMsg(TRUSTY_SP_ID),
         addr: VsockAddr { cid: 2, port: 1 },
-        allowed_uuids: &[Uuid::new(
-            0x9b3c1e9e,
-            0x1808,
-            0x4b98,
-            [0x8f, 0xa9, 0x85, 0x92, 0xdf, 0xf3, 0xa3, 0x37],
-        )],
+        allowed_uuids: &[
+            Uuid::new(
+                // trusty/user/app/authmgr/authmgr-fe/app/manifest.json
+                0x9b3c1e9e,
+                0x1808,
+                0x4b98,
+                [0x8f, 0xa9, 0x85, 0x92, 0xdf, 0xf3, 0xa3, 0x37],
+            ),
+            Uuid::new(
+                // trusty/user/app/authmgr/authmgr-be/lib/manifest.json
+                0x1c966e25,
+                0x7729,
+                0x4122,
+                [0x8f, 0xb6, 0xcc, 0xd2, 0xb6, 0x12, 0x43, 0x0c],
+            ),
+        ],
     },
 ];
 
@@ -449,7 +459,7 @@ where
             data_len -= 1;
         }
         let port_name = &buffer[0..data_len];
-        info!("port_name is {:?}", port_name);
+        info!("port_name is {port_name:?}");
 
         // should not contain any null bytes
         c.tipc_port_name = CString::new(port_name).ok();
@@ -458,10 +468,13 @@ where
         self.vsock_connect_tipc(c)
     }
 
-    fn create_tipc_ports(&self, sp_id: Option<u16>) -> [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] {
+    fn create_tipc_ports(
+        &self,
+        transport_kind: TransportKind,
+    ) -> [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] {
         let mut port_hrefs: [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] = Default::default();
         for (port, phref) in TIPC_TO_VSOCK_MAPPINGS.iter().zip(port_hrefs.iter_mut()) {
-            if port.sp_id != sp_id {
+            if port.transport_kind != transport_kind {
                 continue;
             }
 
@@ -726,7 +739,7 @@ where
                     debug_assert!(connection.state == VsockConnectionState::TipcOnly);
 
                     if let Err(e) = device.handle_set.attach(&mut connection.href) {
-                        error!("failed to attach connection: {:?}", e);
+                        error!("failed to attach connection: {e:?}");
                         device.vsock_send_reset(connection.peer, connection.local_port);
                         return ConnectionStateAction::Remove;
                     }
@@ -813,13 +826,16 @@ where
     }
 }
 
-pub(crate) fn vsock_tx_loop<M>(device: Arc<VsockDevice<M>>, sp_id: Option<u16>) -> Result<(), Error>
+pub(crate) fn vsock_tx_loop<M>(
+    device: Arc<VsockDevice<M>>,
+    transport_kind: TransportKind,
+) -> Result<(), Error>
 where
     M: VsockManager,
 {
     debug!("starting vsock_tx_loop");
 
-    let mut port_hrefs = device.create_tipc_ports(sp_id);
+    let mut port_hrefs = device.create_tipc_ports(transport_kind);
     let mut timeout = Duration::MAX;
     let ten_secs = Duration::from_secs(10);
     let mut tx_buffer = vec![0u8; PAGE_SIZE].into_boxed_slice();
@@ -987,7 +1003,7 @@ where
 
 pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
     driver: VirtIOSocket<H, T, 4096>,
-    sp_id: Option<u16>,
+    transport_kind: TransportKind,
 ) -> Result<(), Error> {
     let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
     let device_for_rx = Arc::new(VsockDevice::new(manager));
@@ -1001,7 +1017,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .stack_size(stack_size)
         .spawn(move || {
             let ret = vsock_rx_loop(device_for_rx);
-            error!("vsock_rx_loop returned {:?}", ret);
+            error!("vsock_rx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;
@@ -1011,8 +1027,8 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_tx_loop(device_for_tx, sp_id);
-            error!("vsock_tx_loop returned {:?}", ret);
+            let ret = vsock_tx_loop(device_for_tx, transport_kind);
+            error!("vsock_tx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;

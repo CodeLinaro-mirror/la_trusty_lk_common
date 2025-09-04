@@ -203,8 +203,7 @@ impl VirtioMsgDevice {
                     // about warn! taking a reference to a field in a packed structure
                     let new_status = req.status;
                     warn!(
-                        "virtio-msg driver attempted invalid transition to status {:x?}",
-                        new_status
+                        "virtio-msg driver attempted invalid transition to status {new_status:x?}"
                     );
                     // virtio-msg protocol doesn't accept a response here
                     return Err(LkError::ERR_INVALID_ARGS);
@@ -225,7 +224,7 @@ impl VirtioMsgDevice {
                 debug!("received virtio-msg set_features request {req:x?}");
                 let requested_features = req.features[0];
                 if requested_features & SUPPORTED_VIRTIO_FEATURES != SUPPORTED_VIRTIO_FEATURES {
-                    warn!("driver does not support required features: {:x?}", requested_features);
+                    warn!("driver does not support required features: {requested_features:x?}");
                 }
                 // TODO: don't force F_ACCESS_PLATFORM once virtio-drivers accepts it
                 let negotiated_features =
