@@ -21,7 +21,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use crate::sys::uuid_t;
+pub use crate::sys::uuid_t;
 
 // TODO: split this into a separate trusty module to share bindings with userspace
 #[derive(Debug, PartialEq, Eq)]
@@ -35,5 +35,17 @@ impl Uuid {
         clock_seq_and_node: [u8; 8],
     ) -> Self {
         Self(uuid_t { time_low, time_mid, time_hi_and_version, clock_seq_and_node })
+    }
+}
+
+impl uuid_t {
+    pub fn kernel() -> Self {
+        // SAFETY: This is a bindgen-generated static which is known to be constant
+        unsafe { crate::sys::kernel_uuid }
+    }
+
+    pub fn zero() -> Self {
+        // SAFETY: This is a bindgen-generated static which is known to be constant
+        unsafe { crate::sys::zero_uuid }
     }
 }
