@@ -39,6 +39,14 @@
 #include <lk/init.h>
 #include <lk/main.h>
 
+#ifndef PRIMARY_BOOTSTRAP2_STACK_SIZE
+#define PRIMARY_BOOTSTRAP2_STACK_SIZE DEFAULT_STACK_SIZE
+#endif
+
+#ifndef SECONDARY_BOOTSTRAP2_STACK_SIZE
+#define SECONDARY_BOOTSTRAP2_STACK_SIZE DEFAULT_STACK_SIZE
+#endif
+
 /* saved boot arguments from whoever loaded the system */
 ulong lk_boot_args[4];
 
@@ -116,7 +124,9 @@ void lk_main(ulong arg0, ulong arg1, ulong arg2, ulong arg3)
 
     // create a thread to complete system initialization
     dprintf(SPEW, "creating bootstrap completion thread\n");
-    thread_t *t = thread_create("bootstrap2", &bootstrap2, NULL, DEFAULT_PRIORITY, DEFAULT_STACK_SIZE);
+    thread_t *t = thread_create("bootstrap2",
+                                &bootstrap2, NULL, DEFAULT_PRIORITY,
+                                PRIMARY_BOOTSTRAP2_STACK_SIZE);
     if (!t) {
         panic("Failed to start bootstrap completion thread\n");
     }
@@ -191,7 +201,7 @@ void lk_init_secondary_cpus(uint secondary_cpu_count)
         dprintf(SPEW, "creating bootstrap completion thread for cpu %d\n", i + 1);
         thread_t *t = thread_create("secondarybootstrap2",
                                     &secondary_cpu_bootstrap2, NULL,
-                                    DEFAULT_PRIORITY, DEFAULT_STACK_SIZE);
+                                    DEFAULT_PRIORITY, SECONDARY_BOOTSTRAP2_STACK_SIZE);
         if (!t) {
             dprintf(CRITICAL,
                     "Failed to start bootstrap completion thread for cpu %d\n",

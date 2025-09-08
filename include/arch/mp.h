@@ -24,8 +24,17 @@
 
 #include <sys/types.h>
 #include <kernel/mp.h>
+#include <platform/interrupts.h>
 
 /* send inter processor interrupt, if supported */
 status_t arch_mp_send_ipi(mp_cpu_mask_t target, mp_ipi_t ipi);
+
+/**
+ * arch_mp_register_ipi_handler() - Register a handler for one of the IPIs
+ * @ipi: One of the IPIs from &enum mp_ipi.
+ * @handler: Function to call when receiving @ipi.
+ * @arg: Argument for the handler.
+ */
+void arch_mp_register_ipi_handler(mp_ipi_t ipi, int_handler handler, void *arg);
 
 void arch_mp_init_percpu(void);
