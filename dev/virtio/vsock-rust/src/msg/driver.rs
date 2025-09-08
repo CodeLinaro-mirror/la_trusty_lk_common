@@ -21,6 +21,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+use crate::msg::driver::hal::VsockMemAllocator;
 use crate::msg::driver::requests::{VirtioMsgReq, VirtioMsgResp};
 use crate::msg::VIRTIO_MSG_FFA_UUID;
 use crate::sys::{
@@ -42,6 +43,7 @@ use static_assertions::const_assert_eq;
 use virtio_drivers_and_devices::transport::DeviceType;
 use virtio_drivers_and_devices::{BufferDirection, PhysAddr};
 
+mod hal;
 mod requests;
 
 type Result<T> = core::result::Result<T, LkError>;
@@ -87,12 +89,14 @@ struct SharedHeap {
     paddr: PhysAddr,
     vaddr: usize,
     shared: bool,
+    allocator: VsockMemAllocator,
 }
 
 impl SharedHeap {
     const fn new() -> Self {
-        Self { paddr: 0, vaddr: 0, shared: false }
+        Self { paddr: 0, vaddr: 0, shared: false, allocator: VsockMemAllocator::new() }
     }
+
     fn init(&mut self, heap_size: usize, area_id: u8) -> Result<()> {
         if self.shared {
             return Err(LkError::ERR_ALREADY_STARTED);
@@ -118,6 +122,8 @@ impl SharedHeap {
         };
         let req = VirtioMsgReq::area_share(u32::from(area_id), ffa_handle.get());
         send_virtio_msg_request(req)?;
+
+        self.allocator.init(num_pages)?;
 
         self.paddr = paddr;
         self.vaddr = vaddr;
