@@ -45,6 +45,7 @@ use virtio_drivers_and_devices::{BufferDirection, PhysAddr};
 
 mod hal;
 mod requests;
+mod transport;
 
 type Result<T> = core::result::Result<T, LkError>;
 
