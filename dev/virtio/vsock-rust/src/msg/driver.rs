@@ -21,14 +21,16 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use crate::msg::driver::hal::VsockMemAllocator;
+use crate::msg::driver::hal::{MsgHal, VsockMemAllocator};
 use crate::msg::driver::requests::{VirtioMsgReq, VirtioMsgResp};
+use crate::msg::driver::transport::FFAMsgTransport;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
 use crate::sys::{
     bus_activate_resp as BusActivateResp, bus_configure_resp as BusConfigureResp,
     get_device_info_resp as GetDeviceInfoResp, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP,
     VIRTIO_MSG_FFA_FEATURE_NUM_SHM, VIRTIO_MSG_FFA_VERSION_1_0,
 };
+use crate::vsock::{vsock_init, TransportKind};
 use arm_ffa::{msg_send_direct_req2, partition_info_get_count, partition_info_get_desc};
 use core::ffi::c_uint;
 use core::mem::MaybeUninit;
@@ -40,6 +42,7 @@ use rust_support::mmu::{ARCH_MMU_FLAG_PERM_NO_EXECUTE, PAGE_SIZE};
 use rust_support::sync::Mutex;
 use rust_support::{Error as LkError, LK_INIT_HOOK};
 use static_assertions::const_assert_eq;
+use virtio_drivers_and_devices::device::socket::VirtIOSocket;
 use virtio_drivers_and_devices::transport::DeviceType;
 use virtio_drivers_and_devices::{BufferDirection, PhysAddr};
 
@@ -212,7 +215,7 @@ fn validate_features(features: u64, req_num_shm: u8) -> Result<()> {
 
 fn driver_init() -> Result<()> {
     // Call FFA_PARTITION_INFO_GET to get the FFA ID for the partition with the virtio-msg device
-    init_receiver_id()?;
+    let ffa_id = init_receiver_id()?;
 
     // Send an activate request to the virtio-msg device over FFA
     let activate_resp = activate_device(VIRTIO_MSG_FFA_VERSION_1_0).inspect_err(|e| {
@@ -261,6 +264,19 @@ fn driver_init() -> Result<()> {
             info!("ignoring unexpected non-vsock virtio-msg device with type {dev_ty:?}");
             continue;
         }
+        // Since virtio-driver Transport trait doesn't allow specifying a device ID we need to
+        // create a FFAMsgTransport for each vsock device
+        let transport = FFAMsgTransport::new(dev_id);
+        // Use page sized buffers for the rx virtqueue
+        let driver: VirtIOSocket<MsgHal, FFAMsgTransport, { PAGE_SIZE as usize }> =
+            VirtIOSocket::new(transport).map_err(|e| {
+                error!("could not create VirtIOSocket {e:?}");
+                LkError::ERR_GENERIC
+            })?;
+        vsock_init(driver, TransportKind::DriverFFAMsg(ffa_id)).map_err(|e| {
+            error!("vsock_init failed {e:?}");
+            LkError::ERR_GENERIC
+        })?;
     }
 
     Ok(())
