@@ -768,26 +768,39 @@ where
                         // 1. `TipcConnecting`: The underlying TIPC connection is not yet ready.
                         //    Requeuing the event here fixes a race condition (b/406418102) and
                         //    allows the client to use the standard vsock protocol which does not
-                        //    include a way to tell the peer to retry the connection attempt.
+                        //    include a way to tell the peer to retry the connection attempt. In the
+                        //    case where the TIPC port name will be sent in the first message the
+                        //    client should wait for the status byte so we send a reset if we get
+                        //    data in this state.
                         // 2. `TipcSendBlocked`: The TIPC connection is ready but last attempt to
                         //    send data on the connection blocked due to lack of buffer space.
                         VsockConnection { state: VsockConnectionState::TipcConnecting, .. }
                         | VsockConnection {
                             state: VsockConnectionState::TipcSendBlocked, ..
                         } => {
-                            // requeue pending event.
-                            pending.push_back(VsockEvent {
-                                source,
-                                destination,
-                                event_type,
-                                buffer_status,
-                            });
-                            // NOTE: on one hand, we want to wait for the tipc connection to become ready
-                            // or unblocked. on the other, we want to pick up incoming events as soon as we
-                            // can...
-                            // TODO: We could wait on an event here rather than sleeping until tipc is ready.
-                            sleep(ten_ms);
-                            Ok(())
+                            // TODO (b/443749488): Make whether a port name is expected or not more
+                            // explicit in the VsockConnectionState
+                            let port_name_expected = get_port_name(lp) == Some(c"");
+                            if connection.state == VsockConnectionState::TipcConnecting
+                                && port_name_expected
+                            {
+                                warn!("got data while still waiting for tipc connection");
+                                Err(LkError::ERR_BAD_STATE.into())
+                            } else {
+                                // requeue pending event.
+                                pending.push_back(VsockEvent {
+                                    source,
+                                    destination,
+                                    event_type,
+                                    buffer_status,
+                                });
+                                // NOTE: on one hand, we want to wait for the tipc connection to become ready
+                                // or unblocked. on the other, we want to pick up incoming events as soon as we
+                                // can...
+                                // TODO: We could wait on an event here rather than sleeping until tipc is ready.
+                                sleep(ten_ms);
+                                Ok(())
+                            }
                         }
                         VsockConnection { state: s, .. } => {
                             error!("got data for connection in state {s:?}");
@@ -887,6 +900,16 @@ where
                 );
                 info!("connected to {}, remote {:?}", c.tipc_port_name(), c.peer.port);
                 c.state = VsockConnectionState::Active;
+
+                // Send a status byte as the first message for ports that expect a TIPC port name in the
+                // first message to signal a successful connection to the client.
+                if get_port_name(c.local_port) == Some(c"") {
+                    let buffer = [0u8];
+                    let res = device.connection_manager.lock().send(c.peer, c.local_port, &buffer);
+                    if res.is_err() {
+                        warn!("failed to send connected status message");
+                    }
+                }
             }
             if href.emask() & IPC_HANDLE_POLL_MSG != 0 {
                 // Print stats if we don't send any more packets for a while
