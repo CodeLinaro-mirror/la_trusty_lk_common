@@ -55,6 +55,7 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	fwrite \
 	handle_close \
 	handle_decref \
+	handle_incref \
 	handle_set_detach_ref \
 	handle_set_attach \
 	handle_set_create \
