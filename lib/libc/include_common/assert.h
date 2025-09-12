@@ -40,7 +40,7 @@
 #define assert(e) DEBUG_ASSERT(e)
 
 #ifndef __cplusplus
-#define static_assert(e) STATIC_ASSERT(e)
+#define static_assert(args...) STATIC_ASSERT(args)
 #endif
 
 #endif
