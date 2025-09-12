@@ -48,6 +48,7 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
+	event_destroy \
 	event_init \
 	event_signal \
 	event_wait_timeout \

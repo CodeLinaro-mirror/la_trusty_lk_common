@@ -21,7 +21,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use crate::sys::{event_init, event_signal, event_wait_timeout};
+use crate::sys::{event_destroy, event_init, event_signal, event_wait_timeout};
 use crate::sys::{event_t, lk_time_t, status_t, uint};
 use crate::Error;
 use crate::INFINITE_TIME;
@@ -84,3 +84,12 @@ unsafe impl Sync for Event {}
 // SAFETY: Event is heap allocated so it may be freely sent across threads without invalidating it.
 // It may also be waited on and signaled from any thread.
 unsafe impl Send for Event {}
+
+impl Drop for Event {
+    fn drop(&mut self) {
+        // SAFETY: The event_t was initialized to a valid value in Event::new. We know Other threads
+        // are not waiting on the Event at this point since this is the Drop impl (although
+        // event_destroy allows that anyway by resuming those threads).
+        unsafe { event_destroy(self.0.get()) }
+    }
+}
