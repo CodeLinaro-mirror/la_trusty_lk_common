@@ -22,11 +22,13 @@
  */
 
 use crate::sys::{event_init, event_signal, event_wait_timeout};
-use crate::sys::{event_t, status_t, uint};
+use crate::sys::{event_t, lk_time_t, status_t, uint};
+use crate::Error;
 use crate::INFINITE_TIME;
 use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::mem;
+use core::time::Duration;
 
 pub use crate::sys::EVENT_FLAG_AUTOUNSIGNAL;
 
@@ -53,6 +55,17 @@ impl Event {
     pub fn wait(&self) -> status_t {
         // SAFETY: One or more threads are allowed to wait for an event to be signaled
         unsafe { event_wait_timeout(self.0.get(), INFINITE_TIME) }
+    }
+
+    pub fn wait_timeout(&self, timeout: Duration) -> Result<(), Error> {
+        let timeout_ms: lk_time_t =
+            timeout.as_millis().try_into().map_err(|_| Error::ERR_INVALID_ARGS)?;
+        // SAFETY: One or more threads are allowed to wait for an event to be signaled
+        let rc = unsafe { event_wait_timeout(self.0.get(), timeout_ms) };
+        if rc < 0 {
+            Error::from_lk(rc)?;
+        }
+        Ok(())
     }
 
     pub fn signal(&self) -> status_t {
