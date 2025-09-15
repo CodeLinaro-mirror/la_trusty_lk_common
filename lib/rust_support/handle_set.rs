@@ -21,6 +21,8 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+use core::ffi::c_void;
+use core::marker::PhantomData;
 use core::time::Duration;
 
 use crate::Error;
@@ -37,7 +39,8 @@ use crate::sys::handle_wait;
 
 use crate::handle::HandleRef;
 
-pub struct HandleSet(*mut handle);
+/// A handle set where the cookies are have type `*mut T`.
+pub struct HandleSet<T: 'static = c_void>(*mut handle, PhantomData<*mut T>);
 
 fn duration_as_ms(dur: Duration) -> Result<u32, Error> {
     match dur {
@@ -47,17 +50,17 @@ fn duration_as_ms(dur: Duration) -> Result<u32, Error> {
 }
 
 #[allow(clippy::new_without_default)]
-impl HandleSet {
+impl<T: 'static> HandleSet<T> {
     pub fn new() -> Self {
         // Safety: `handle_set_create` places no preconditions on callers.
         let handle = unsafe { handle_set_create() };
         if handle.is_null() {
             panic!("handle_set_create failed.");
         }
-        Self(handle)
+        Self(handle, PhantomData)
     }
 
-    pub fn attach(&self, href: &mut HandleRef) -> Result<(), Error> {
+    pub fn attach(&self, href: &mut HandleRef<T>) -> Result<(), Error> {
         assert!(!href.is_attached(), "HandleRef is already attached.");
         // Safety:
         // `self` contains a properly initialized handle
@@ -68,7 +71,7 @@ impl HandleSet {
         Ok(())
     }
 
-    pub fn handle_set_wait(&self, href: &mut HandleRef, timeout: Duration) -> Result<(), Error> {
+    pub fn handle_set_wait(&self, href: &mut HandleRef<T>, timeout: Duration) -> Result<(), Error> {
         let timeout = duration_as_ms(timeout)?;
         // Safety:
         // `self` contains a properly initialized handle
@@ -87,7 +90,7 @@ impl HandleSet {
     }
 }
 
-impl Drop for HandleSet {
+impl<T: 'static> Drop for HandleSet<T> {
     fn drop(&mut self) {
         // Safety:
         // `handle_set_create` returned a valid handle that wasn't closed already.
@@ -97,8 +100,8 @@ impl Drop for HandleSet {
 
 // Safety: the kernel synchronizes operations on handle sets so they can be passed
 // from one thread to another
-unsafe impl Send for HandleSet {}
+unsafe impl<T: 'static + Sync + Send> Send for HandleSet<T> {}
 
 // Safety: the kernel synchronizes operations on handle sets so it is safe to share
 // handle sets between threads
-unsafe impl Sync for HandleSet {}
+unsafe impl<T: 'static + Sync + Send> Sync for HandleSet<T> {}

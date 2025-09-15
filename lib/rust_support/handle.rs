@@ -24,6 +24,7 @@
 use alloc::boxed::Box;
 
 use core::ffi::c_void;
+use core::marker::PhantomData;
 use core::ptr::null_mut;
 
 pub use crate::sys::handle_close;
@@ -76,14 +77,23 @@ impl Default for handle_ref {
 // TODO: add Unpin as a negative trait bound once the rustc feature is stabilized.
 // impl !Unpin for handle_ref {}
 
-#[derive(Default)]
-pub struct HandleRef {
+/// A handle_ref with a cookie of type `*mut T`.
+pub struct HandleRef<T: 'static = c_void> {
     // Box the `handle_ref` so it doesn't get moved with the `HandleRef`
     inner: Box<handle_ref>,
     owns_refcount: bool,
+    _cookiep: PhantomData<*mut T>,
 }
 
-impl HandleRef {
+// Default must be manually derived since #[derive(Default)] assumes T: Default even though it's not
+// necessary since HandleRef<T> does not contain a T.
+impl<T: 'static> Default for HandleRef<T> {
+    fn default() -> Self {
+        Self { inner: Box::default(), owns_refcount: false, _cookiep: PhantomData }
+    }
+}
+
+impl<T: 'static> HandleRef<T> {
     /// Grabs a refcount to the handle and returns a HandleRef
     ///
     /// # Safety
@@ -145,12 +155,12 @@ impl HandleRef {
         Box::as_mut_ptr(&mut self.inner)
     }
 
-    pub fn cookie(&self) -> *mut c_void {
-        self.inner.cookie
+    pub fn cookie(&self) -> *mut T {
+        self.inner.cookie.cast::<T>()
     }
 
-    pub fn set_cookie(&mut self, cookie: *mut c_void) {
-        self.inner.cookie = cookie;
+    pub fn set_cookie(&mut self, cookie: *mut T) {
+        self.inner.cookie = cookie.cast::<c_void>();
     }
 
     pub fn emask(&self) -> u32 {
@@ -174,7 +184,8 @@ impl HandleRef {
     }
 }
 
-impl Drop for HandleRef {
+// HandleRef<T> does not have ownership of its cookie so it does not need to run T Drop code.
+impl<T: 'static> Drop for HandleRef<T> {
     fn drop(&mut self) {
         self.detach();
         // Release the refcount grabbed by `HandleRef::new`
@@ -190,8 +201,8 @@ impl Drop for HandleRef {
 
 // Safety: the kernel synchronizes operations on handle refs so they can be passed
 // from one thread to another
-unsafe impl Send for HandleRef {}
+unsafe impl<T: 'static + Sync + Send> Send for HandleRef<T> {}
 
 // Safety: the kernel synchronizes operations on handle refs so it safe to share
 // references between threads
-unsafe impl Sync for HandleRef {}
+unsafe impl<T: 'static + Sync + Send> Sync for HandleRef<T> {}
