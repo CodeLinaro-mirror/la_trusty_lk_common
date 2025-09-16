@@ -23,6 +23,7 @@
 
 use alloc::boxed::Box;
 
+use core::cell::UnsafeCell;
 use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::ptr::null_mut;
@@ -71,6 +72,34 @@ impl Default for handle_ref {
         }
     }
 }
+
+/// An optional wrapper to create custom handle_ref cookies.
+///
+/// Moving this type does not change the pointee's address so it may be used as a cookie. Other
+/// types with stable addresses may also be used as cookies so `HandleRef::set_cookie` accepts a
+/// `*mut T` and this type provides an `as_mut_ptr` method to access its `*mut T`.
+#[derive(Default)]
+pub struct HandleCookie<T>(Box<UnsafeCell<T>>);
+
+impl<T> HandleCookie<T> {
+    pub fn new(t: T) -> Self {
+        Self(Box::new(UnsafeCell::new(t)))
+    }
+
+    pub fn as_mut_ptr(&self) -> *mut T {
+        self.0.get()
+    }
+}
+
+// TODO: Replace UnsafeCell in HandleCookie with SyncUnsafeCell when it becomes stabilized to remove
+// this Sync impl (they have the exact same safety rationale).
+// SAFETY: UnsafeCell doesn't impl Sync to prevent accidental mis-use, but HandleCookie
+// intentionally implements it to allow sharing between threads. Since the HandleSet which users
+// wait on to update the HandleRef with the cookie already implement Sync the cookie can already be
+// shared between threads. It is up to the user of the cookie to ensure proper synchronization when
+// accessing the pointer. Unlike SyncUnsafeCell this has the additional `'static` bound to prevent
+// making cookies from references to local variables.
+unsafe impl<T: 'static + Sync> Sync for HandleCookie<T> {}
 
 // `handle_ref`s should not move since they are inserted as nodes in linked lists
 // and the kernel may write back to the non-node fields as well.
