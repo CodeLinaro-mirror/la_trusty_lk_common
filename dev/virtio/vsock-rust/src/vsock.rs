@@ -1020,7 +1020,8 @@ where
 
             warn!("got event for non-existent remote {}, was it closed?", href.id());
         });
-        href.handle_decref();
+        // SAFETY: The refcount was incremented by the handle_set_wait or handle_wait
+        unsafe { href.handle_decref() };
     }
 }
 

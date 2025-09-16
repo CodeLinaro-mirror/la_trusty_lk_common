@@ -121,7 +121,14 @@ impl HandleRef {
         }
     }
 
-    pub fn handle_decref(&mut self) {
+    /// Releases a refcount if the handle is non-null.
+    ///
+    /// # Safety
+    ///
+    /// The refcount must've been incremented at least once per call to `handle_decref`. This may
+    /// happen with `handle_incref` or through other functions that grab a refcount to the
+    /// `handle_ref` or `HandleRef`.
+    pub unsafe fn handle_decref(&mut self) {
         if self.inner.handle.is_null() {
             panic!("handle is null; can't decrease its reference count");
         }
@@ -172,7 +179,11 @@ impl Drop for HandleRef {
         self.detach();
         // Release the refcount grabbed by `HandleRef::new`
         if self.owns_refcount && !self.inner.handle.is_null() {
-            self.handle_decref();
+            // SAFETY: If owns_refcount is set then HandleRef::new was used to create this and it
+            // incremented the refcount.
+            unsafe {
+                self.handle_decref();
+            }
         }
     }
 }
