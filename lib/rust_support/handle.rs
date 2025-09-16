@@ -107,7 +107,7 @@ unsafe impl<T: 'static + Sync> Sync for HandleCookie<T> {}
 // impl !Unpin for handle_ref {}
 
 /// A handle_ref with a cookie of type `*mut T`.
-pub struct HandleRef<T: 'static = c_void> {
+pub struct HandleRef<T: 'static> {
     // Box the `handle_ref` so it doesn't get moved with the `HandleRef`
     inner: Box<handle_ref>,
     owns_refcount: bool,

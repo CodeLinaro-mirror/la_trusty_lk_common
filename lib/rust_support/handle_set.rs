@@ -21,7 +21,6 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::time::Duration;
 
@@ -40,7 +39,7 @@ use crate::sys::handle_wait;
 use crate::handle::HandleRef;
 
 /// A handle set where the cookies are have type `*mut T`.
-pub struct HandleSet<T: 'static = c_void>(*mut handle, PhantomData<*mut T>);
+pub struct HandleSet<T: 'static>(*mut handle, PhantomData<*mut T>);
 
 fn duration_as_ms(dur: Duration) -> Result<u32, Error> {
     match dur {

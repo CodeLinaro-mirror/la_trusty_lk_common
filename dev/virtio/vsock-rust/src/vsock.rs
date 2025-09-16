@@ -222,7 +222,7 @@ struct VsockConnection {
     local_port: u32,
     state: VsockConnectionState,
     tipc_port_name: Option<CString>,
-    href: HandleRef,
+    href: HandleRef<c_void>,
     tx_count: u64,
     tx_since_rx: u64,
     rx_count: u64,
@@ -440,7 +440,7 @@ where
     M: VsockManager,
 {
     connections: Mutex<Vec<VsockConnection>>,
-    handle_set: HandleSet,
+    handle_set: HandleSet<c_void>,
     connection_manager: Mutex<M>,
     vsock_drop: Arc<Event>,
     rx_event: Arc<VsockRxEvent>,
@@ -543,8 +543,8 @@ where
     fn create_tipc_ports(
         &self,
         transport_kind: TransportKind,
-    ) -> [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] {
-        let mut port_hrefs: [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] = Default::default();
+    ) -> [HandleRef<c_void>; TIPC_TO_VSOCK_MAPPINGS.len()] {
+        let mut port_hrefs: [HandleRef<c_void>; TIPC_TO_VSOCK_MAPPINGS.len()] = Default::default();
         for (port, phref) in TIPC_TO_VSOCK_MAPPINGS.iter().zip(port_hrefs.iter_mut()) {
             if port.transport_kind != transport_kind {
                 continue;
@@ -599,7 +599,7 @@ where
     fn tipc_connect_vsock(
         &self,
         port: &TipcToVsockMapping,
-        href: &mut HandleRef,
+        href: &mut HandleRef<c_void>,
     ) -> Result<VsockConnection, Error> {
         debug!("got tipc connection on {:?}", port.name);
 
