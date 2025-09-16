@@ -10,7 +10,7 @@
 
 mod err;
 mod hal;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(feature = "virtio_msg_device", feature = "virtio_msg_driver"))]
 mod msg;
 mod pci;
 mod vsock;

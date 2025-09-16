@@ -25,6 +25,9 @@ MODULE_LIBRARY_DEPS := \
 # `trusty-std` is for its `#[global_allocator]`.
 
 
+VSOCK_WITH_VIRTIO_MSG_DEVICE ?= false
+VSOCK_WITH_VIRTIO_MSG_DRIVER ?= false
+
 # hypervisor_backends supports arm64 and x86-64 only for now
 ifeq ($(SUBARCH),x86-64)
 MODULE_LIBRARY_DEPS += \
@@ -36,12 +39,12 @@ MODULE_LIBRARY_DEPS += \
 	packages/modules/Virtualization/libs/libhypervisor_backends \
 	trusty/kernel/lib/arm_ffa/rust \
 
-ifeq (false,$(call TOBOOL,$(TRUSTY_VM_GUEST)))
+endif
+
+ifeq (true,$(call TOBOOL,$(VSOCK_WITH_VIRTIO_MSG_DEVICE)))
 MODULE_LIBRARY_DEPS += \
 	trusty/kernel/lib/extmem/rust \
 	trusty/kernel/lib/sm/rust \
-
-endif
 
 endif
 
@@ -100,11 +103,14 @@ MODULE_RUSTFLAGS += \
 	--cfg 'feature="vintf_ta"' \
 
 endif
-ifeq (false,$(call TOBOOL,$(TRUSTY_VM_GUEST)))
+
+ifeq (true,$(call TOBOOL,$(VSOCK_WITH_VIRTIO_MSG_DEVICE)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="virtio_msg_device"' \
 
-else
+endif
+
+ifeq (true,$(call TOBOOL,$(VSOCK_WITH_VIRTIO_MSG_DRIVER)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="virtio_msg_driver"' \
 
