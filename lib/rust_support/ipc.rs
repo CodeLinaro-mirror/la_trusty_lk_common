@@ -36,7 +36,6 @@ pub use crate::sys::iovec_kern;
 pub use crate::sys::ipc_msg_info;
 pub use crate::sys::ipc_msg_kern;
 
-pub use crate::sys::zero_uuid;
 pub use crate::sys::IPC_CONNECT_WAIT_FOR_PORT;
 pub use crate::sys::IPC_PORT_ALLOW_NS_CONNECT;
 pub use crate::sys::IPC_PORT_ALLOW_TA_CONNECT;

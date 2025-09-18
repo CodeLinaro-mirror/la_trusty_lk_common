@@ -25,7 +25,7 @@ pub use crate::sys::ktipc_port_acl;
 pub use crate::sys::ktipc_server;
 pub use crate::sys::ktipc_server_init;
 pub use crate::sys::ktipc_server_start;
-pub use crate::sys::uuid;
+pub use peer_id::uuid;
 
 use core::ffi::CStr;
 use trusty_std::boxed::Box;
