@@ -59,7 +59,6 @@ use rust_support::ipc::ipc_port_publish;
 use rust_support::ipc::ipc_put_msg;
 use rust_support::ipc::ipc_read_msg;
 use rust_support::ipc::ipc_send_msg;
-use rust_support::ipc::zero_uuid;
 use rust_support::ipc::IPC_CONNECT_WAIT_FOR_PORT;
 use rust_support::ipc::IPC_PORT_ALLOW_TA_CONNECT;
 use rust_support::ipc::IPC_PORT_PATH_MAX;
@@ -69,6 +68,7 @@ use rust_support::thread::sleep;
 use rust_support::thread::Builder;
 use rust_support::thread::Priority;
 use rust_support::uuid::Uuid;
+use rust_support::uuid_t;
 use virtio_drivers_and_devices::device::socket::SocketError;
 use virtio_drivers_and_devices::device::socket::VirtIOSocket;
 use virtio_drivers_and_devices::device::socket::VsockAddr;
@@ -480,7 +480,7 @@ where
             }
 
             // Safety:
-            // - `sid` is a valid uuid because we use a bindgen'd constant
+            // - `sid` is a valid uuid with static lifetime
             // - `path` points to a null-terminated C-string. The null byte was appended by
             //   `CString::new`.
             // - `num_recv_bufs` is a primitive value.
@@ -490,7 +490,7 @@ where
             //   after the callee returns.
             let ret = unsafe {
                 ipc_port_create(
-                    &zero_uuid,
+                    uuid_t::zero(),
                     port.name.as_ptr(),
                     1,
                     PAGE_SIZE,
@@ -576,8 +576,10 @@ where
         }
 
         debug_assert!(!peer_uuid_ptr.is_null());
-        // Safety: `peer_uuid` is non-null and should point to a valid UUID by now
-        let peer_uuid = unsafe { Uuid(*peer_uuid_ptr) };
+        // Safety:
+        //   Since `ipc_port_accept` returned without error, it has stored into `peer_uuid_ptr` a
+        //   non-null pointer which is valid for reads of the type `uuid`.
+        let peer_uuid = unsafe { *peer_uuid_ptr }.into();
         if !port.allowed_uuids.is_empty() && !port.allowed_uuids.contains(&peer_uuid) {
             error!("client {:?} not allowed on {:?}: {ret} ", peer_uuid, port.name);
             c.href.handle_close();
@@ -604,7 +606,7 @@ where
         debug_assert!(port_name.count_bytes() < IPC_PORT_PATH_MAX as usize);
 
         // Safety:
-        // - `cid`` is a valid uuid because we use a bindgen'd constant
+        // - `sid`` is a valid uuid with static lifetime
         // - `path` points to a null-terminated C-string. The null byte was appended by
         //   `CString::new`.
         // - `max_path` is the length of `path` in bytes including the null terminator.
@@ -614,7 +616,7 @@ where
         //   after the callee returns.
         let ret = unsafe {
             ipc_port_connect_async(
-                &zero_uuid,
+                uuid_t::zero(),
                 port_name.as_ptr(),
                 port_name.count_bytes() + 1, /* count_bytes excludes null-byte */
                 IPC_CONNECT_WAIT_FOR_PORT,
