@@ -105,6 +105,11 @@ MODULE_RUSTFLAGS += \
 	--cfg 'feature="vintf_ta"' \
 
 endif
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_PLACEHOLDER_SHARED_SECRET)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="placeholder_shared_secret"' \
+
+endif
 
 ifeq (true,$(call TOBOOL,$(VSOCK_WITH_VIRTIO_MSG_DEVICE)))
 MODULE_RUSTFLAGS += \
