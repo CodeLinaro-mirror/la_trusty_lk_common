@@ -178,6 +178,13 @@ const TIPC_TO_VSOCK_MAPPINGS: &[TipcToVsockMapping] = &[
                 0x4122,
                 [0x8f, 0xb6, 0xcc, 0xd2, 0xb6, 0x12, 0x43, 0x0c],
             ),
+            Uuid::new(
+                // trusty/user/app/sample/vintf/app/manifest.json
+                0xd2d10228,
+                0x107c,
+                0x4f7b,
+                [0x9c, 0x52, 0x86, 0xdc, 0xe8, 0x00, 0x70, 0x49],
+            ),
         ],
     },
 ];
