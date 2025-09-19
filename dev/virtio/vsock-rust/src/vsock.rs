@@ -586,7 +586,7 @@ where
         // Safety:
         //   Since `ipc_port_accept` returned without error, it has stored into `peer_uuid_ptr` a
         //   non-null pointer which is valid for reads of the type `uuid`.
-        let peer_uuid = unsafe { *peer_uuid_ptr }.into();
+        let peer_uuid = unsafe { *peer_uuid_ptr };
         if !port.allowed_uuids.is_empty() && !port.allowed_uuids.contains(&peer_uuid) {
             error!("client {:?} not allowed on {:?}: {ret} ", peer_uuid, port.name);
             c.href.handle_close();
