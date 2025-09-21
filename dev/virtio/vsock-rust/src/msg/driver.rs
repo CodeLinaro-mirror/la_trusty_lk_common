@@ -32,11 +32,15 @@ use arm_ffa::{msg_send_direct_req2, partition_info_get_count, partition_info_get
 use core::ffi::c_uint;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU32, Ordering};
+use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use rust_support::init::lk_init_level;
+use rust_support::mmu::{ARCH_MMU_FLAG_PERM_NO_EXECUTE, PAGE_SIZE};
+use rust_support::sync::Mutex;
 use rust_support::{Error as LkError, LK_INIT_HOOK};
 use static_assertions::const_assert_eq;
 use virtio_drivers_and_devices::transport::DeviceType;
+use virtio_drivers_and_devices::{BufferDirection, PhysAddr};
 
 mod requests;
 
@@ -50,6 +54,76 @@ fn get_receiver_id() -> u16 {
     let receiver_id = RECEIVER_ID.load(Ordering::Relaxed);
     // u32::MAX is the initial sentinel value, but any valid value will fit in a u16
     receiver_id.try_into().expect("RECEIVER_ID has not been initialized")
+}
+
+// An arbitrary and easily identifiable area id which the main heap will always use. Once the
+// virtio-msg driver supports allocating memory on demand the other shared memory regions must make
+// sure to not use this area id.
+const INITIAL_AREA_ID: u8 = 0x1E;
+
+// This shared memory area contains the virtqueues so it cannot be unshared/deallocate until the
+// driver is torn down.
+lazy_static! {
+    static ref MAIN_HEAP: Mutex<SharedHeap> = Mutex::new(SharedHeap::new());
+}
+
+const VIRTIO_MSG_SHARED_MEMORY_SIZE: usize = {
+    let env_var = env!("VSOCK_VIRTIO_MSG_SHARED_MEMORY_SIZE");
+    let mem_size = match usize::from_str_radix(env_var, 10) {
+        Ok(num_vms) => num_vms,
+        Err(_) => panic!("could not convert VSOCK_VIRTIO_MSG_SHARED_MEMORY_SIZE to usize"),
+    };
+    let page_size = PAGE_SIZE as usize;
+    // Round up the size to a multiple of the page size
+    let num_pages = mem_size.div_ceil(page_size);
+    if num_pages < 14 {
+        panic!("VSOCK_VIRTIO_MSG_SHARED_MEMORY_SIZE should be at least 14 pages");
+    }
+    num_pages * page_size
+};
+
+#[derive(Debug)]
+struct SharedHeap {
+    paddr: PhysAddr,
+    vaddr: usize,
+    shared: bool,
+}
+
+impl SharedHeap {
+    const fn new() -> Self {
+        Self { paddr: 0, vaddr: 0, shared: false }
+    }
+    fn init(&mut self, heap_size: usize, area_id: u8) -> Result<()> {
+        if self.shared {
+            return Err(LkError::ERR_ALREADY_STARTED);
+        }
+        let num_pages = heap_size / PAGE_SIZE as usize;
+        if heap_size % PAGE_SIZE as usize != 0 {
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+        // Call the Trusty-specific DMA allocation function to pre-allocate memory which can be
+        // shared over FFA. The returned `SharedHeap` will then allocate out of this memory region
+        // to implement the virtio `Hal` trait's `dma_alloc` method. When pointers into this shared
+        // heap are created it's only for the virtqueues and descriptor buffers which synchronize
+        // accesses on both sides according to the virtio spec. We also prevent a situation where
+        // the other side can trigger UB in rust by always copying data into and out of the shared
+        // memory region instead of creating references directly to it.
+        let (paddr, vaddr) = crate::hal::dma_alloc(num_pages, BufferDirection::Both);
+        let vaddr = vaddr.as_ptr().addr();
+        let arch_mmu_flags = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
+        // SAFETY: This memory came from `vmm_alloc_contiguous` with the same arch_mmu_flags
+        // (NO_EXECUTE) used below so it's safe to share with another FFA endpoint.
+        let ffa_handle = unsafe {
+            arm_ffa::mem_share_kernel_buffer(get_receiver_id(), paddr, num_pages, arch_mmu_flags)?
+        };
+        let req = VirtioMsgReq::area_share(u32::from(area_id), ffa_handle.get());
+        send_virtio_msg_request(req)?;
+
+        self.paddr = paddr;
+        self.vaddr = vaddr;
+        self.shared = true;
+        Ok(())
+    }
 }
 
 fn init_receiver_id() -> Result<u16> {
@@ -163,6 +237,8 @@ fn driver_init() -> Result<()> {
     validate_features(configure_resp.features, 1).inspect_err(|e| {
         error!("failed to validate features bitmask {features:x?} {e}");
     })?;
+
+    MAIN_HEAP.lock().init(VIRTIO_MSG_SHARED_MEMORY_SIZE, INITIAL_AREA_ID)?;
 
     let num_devices = activate_resp.num as u16;
 

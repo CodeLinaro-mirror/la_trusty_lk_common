@@ -101,11 +101,11 @@ MODULE_RUSTFLAGS += \
 endif
 ifeq (false,$(call TOBOOL,$(TRUSTY_VM_GUEST)))
 MODULE_RUSTFLAGS += \
-	--cfg 'feature="virtio_device_side"' \
+	--cfg 'feature="virtio_msg_device"' \
 
 else
 MODULE_RUSTFLAGS += \
-	--cfg 'feature="virtio_driver_side"' \
+	--cfg 'feature="virtio_msg_driver"' \
 
 endif
 
