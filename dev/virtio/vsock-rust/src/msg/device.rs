@@ -33,6 +33,7 @@ use crate::msg::VIRTIO_MSG_FFA_UUID;
 use crate::sys::VIRTIO_CONFIG_S_DRIVER_OK;
 use crate::vsock::TransportKind;
 use crate::vsock::VsockDevice;
+use crate::FFAClientId;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -91,8 +92,6 @@ struct VirtQueue {
     pub avail_ring: BusAddress,
     pub used_ring: BusAddress,
 }
-
-type ClientId = u16;
 
 #[derive(Debug)]
 struct DeviceState {
@@ -175,7 +174,7 @@ impl VirtioMsgDevice {
 pub struct VirtioMsgTransport {
     // TODO(b/433488986): Replace this with a bus to support multiple devices per VM
     devices: [VirtioMsgDevice; VIRTIO_MSG_NUM_VMS],
-    vm_ids: IRQSpinLock<[Option<ClientId>; VIRTIO_MSG_NUM_VMS]>,
+    vm_ids: IRQSpinLock<[Option<FFAClientId>; VIRTIO_MSG_NUM_VMS]>,
     // This event is shared by all VMs to avoid creating a deferred init thread per VM
     device_init: Event,
 }
@@ -187,7 +186,7 @@ impl VirtioMsgTransport {
         Self { devices, vm_ids: IRQSpinLock::new_irq([None; VIRTIO_MSG_NUM_VMS]), device_init }
     }
 
-    pub fn get_device(&self, client_id: ClientId) -> &VirtioMsgDevice {
+    pub fn get_device(&self, client_id: FFAClientId) -> &VirtioMsgDevice {
         let mut vm_ids = self.vm_ids.lock_save();
 
         for (n, id) in vm_ids.iter().enumerate() {
@@ -218,7 +217,7 @@ lazy_static! {
     static ref TRANSPORT: VirtioMsgTransport = VirtioMsgTransport::new();
 }
 
-fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: ClientId) {
+fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: FFAClientId) {
     let transport = FFAMsgTransport::new(device, client_id);
     let virtio_socket_device = VirtIOSocketDevice::<TrustyDeviceHal, _>::new(transport).unwrap();
     let manager = VsockDeviceConnectionManager::new_with_capacity(virtio_socket_device, 4096);
@@ -231,7 +230,8 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: ClientI
         .name(c"virtio_vsock_rx")
         .priority(Priority::HIGH)
         .spawn(move || {
-            let ret = crate::vsock::vsock_rx_loop(device_for_rx);
+            let ret =
+                crate::vsock::vsock_rx_loop(device_for_rx, TransportKind::DeviceFFAMsg(client_id));
             debug!("vsock_rx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
@@ -241,7 +241,8 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: ClientI
         .name(c"virtio_vsock_tx")
         .priority(Priority::HIGH)
         .spawn(move || {
-            let ret = crate::vsock::vsock_tx_loop(device_for_tx, TransportKind::DeviceFFAMsg);
+            let ret =
+                crate::vsock::vsock_tx_loop(device_for_tx, TransportKind::DeviceFFAMsg(client_id));
             debug!("vsock_tx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })

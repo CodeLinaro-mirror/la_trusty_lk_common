@@ -87,6 +87,7 @@ use rust_support::handle_set::HandleSet;
 use rust_support::Error as LkError;
 
 use crate::err::Error;
+use crate::FFAClientId;
 
 const ACTIVE_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -125,8 +126,8 @@ fn get_port_name(port: u32) -> Option<&'static CStr> {
 #[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub(crate) enum TransportKind {
-    DriverFFAMsg(u16),
-    DeviceFFAMsg,
+    DriverFFAMsg(FFAClientId),
+    DeviceFFAMsg(FFAClientId),
     DriverPCI,
 }
 
@@ -690,7 +691,10 @@ where
     }
 }
 
-pub(crate) fn vsock_rx_loop<M>(device: Arc<VsockDevice<M>>) -> Result<(), Error>
+pub(crate) fn vsock_rx_loop<M>(
+    device: Arc<VsockDevice<M>>,
+    _transport_kind: TransportKind,
+) -> Result<(), Error>
 where
     M: VsockManager,
 {
@@ -1040,7 +1044,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_rx_loop(device_for_rx);
+            let ret = vsock_rx_loop(device_for_rx, transport_kind);
             error!("vsock_rx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })

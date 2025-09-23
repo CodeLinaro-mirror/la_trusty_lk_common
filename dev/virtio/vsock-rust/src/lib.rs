@@ -29,3 +29,6 @@ mod sys;
 
 pub use err::Error;
 pub use pci::pci_init_mmio;
+
+// FF-A partitions use 16-bit IDs
+type FFAClientId = u16;
