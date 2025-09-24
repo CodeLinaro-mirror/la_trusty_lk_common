@@ -133,6 +133,8 @@ const PORT_MAP: &[TipcPort] = &[
     TipcPort { port: 13, name: c"android.hardware.gatekeeper.IGateKeeper_with_thal" },
     #[cfg(feature = "placeholder_shared_secret")]
     TipcPort { port: 14, name: c"android.hardware.security.hwcrypto.sharedsecret/default.bnd" },
+    #[cfg(feature = "fingerguard")]
+    TipcPort { port: 15, name: c"com.android.desktop.trusty.fingerguard" },
 ];
 
 /// Finds the TIPC name associated with a given vsock port number.

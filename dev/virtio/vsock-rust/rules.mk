@@ -144,6 +144,11 @@ MODULE_RUSTFLAGS += --cfg 'feature="keymint_provisioning"'
 
 endif
 
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_FINGERGUARD)))
+MODULE_RUSTFLAGS += --cfg 'feature="fingerguard"'
+
+endif
+
 MODULE_RUST_USE_CLIPPY := true
 
 # TODO: These are the options used to generate new_bindings.rs from the latest version of the
