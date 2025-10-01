@@ -50,6 +50,7 @@ use extmem::ExtMemObj;
 use lazy_static::lazy_static;
 use log::debug;
 use log::trace;
+use peer_id::Uuid;
 use rust_support::event::Event;
 use rust_support::event::EVENT_FLAG_AUTOUNSIGNAL;
 use rust_support::init::lk_init_level;
@@ -57,7 +58,6 @@ use rust_support::spinlock::IRQSpinLock;
 use rust_support::sync::Mutex;
 use rust_support::thread;
 use rust_support::thread::Priority;
-use rust_support::uuid::uuid_t;
 use rust_support::Error as LkError;
 use rust_support::LK_INIT_HOOK;
 use sm::VmNotifier;
@@ -305,8 +305,7 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: FFAClie
     // Create a unique name based off the VM ID for the event_source
     let evt_name = "vsock-tx-loop-".to_string() + &client_id.to_string();
     let evt_name_with_nul = CString::new(evt_name).expect("client_id contains no internal 0 bytes");
-    let evt_source =
-        EventSource::create(evt_name_with_nul.clone(), vec![*uuid_t::kernel()]).unwrap();
+    let evt_source = EventSource::create(evt_name_with_nul.clone(), vec![*Uuid::kernel()]).unwrap();
 
     // Publish the event_source so the client can open it
     evt_source.publish().unwrap();
@@ -322,7 +321,7 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: FFAClie
     let device_for_tx = device_for_rx.clone();
 
     // Create the event_client for the tx loop
-    let evt_client = EventClient::open(&evt_name_with_nul, *uuid_t::kernel()).unwrap();
+    let evt_client = EventClient::open(&evt_name_with_nul, *Uuid::kernel()).unwrap();
 
     // The VM destruction callback only signals to the rx, tx and memory_unmap thread that the VM
     // was destroyed and then returns. Since the vsock rx/tx loops may be accessing the VM's memory

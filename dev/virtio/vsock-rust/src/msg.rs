@@ -27,7 +27,7 @@ use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::align_of;
 use core::mem::offset_of;
 use core::mem::size_of;
-use rust_support::uuid::Uuid;
+use peer_id::Uuid;
 use static_assertions::const_assert;
 use virtio_drivers_and_devices::PhysAddr;
 

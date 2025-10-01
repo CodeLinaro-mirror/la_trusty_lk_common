@@ -8,6 +8,7 @@ MODULE_EXPORT_INCLUDES += \
 	$(LOCAL_DIR)/include
 
 MODULE_LIBRARY_DEPS := \
+	trusty/kernel/lib/shared/peer_id/rust \
 	trusty/kernel/lib/rand/rust \
 	trusty/kernel/lib/trusty/rust \
 	trusty/user/base/lib/liballoc-rust \

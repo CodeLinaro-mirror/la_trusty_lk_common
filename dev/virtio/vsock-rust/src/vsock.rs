@@ -45,6 +45,7 @@ use log::error;
 use log::info;
 use log::warn;
 
+use peer_id::Uuid;
 use rand::rand_get_bytes;
 use rust_support::event::Event;
 use rust_support::event::EVENT_FLAG_AUTOUNSIGNAL;
@@ -71,8 +72,6 @@ use rust_support::thread;
 use rust_support::thread::sleep;
 use rust_support::thread::Builder;
 use rust_support::thread::Priority;
-use rust_support::uuid::Uuid;
-use rust_support::uuid_t;
 use trusty::EventClient;
 use virtio_drivers_and_devices::device::socket::SocketError;
 use virtio_drivers_and_devices::device::socket::VirtIOSocket;
@@ -561,7 +560,7 @@ where
             //   after the callee returns.
             let ret = unsafe {
                 ipc_port_create(
-                    uuid_t::zero(),
+                    Uuid::zero(),
                     port.name.as_ptr(),
                     1,
                     PAGE_SIZE,
@@ -687,7 +686,7 @@ where
         //   after the callee returns.
         let ret = unsafe {
             ipc_port_connect_async(
-                uuid_t::zero(),
+                Uuid::zero(),
                 port_name.as_ptr(),
                 port_name.count_bytes() + 1, /* count_bytes excludes null-byte */
                 IPC_CONNECT_WAIT_FOR_PORT,
