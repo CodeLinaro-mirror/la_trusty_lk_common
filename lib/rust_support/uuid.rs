@@ -25,7 +25,7 @@ pub use crate::sys::uuid_t;
 
 // TODO: split this into a separate trusty module to share bindings with userspace
 #[derive(Debug, PartialEq, Eq)]
-pub struct Uuid(pub uuid_t);
+pub struct Uuid(uuid_t);
 
 impl Uuid {
     pub const fn new(
@@ -36,16 +36,26 @@ impl Uuid {
     ) -> Self {
         Self(uuid_t { time_low, time_mid, time_hi_and_version, clock_seq_and_node })
     }
+
+    pub fn c_repr(self) -> uuid_t {
+        self.0
+    }
 }
 
 impl uuid_t {
-    pub fn kernel() -> Self {
+    pub fn kernel() -> &'static Self {
         // SAFETY: This is a bindgen-generated static which is known to be constant
-        unsafe { crate::sys::kernel_uuid }
+        unsafe { &crate::sys::kernel_uuid }
     }
 
-    pub fn zero() -> Self {
+    pub fn zero() -> &'static Self {
         // SAFETY: This is a bindgen-generated static which is known to be constant
-        unsafe { crate::sys::zero_uuid }
+        unsafe { &crate::sys::zero_uuid }
+    }
+}
+
+impl From<uuid_t> for Uuid {
+    fn from(uuid: uuid_t) -> Self {
+        Self(uuid)
     }
 }
