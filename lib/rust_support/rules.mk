@@ -182,6 +182,9 @@ MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
 MODULE_INCLUDES := $(LOCAL_DIR)
 
 MODULE_RUSTFLAGS += \
+	-A unpredictable-function-pointer-comparisons \
+
+MODULE_RUSTFLAGS += \
 	-A clippy::disallowed_names \
 	-A clippy::type-complexity \
 	-A clippy::unnecessary_fallible_conversions \
