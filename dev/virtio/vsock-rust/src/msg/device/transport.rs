@@ -21,11 +21,11 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use crate::msg::device::ClientId;
 use crate::msg::device::DeviceState;
 use crate::msg::device::VirtioMsgDevice;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
 use crate::msg::BusAddress;
+use crate::FFAClientId;
 use alloc::sync::Arc;
 use rust_support::spinlock::IRQSpinLock;
 use virtio_drivers_and_devices::transport::DeviceTransport;
@@ -36,7 +36,7 @@ pub struct FFAMsgTransport {
 }
 
 impl FFAMsgTransport {
-    pub fn new(device: &VirtioMsgDevice, client_id: ClientId) -> Self {
+    pub fn new(device: &VirtioMsgDevice, client_id: FFAClientId) -> Self {
         let state = device.state.clone();
         Self { state, client_id }
     }
