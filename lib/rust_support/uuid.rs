@@ -21,41 +21,5 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-pub use crate::sys::uuid_t;
-
-// TODO: split this into a separate trusty module to share bindings with userspace
-#[derive(Debug, PartialEq, Eq)]
-pub struct Uuid(uuid_t);
-
-impl Uuid {
-    pub const fn new(
-        time_low: u32,
-        time_mid: u16,
-        time_hi_and_version: u16,
-        clock_seq_and_node: [u8; 8],
-    ) -> Self {
-        Self(uuid_t { time_low, time_mid, time_hi_and_version, clock_seq_and_node })
-    }
-
-    pub fn c_repr(self) -> uuid_t {
-        self.0
-    }
-}
-
-impl uuid_t {
-    pub fn kernel() -> &'static Self {
-        // SAFETY: This is a bindgen-generated static which is known to be constant
-        unsafe { &crate::sys::kernel_uuid }
-    }
-
-    pub fn zero() -> &'static Self {
-        // SAFETY: This is a bindgen-generated static which is known to be constant
-        unsafe { &crate::sys::zero_uuid }
-    }
-}
-
-impl From<uuid_t> for Uuid {
-    fn from(uuid: uuid_t) -> Self {
-        Self(uuid)
-    }
-}
+pub use peer_id::uuid as uuid_t;
+pub use peer_id::Uuid;

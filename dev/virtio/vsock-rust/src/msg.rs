@@ -21,8 +21,6 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![allow(dead_code)]
-
 use crate::sys::virtio_msg as VirtioMsg;
 use crate::sys::virtio_msg_ffa as VirtioMsgFFA;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
