@@ -21,6 +21,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <kernel/mp.h>
 #include <kernel/timer.h>
 #include <lib/unittest/unittest.h>
 #include <platform.h>
@@ -307,6 +308,18 @@ TEST(TimerTest, TimerCancel) {
     int64_t wait_time = MS2NS(2);
     int saved_pinned_cpu = thread_pinned_cpu(get_current_thread());
     EXPECT_EQ(saved_pinned_cpu, -1);
+
+    /*
+     * This test needs CPUs 0 and 1. Verify that they're both available
+     * before running this test. E.g. in a single-CPU Trusty VM they are not.
+     */
+    for (uint cpu = 0; cpu < 2; cpu++) {
+        if (!mp_is_cpu_active(cpu) && !mp_is_cpu_idle(cpu)) {
+            trusty_unittest_printf("[   INFO   ] CPU %u is not active or idle\n", cpu);
+            GTEST_SKIP();
+        }
+    }
+
     for (int i = 0; i < 1000; i++) {
         TimerTestTimerStart(&t, MS2NS(2), 1);
         thread_set_pinned_cpu(get_current_thread(),
@@ -323,6 +336,8 @@ TEST(TimerTest, TimerCancel) {
         timer_cancel_sync(&t.timer);
     }
     thread_set_pinned_cpu(get_current_thread(), saved_pinned_cpu);
+
+test_abort:;
 }
 
 PORT_TEST(TimerTest, "com.android.kernel.timertest");

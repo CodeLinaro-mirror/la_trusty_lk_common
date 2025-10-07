@@ -62,7 +62,7 @@ fn area_id_and_offset(bus_addr: BusAddress) -> (AreaId, u64) {
 
 #[cfg(feature = "virtio_driver_side")]
 fn bus_address(area_id: AreaId, offset: u64) -> BusAddress {
-    BusAddress::from(area_id) << 56 | (offset as BusAddress)
+    (BusAddress::from(area_id) << 56) | (offset as BusAddress)
 }
 
 // virtio-msg over FF-A only supports up to 255 shared memory regions

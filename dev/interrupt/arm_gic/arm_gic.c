@@ -21,6 +21,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <arch/mp.h>
+#include <arch/ops.h>
 #include <assert.h>
 #include <bits.h>
 #include <err.h>
@@ -264,19 +265,25 @@ static status_t defer_active_irq(unsigned int vector, uint cpu)
         panic("deferred active irq list is full on cpu %u\n", cpu);
 
     deferred_active_irqs[cpu][idx] = vector;
-    GICCREG_WRITE(0, icc_eoir1_el1, vector);
+    GICCREG_WRITE(0, GICC_PRIMARY_EOIR, vector);
     LTRACEF_LEVEL(2, "deferred irq %u on cpu %u\n", vector, cpu);
     return NO_ERROR;
 }
 
 static void raise_ns_doorbell_irq(uint cpu)
 {
+#if GIC_VERSION > 2
     uint64_t reg = arm_gicv3_sgir_val(ARM_GIC_DOORBELL_IRQ, cpu);
 
     if (doorbell_enabled) {
         LTRACEF("GICD_SGIR: %" PRIx64 "\n", reg);
         GICCREG_WRITE(0, icc_asgi1r_el1, reg);
     }
+#else
+    if (doorbell_enabled) {
+        arm_gic_sgi(ARM_GIC_DOORBELL_IRQ, ARM_GIC_SGI_FLAG_NS, 1U << cpu);
+    }
+#endif
 }
 
 static status_t fiq_enter_defer_irqs(uint cpu)
@@ -284,7 +291,7 @@ static status_t fiq_enter_defer_irqs(uint cpu)
     bool inject = false;
 
     do {
-        u_int irq = GICCREG_READ(0, icc_iar1_el1) & 0x3ff;
+        u_int irq = GICCREG_READ(0, GICC_PRIMARY_IAR) & 0x3ff;
 
         if (irq >= 1020)
             break;
@@ -318,7 +325,7 @@ static enum handler_return handle_deferred_irqs(void)
             ret = INT_RESCHEDULE;
 
         deferred_active_irqs[cpu][idx] = 0;
-        GICCREG_WRITE(0, icc_dir_el1, irq);
+        GICCREG_WRITE(0, GICC_DIR, irq);
         LTRACEF_LEVEL(2, "handled deferred irq %u on cpu %u\n", irq, cpu);
     }
 
@@ -347,6 +354,10 @@ void register_int_handler(unsigned int vector, int_handler handler, void *arg)
 #endif
 #if GIC_VERSION > 2
         arm_gicv3_configure_irq_locked(cpu, vector);
+#else /* GIC_VERSION > 2 */
+#if GICV2_IRQ_GROUP == GICV2_IRQ_GROUP_GRP0S
+        arm_gic_set_secure_locked(vector, true);
+#endif
 #endif
         h = alloc_int_handler(vector, cpu);
         h->handler = handler;
@@ -418,7 +429,11 @@ static void arm_gic_init_percpu(uint level)
 #else
     /* GICv2 */
 #if WITH_LIB_SM
+#if ARM_GIC_USE_DOORBELL_NS_IRQ
+    GICCREG_WRITE(0, GICC_CTLR, 0x209); // enable GIC0 and select g0, fiq and eoi mode for secure
+#else
     GICCREG_WRITE(0, GICC_CTLR, 0xb); // enable GIC0 and select fiq mode for secure
+#endif
     GICDREG_WRITE(0, GICD_IGROUPR(0), ~0U); /* GICD_IGROUPR0 is banked */
 #else
     GICCREG_WRITE(0, GICC_CTLR, 1); // enable GIC0
@@ -689,6 +704,14 @@ status_t arm_gic_sgi(u_int irq, u_int flags, u_int cpu_mask)
 
 #else /* else GIC_VERSION > 2 */
 
+#if ARM_GIC_USE_DOORBELL_NS_IRQ
+    /* In doorbell mode, all other interrupts are secure */
+    DEBUG_ASSERT(!(flags & ARM_GIC_SGI_FLAG_NS) == (irq != ARM_GIC_DOORBELL_IRQ));
+#else
+    /* In GICv2 non-doorbell mode, all interrupts are in Group 1 */
+    flags |= ARM_GIC_SGI_FLAG_NS;
+#endif
+
     u_int val =
         ((flags & ARM_GIC_SGI_FLAG_TARGET_FILTER_MASK) << 24) |
         ((cpu_mask & 0xff) << 16) |
@@ -761,7 +784,7 @@ enum handler_return __platform_irq(struct iframe *frame)
 
     GICCREG_WRITE(0, GICC_PRIMARY_EOIR, iar);
 #if ARM_GIC_USE_DOORBELL_NS_IRQ
-    GICCREG_WRITE(0, icc_dir_el1, iar);
+    GICCREG_WRITE(0, GICC_DIR, iar);
 #endif
 
     LTRACEF_LEVEL(2, "cpu %u exit %d\n", cpu, ret);
@@ -925,11 +948,14 @@ status_t sm_intc_fiq_enter(void)
 
 void sm_intc_raise_doorbell_irq(void)
 {
-    u_int cpu = arch_curr_cpu_num();
 #if ARM_GIC_USE_DOORBELL_NS_IRQ
+    u_int cpu = arch_curr_cpu_num();
     raise_ns_doorbell_irq(cpu);
 #else
-    arch_mp_send_ipi(1U << cpu, MP_IPI_GENERIC);
+    static volatile int logged_doorbell_attempt;
+    if (!atomic_swap(&logged_doorbell_attempt, 1)) {
+        dprintf(SPEW, "doorbell irq not supported\n");
+    }
 #endif
 }
 #endif
