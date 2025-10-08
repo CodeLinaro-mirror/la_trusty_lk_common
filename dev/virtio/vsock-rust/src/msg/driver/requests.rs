@@ -24,6 +24,7 @@
 // glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
 use crate::sys::*;
 use crate::sys_dev2;
+use crate::sys_dev2::VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
 
 use crate::msg::{VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
@@ -112,6 +113,22 @@ impl VirtioMsgReq {
         msg.id = u8::try_from(id).unwrap();
         init_fn(msg);
         Self(buf)
+    }
+
+    // TODO: Add arguments for direct and indirect message support once Trusty has the option.
+    pub fn new_bus_ffa_version(driver_version: u32, vmsg_revision: u32, num_shm: u16) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION,
+            None,
+            |payload: &mut sys_dev2::bus_ffa_version| {
+                payload.driver_version = driver_version;
+                payload.vmsg_revision = vmsg_revision;
+                payload.vmsg_features = 0;
+                // Trusty VMs only support sending direct messages so just hard-code this
+                payload.features = VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
+                payload.area_num = num_shm;
+            },
+        )
     }
 
     pub fn activate(driver_version: u32) -> Self {
