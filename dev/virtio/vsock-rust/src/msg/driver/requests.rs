@@ -134,22 +134,6 @@ impl VirtioMsgReq {
         )
     }
 
-    pub fn activate(driver_version: u32) -> Self {
-        Self::new_ffa_req(VIRTIO_MSG_FFA_ACTIVATE, |msg| {
-            msg.__bindgen_anon_1.bus_activate = bus_activate { driver_version };
-        })
-    }
-
-    // TODO: Add arguments for direct and indirect message support once Trusty has the option.
-    pub fn configure(num_shm: u8) -> Self {
-        Self::new_ffa_req(VIRTIO_MSG_FFA_CONFIGURE, |msg| {
-            // Trusty only support direct messages so just hard-code this
-            let features =
-                u64::from(VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP) | (u64::from(num_shm) << 8);
-            msg.__bindgen_anon_1.bus_configure = bus_configure { features };
-        })
-    }
-
     pub fn new_bus_get_devices(offset: u16, num_devs: u16) -> Self {
         // virtio-msg spec 4.4.7.1: The offset and number of device numbers requested MUST be
         // multiples of 8.
@@ -409,20 +393,6 @@ impl VirtioMsgResp {
 
     pub fn read_bus_ffa_version(self) -> Result<sys_dev2::bus_ffa_version_resp> {
         self.read_v2_resp(sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION)
-    }
-
-    pub fn into_activate(self) -> Result<bus_activate_resp> {
-        let resp = self.into_ffa_resp(VIRTIO_MSG_FFA_ACTIVATE)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.bus_activate_resp })
-    }
-
-    pub fn into_configure(self) -> Result<bus_configure_resp> {
-        let resp = self.into_ffa_resp(VIRTIO_MSG_FFA_CONFIGURE)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.bus_configure_resp })
     }
 
     pub fn read_bus_get_devices(&self) -> Result<(sys_dev2::bus_get_devices_resp, &[u8])> {
