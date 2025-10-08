@@ -261,6 +261,43 @@ impl VirtioMsgResp {
         Ok(*resp)
     }
 
+    /// Returns a copy of the payload in a virtio_msg response
+    fn read_v2_resp<T: FromBytes>(self, msg_id: u32) -> Result<T> {
+        let resp = sys_dev2::virtio_msg::from_bytes(&self.buf);
+        if u32::from(resp.msg_id) != msg_id {
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+        let payload_size = size_of::<T>();
+        let total_size = size_of_val(resp) + payload_size;
+        // virtio-msg spec 7.2: Total length of the message in bytes, include the 6-byte header.
+        // Must be between 6 and 96.
+        assert!(total_size <= MAX_VIRTIO_MSG_SIZE);
+
+        if usize::from(resp.msg_size) != total_size {
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+
+        // SAFETY: The `payload` field on `resp` is right after the header fields and this creates a
+        // `&[u8]` of the remaining portion of the buffer from which `resp` is derived.
+        let payload_slice =
+            unsafe { resp.payload.as_slice(size_of_val(&self.buf) - size_of_val(resp)) };
+
+        // The payload slice is at least as big as `T` since we asserted the total size above so
+        // this should never panic. We use the _from_prefix method since the payload may be smaller
+        // than the slice.
+        let (payload_copy, remainder) = FromBytes::read_from_prefix(payload_slice).unwrap();
+
+        if remainder.iter().any(|&b| b != 0) {
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+
+        Ok(payload_copy)
+    }
+
+    pub fn read_bus_ffa_version(self) -> Result<sys_dev2::bus_ffa_version_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION)
+    }
+
     pub fn into_activate(self) -> Result<bus_activate_resp> {
         let resp = self.into_ffa_resp(VIRTIO_MSG_FFA_ACTIVATE)?;
         // SAFETY: `resp` is derived from an array of bytes which is sufficient
