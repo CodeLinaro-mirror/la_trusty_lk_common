@@ -23,13 +23,15 @@
 
 use crate::msg::device::VirtQueue;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
-use crate::msg::VirtioMsg;
-use crate::msg::VirtioMsgFFA;
+use crate::msg::{VirtioMsg, VirtioMsgFFA};
+use crate::sys_dev2;
+use core::mem::size_of_val;
 // glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
 use crate::sys::*;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceType;
+use zerocopy::FromBytes;
 
 pub struct VirtioMsgReq<'a> {
     buf: &'a mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
@@ -37,6 +39,7 @@ pub struct VirtioMsgReq<'a> {
 
 #[derive(Debug)]
 pub enum VirtioMsgPayload {
+    BusFFAVersion(sys_dev2::bus_ffa_version),
     Activate(bus_activate),
     Configure(bus_configure),
     GetDeviceInfo,
@@ -78,6 +81,20 @@ impl VirtioMsgReq<'_> {
         u32::from(req.type_) & VIRTIO_MSG_TYPE_BUS != 0
     }
 
+    fn get_v2_payload<T: FromBytes>(&self) -> T {
+        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
+        // SAFETY: The `payload` field on `req` is right after the header fields and this creates a
+        // `&[u8]` of the remaining portion of the buffer from which `req` is derived.
+        let payload_slice =
+            unsafe { req.payload.as_slice(size_of_val(self.buf) - size_of_val(req)) };
+
+        // The payload slice is at least as big as any virtio-msg request which we handle so this
+        // should not panic
+        let (payload_copy, _remainder) = FromBytes::read_from_prefix(payload_slice).unwrap();
+        // TODO: Check that _remainder is zeroed out
+        payload_copy
+    }
+
     pub fn get_msg_payload(&self) -> VirtioMsgPayload {
         let req = VirtioMsgFFA::from_bytes(self.buf);
 
@@ -87,6 +104,9 @@ impl VirtioMsgReq<'_> {
 
         if self.is_bus_msg() {
             match id {
+                sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION => {
+                    VirtioMsgPayload::BusFFAVersion(self.get_v2_payload())
+                }
                 VIRTIO_MSG_FFA_ACTIVATE => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
                     // union variants with valid values.
