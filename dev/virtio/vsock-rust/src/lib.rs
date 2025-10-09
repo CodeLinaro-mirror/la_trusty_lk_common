@@ -28,6 +28,14 @@ mod vsock;
 #[path = "bindings.rs"]
 mod sys;
 
+#[allow(clippy::upper_case_acronyms)]
+#[allow(unused)]
+#[allow(non_camel_case_types)]
+#[allow(non_upper_case_globals)]
+#[rustfmt::skip]
+#[path = "new_bindings.rs"]
+mod sys_dev2;
+
 pub use err::Error;
 pub use pci::pci_init_mmio;
 
