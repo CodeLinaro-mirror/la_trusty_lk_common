@@ -23,6 +23,11 @@
 # MODULE_DISABLE_STACK_PROTECTOR : disable stack protector for this module
 # MODULE_DISABLE_SCS : disable shadow call stack for this module
 # MODULE_SKIP_DOCS : skip generating docs for this module
+# MODULE_LIBRARIES : extra .rlib or .so (proc-macro) library files that this module
+#                    requires (Rust-only, internal)
+# MODULE_RLIBS : list of foo=/path/to/libfoo.rlib pairs of Rust crates
+#                (Rust-only, internal) to pass to the compiler that this module
+#                requires; should exactly match the files from MODULE_LIBRARIES
 
 # MODULE_ARM_OVERRIDE_SRCS : list of source files, local path that should be force compiled with ARM (if applicable)
 
@@ -489,5 +494,7 @@ MODULE_RUST_STEM :=
 MODULE_SKIP_DOCS :=
 MODULE_ADD_IMPLICIT_DEPS := true
 MODULE_RUSTFLAGS_CONFIG :=
+MODULE_RLIBS :=
+MODULE_LIBRARIES :=
 
 endif # QUERY_MODULE (this line should stay after all other processing)
