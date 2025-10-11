@@ -1,0 +1,21 @@
+package {
+    default_applicable_licenses: ["trusty_kernel_license"],
+    default_team: "trendy_team_trusty",
+}
+
+cc_library_static {
+    name: "external_trusty_lk_lib_binary_search_tree",
+    host_supported: true,
+    srcs: [
+        "binary_search_tree.c",
+    ],
+    header_libs: [
+        "external_trusty_lk_headers_shared",
+    ],
+    export_include_dirs: [
+        "include",
+    ],
+    export_header_lib_headers: [
+        "external_trusty_lk_headers_shared",
+    ],
+}

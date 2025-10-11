@@ -1,0 +1,18 @@
+package {
+    default_applicable_licenses: ["trusty_kernel_license"],
+    default_team: "trendy_team_trusty",
+}
+
+cc_test_host {
+    name: "external_trusty_lk_lib_binary_search_tree_hosttest",
+    gtest: true,
+    srcs: [
+        "binary_search_tree_test.cpp",
+    ],
+    static_libs: [
+        "external_trusty_lk_lib_binary_search_tree",
+    ],
+    header_libs: [
+        "external_trusty_lk_headers_shared",
+    ],
+}
