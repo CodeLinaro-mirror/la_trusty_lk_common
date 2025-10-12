@@ -116,9 +116,6 @@ impl TrustyHal {
     }
 }
 
-// Safety: TrustyHal is stateless and thus trivially safe to send to another thread
-unsafe impl Send for TrustyHal {}
-
 // Safety: See function specific comments
 unsafe impl Hal for TrustyHal {
     // Safety:

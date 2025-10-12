@@ -3,3 +3,11 @@ dirgroup {
     dirs: ["."],
     visibility: ["//trusty/vendor/google/aosp/scripts"],
 }
+
+cc_library_headers {
+    name: "external_trusty_lk_headers_shared",
+    export_include_dirs: [
+        "include/shared",
+    ],
+    host_supported: true,
+}
