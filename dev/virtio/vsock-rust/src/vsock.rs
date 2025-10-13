@@ -28,6 +28,8 @@ use core::ops::Deref;
 use core::ops::DerefMut;
 use core::ptr::eq;
 use core::ptr::null_mut;
+use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering;
 use core::time::Duration;
 
 use alloc::borrow::ToOwned;
@@ -44,6 +46,8 @@ use log::info;
 use log::warn;
 
 use rand::rand_get_bytes;
+use rust_support::event::Event;
+use rust_support::event::EVENT_FLAG_AUTOUNSIGNAL;
 use rust_support::handle::IPC_HANDLE_POLL_HUP;
 use rust_support::handle::IPC_HANDLE_POLL_MSG;
 use rust_support::handle::IPC_HANDLE_POLL_READY;
@@ -69,6 +73,7 @@ use rust_support::thread::Builder;
 use rust_support::thread::Priority;
 use rust_support::uuid::Uuid;
 use rust_support::uuid_t;
+use trusty::EventClient;
 use virtio_drivers_and_devices::device::socket::SocketError;
 use virtio_drivers_and_devices::device::socket::VirtIOSocket;
 use virtio_drivers_and_devices::device::socket::VsockAddr;
@@ -88,6 +93,14 @@ use rust_support::Error as LkError;
 
 use crate::err::Error;
 use crate::FFAClientId;
+
+#[cfg(feature = "virtio_msg_device")]
+use sm::VmRef;
+// For non-TZ builds we can't import sm::VmRef since lib/sm and its rust bindings are not supported.
+// Since vsock_{rx,tx}_loop take an Option<VmRef> arg and non-TZ builds always pass in None we
+// redefine it as an arbitrary type for those builds.
+#[cfg(not(feature = "virtio_msg_device"))]
+pub(crate) struct VmRef;
 
 const ACTIVE_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -209,7 +222,7 @@ struct VsockConnection {
     local_port: u32,
     state: VsockConnectionState,
     tipc_port_name: Option<CString>,
-    href: HandleRef,
+    href: HandleRef<c_void>,
     tx_count: u64,
     tx_since_rx: u64,
     rx_count: u64,
@@ -312,6 +325,12 @@ enum ConnectionStateAction {
     Remove,
 }
 
+fn vsock_connection_close_all(connections: &mut Vec<VsockConnection>) {
+    for mut c in connections.drain(..) {
+        vsock_connection_close(&mut c, ConnectionStateAction::Remove);
+    }
+}
+
 fn vsock_connection_lookup_by(
     connections: &mut Vec<VsockConnection>,
     predicate: impl Fn(&VsockConnection) -> bool,
@@ -393,13 +412,38 @@ fn vsock_connection_close(c: &mut VsockConnection, action: ConnectionStateAction
     false // keep connection
 }
 
+// Bitflags for the VsockRxEvent wake_reason field. Enum variants must be smaller than 32 since this
+// field is an AtomicU32
+#[repr(u32)]
+enum WakeReasonFlag {
+    Terminate = 0,
+}
+
+pub(crate) struct VsockRxEvent {
+    event: Event,
+    wake_reason: AtomicU32,
+}
+
+impl VsockRxEvent {
+    const NONE: u32 = 0;
+    const TERMINATE: u32 = 1 << WakeReasonFlag::Terminate as u32;
+
+    #[allow(dead_code)]
+    pub(crate) fn signal_stop(&self) {
+        self.wake_reason.fetch_or(Self::TERMINATE, Ordering::Relaxed);
+        self.event.signal();
+    }
+}
+
 pub struct VsockDevice<M>
 where
     M: VsockManager,
 {
     connections: Mutex<Vec<VsockConnection>>,
-    handle_set: HandleSet,
+    handle_set: HandleSet<c_void>,
     connection_manager: Mutex<M>,
+    vsock_drop: Arc<Event>,
+    rx_event: Arc<VsockRxEvent>,
 }
 
 impl<M> VsockDevice<M>
@@ -407,11 +451,31 @@ where
     M: VsockManager,
 {
     pub(crate) fn new(manager: M) -> Self {
+        let rx_event = VsockRxEvent {
+            event: Event::new(false, EVENT_FLAG_AUTOUNSIGNAL),
+            wake_reason: AtomicU32::new(VsockRxEvent::NONE),
+        };
         Self {
             connections: Mutex::new(Vec::new()),
             handle_set: HandleSet::new(),
             connection_manager: Mutex::new(manager),
+            vsock_drop: Arc::new(Event::new(false, EVENT_FLAG_AUTOUNSIGNAL)),
+            rx_event: Arc::new(rx_event),
         }
+    }
+
+    // Some builds may not need to get an event to wait for the VsockDevice to drop (e.g. in cases
+    // like pVM builds where we know the peer will always be there). We allow this function to
+    // remain unused in those builds instead of gating to avoid needing to gate individual imports
+    // as well.
+    #[allow(dead_code)]
+    pub(crate) fn get_vsock_drop_event(&self) -> Arc<Event> {
+        self.vsock_drop.clone()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn get_vsock_rx_event(&self) -> Arc<VsockRxEvent> {
+        self.rx_event.clone()
     }
 
     fn port_is_listening(&self, port: u32) -> bool {
@@ -479,8 +543,8 @@ where
     fn create_tipc_ports(
         &self,
         transport_kind: TransportKind,
-    ) -> [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] {
-        let mut port_hrefs: [HandleRef; TIPC_TO_VSOCK_MAPPINGS.len()] = Default::default();
+    ) -> [HandleRef<c_void>; TIPC_TO_VSOCK_MAPPINGS.len()] {
+        let mut port_hrefs: [HandleRef<c_void>; TIPC_TO_VSOCK_MAPPINGS.len()] = Default::default();
         for (port, phref) in TIPC_TO_VSOCK_MAPPINGS.iter().zip(port_hrefs.iter_mut()) {
             if port.transport_kind != transport_kind {
                 continue;
@@ -535,7 +599,7 @@ where
     fn tipc_connect_vsock(
         &self,
         port: &TipcToVsockMapping,
-        href: &mut HandleRef,
+        href: &mut HandleRef<c_void>,
     ) -> Result<VsockConnection, Error> {
         debug!("got tipc connection on {:?}", port.name);
 
@@ -700,9 +764,14 @@ where
     }
 }
 
+// The unused VM ref argument is only passed in if the peer is a VM. When this function returns the
+// VmRef gets dropped decreasing the VM's refcount by 1. The Arc<VsockDevice> also gets dropped. If
+// it's the last refcount that triggers the VsockDevice Drop impl which signals the `vsock_drop`
+// event.
 pub(crate) fn vsock_rx_loop<M>(
     device: Arc<VsockDevice<M>>,
     _transport_kind: TransportKind,
+    _vm_ref: Option<VmRef>,
 ) -> Result<(), Error>
 where
     M: VsockManager,
@@ -730,7 +799,20 @@ where
             .or_else(|| device.connection_manager.lock().deref_mut().poll().expect("poll failed"));
 
         if event.is_none() {
-            sleep(ten_ms);
+            let res = device.rx_event.event.wait_timeout(ten_ms);
+            match res {
+                Ok(()) => {
+                    let wake_reason = device.rx_event.wake_reason.load(Ordering::Relaxed);
+                    if (wake_reason & VsockRxEvent::TERMINATE) != 0 {
+                        vsock_connection_close_all(&mut device.connections.lock());
+                        return Ok(());
+                    }
+                }
+                Err(LkError::ERR_TIMED_OUT) => (),
+                Err(e) => {
+                    unreachable!("failed to wait for rx loop event {e:?}")
+                }
+            }
             continue;
         }
 
@@ -852,9 +934,17 @@ where
     }
 }
 
+// This function takes an evt_client if the peer is a VM which may be torn down. It waits on the
+// event client's handle for a potential VM destruction event and once it receives it this thread
+// just notifies the client source and returns. The unused VM ref is also only passed in if the peer
+// is a VM. When this function returns the VmRef gets dropped decreasing the VM's refcount by 1.
+// The Arc<VsockDevice> also gets dropped. If it's the last refcount that triggers the VsockDevice
+// Drop impl which signals the `vsock_drop` event.
 pub(crate) fn vsock_tx_loop<M>(
     device: Arc<VsockDevice<M>>,
     transport_kind: TransportKind,
+    evt_client: Option<EventClient>,
+    _vm_ref: Option<VmRef>,
 ) -> Result<(), Error>
 where
     M: VsockManager,
@@ -865,6 +955,21 @@ where
     let mut timeout = Duration::MAX;
     let ten_secs = Duration::from_secs(10);
     let mut tx_buffer = vec![0u8; PAGE_SIZE].into_boxed_slice();
+
+    let _evt_href = match &evt_client {
+        Some(evt_client) => {
+            // SAFETY: The handle argument is in an EventClient so it must have been initialized by
+            // a call to event_source_open which calls handle_init
+            let mut evt_href = unsafe { HandleRef::new(evt_client.handle()) };
+            evt_href.set_emask(!0);
+            evt_href.set_id(0);
+            evt_href.set_cookie(null_mut());
+            device.handle_set.attach(&mut evt_href).unwrap();
+            Some(evt_href)
+        }
+        None => None,
+    };
+
     loop {
         let mut href = HandleRef::default();
         let mut ret = device.handle_set.handle_set_wait(&mut href, timeout);
@@ -892,6 +997,12 @@ where
             continue;
         }
 
+        if let Some(ref evt_client) = &evt_client {
+            if href.handle() == evt_client.handle() {
+                debug!("stopping vsock tx loop");
+                return Ok(());
+            }
+        };
         let connections = &mut *device.connections.lock();
         let cookie = href.cookie();
         let _ = vsock_connection_lookup_cookie(connections, cookie, |c| {
@@ -1038,6 +1149,17 @@ where
     }
 }
 
+impl<M: VsockManager> Drop for VsockDevice<M> {
+    fn drop(&mut self) {
+        debug!("dropped VsockDevice");
+        // On trusty builds that do not grab another refcount to self.vsock_drop this will signal
+        // the LK event then immediately free the VsockDevice, freeing the event and calling
+        // event_destroy in the process. Builds that do grab another refcount signal it, free the
+        // VsockDevice here but the keep the event around until all references are dropped.
+        self.vsock_drop.signal();
+    }
+}
+
 pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
     driver: VirtIOSocket<H, T, 4096>,
     transport_kind: TransportKind,
@@ -1053,7 +1175,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_rx_loop(device_for_rx, transport_kind);
+            let ret = vsock_rx_loop(device_for_rx, transport_kind, None);
             error!("vsock_rx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })
@@ -1064,7 +1186,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_tx_loop(device_for_tx, transport_kind);
+            let ret = vsock_tx_loop(device_for_tx, transport_kind, None, None);
             error!("vsock_tx_loop returned {ret:?}");
             ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
         })

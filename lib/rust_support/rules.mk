@@ -85,14 +85,17 @@ MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	lk_stdin \
 	lk_stdout \
 	lk_stderr \
+	mask_interrupt \
 	mutex_acquire_timeout \
 	mutex_destroy \
 	mutex_init \
 	mutex_release \
+	register_int_handler \
 	thread_create \
 	thread_join \
 	thread_resume \
 	thread_sleep_ns \
+	unmask_interrupt \
 	vaddr_to_paddr \
 	vmm_alloc \
 	vmm_alloc_obj \
@@ -111,7 +114,9 @@ MODULE_BINDGEN_ALLOW_TYPES := \
 	Error \
 	event_t \
 	handle \
+	handler_return \
 	handle_ref \
+	int_handler \
 	iovec_kern \
 	ipc_msg_.* \
 	ktipc_port_acl \
@@ -154,14 +159,20 @@ MODULE_BINDGEN_ALLOW_VARS := \
 	SPIN_LOCK_FLAG_IRQ_FIQ \
 	SPIN_LOCK_INITIAL_VALUE \
 
+# Manually specify the cfi encoding of handler_return to make cross-language cfi
+# check pass. More info at https://github.com/rust-lang/rust-bindgen/issues/3263
+HANDLER_RETURN_CUSTOM_ATTR := \#\[cfi_encoding=\"14handler_return\"\]
+
 MODULE_BINDGEN_FLAGS := \
 	--newtype-enum Error \
+	--newtype-enum handler_return \
 	--newtype-enum lk_init_level \
 	--bitfield-enum lk_init_flags \
 	--no-prepend-enum-name \
 	--with-derive-custom Error=FromPrimitive \
 	--with-derive-custom handle_waiter=Default \
 	--with-derive-custom ipc_msg_info=Default \
+	--with-derive-custom-enum handler_return=$(HANDLER_RETURN_CUSTOM_ATTR) \
 	--with-derive-eq \
 
 MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
@@ -169,6 +180,9 @@ MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
 # This lets us include wrappers/include/reflist.h instead of the wrapped header:
 # trusty/kernel/shared/lk/reflist.h.
 MODULE_INCLUDES := $(LOCAL_DIR)
+
+MODULE_RUSTFLAGS += \
+	-A unpredictable-function-pointer-comparisons \
 
 MODULE_RUSTFLAGS += \
 	-A clippy::disallowed_names \

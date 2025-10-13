@@ -21,26 +21,10 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#pragma once
-
-#include <arch/mmu.h>
-#include <kernel/event.h>
-#include <kernel/mutex.h>
-#include <kernel/thread.h>
-#include <kernel/vm.h>
-#include <lib/ktipc/ktipc.h>
-#include <lib/trusty/handle.h>
-#include <lib/trusty/handle_set.h>
-#include <lib/trusty/ipc.h>
-#include <lib/trusty/uuid.h>
-#include <lib/vmm_obj_service/vmm_obj_service.h>
-#include <lk/init.h>
-#include <panic.h>
-#include <platform/interrupts.h>
-#include <spinlock.h>
-#include <stdio.h>
-#include <streams.h> /* stubs for stdin, stdout, stderr */
-#include "wrappers/include/reflist.h"
-
-#include "error.h"
-#include "config.h" /* for LK_LOGLEVEL_RUST */
+#include <stdint.h>
+#define __le16 uint16_t
+#define __le32 uint32_t
+#define __le64 uint64_t
+#include "virtio_config.h"
+#include "virtio_msg.h"
+#include "virtio_msg_ffa.h"

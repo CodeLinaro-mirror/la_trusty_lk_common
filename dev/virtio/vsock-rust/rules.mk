@@ -9,6 +9,7 @@ MODULE_EXPORT_INCLUDES += \
 
 MODULE_LIBRARY_DEPS := \
 	trusty/kernel/lib/rand/rust \
+	trusty/kernel/lib/trusty/rust \
 	trusty/user/base/lib/liballoc-rust \
 	trusty/user/base/lib/trusty-std \
 	$(call FIND_CRATE,cfg-if) \
@@ -127,5 +128,59 @@ MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_forwarder"'
 endif
 
 MODULE_RUST_USE_CLIPPY := true
+
+# TODO: These are the options used to generate new_bindings.rs from the latest version of the
+# virtio-msg headers. Once the headers are in mainline linux and we find a suitable location for
+# them they may be generated as part of the build.
+VSOCK_WITH_VIRTIO_MSG_HEADERS ?= false
+
+ifeq (true,$(call TOBOOL,$(VSOCK_WITH_VIRTIO_MSG_HEADERS)))
+MODULE_BINDGEN_SRC_HEADER := $(LOCAL_DIR)/bindings.h
+
+MODULE_BINDGEN_ALLOW_FILES := \
+	.*virtio_config.h \
+	.*virtio_msg.h \
+	.*virtio_msg_ffa.h \
+
+VIRTIO_MSG_BINDGEN_TYPES := \
+	bus_area_share \
+	bus_area_share_resp \
+	bus_area_unshare \
+	bus_area_unshare_resp \
+	bus_area_release \
+	bus_event_device \
+	bus_ffa_version \
+	bus_ffa_version_resp \
+	bus_get_devices \
+	bus_ping \
+	bus_ping_resp \
+	bus_status \
+	event_avail \
+	event_used \
+	get_config \
+	get_device_info_resp \
+	get_device_status_resp \
+	get_device_status \
+	get_features \
+	get_shm \
+	get_shm_resp \
+	get_vqueue \
+	get_vqueue_resp \
+	reset_vqueue \
+	set_device_status \
+	set_device_status_resp \
+	set_vqueue \
+
+ZEROCOPY_TRAITS := \
+	zerocopy::Immutable \
+	zerocopy::FromBytes \
+	zerocopy::IntoBytes \
+	zerocopy::KnownLayout \
+
+MODULE_BINDGEN_FLAGS := \
+	--with-derive-custom .*=Default \
+    $(foreach type,$(VIRTIO_MSG_BINDGEN_TYPES),$(foreach trait,$(ZEROCOPY_TRAITS),--with-derive-custom $(type)=$(trait)))
+
+endif
 
 include make/library.mk
