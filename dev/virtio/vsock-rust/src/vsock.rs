@@ -126,6 +126,8 @@ const PORT_MAP: &[TipcPort] = &[
     TipcPort { port: 10, name: c"com.android.trusty.vintf" },
     #[cfg(feature = "keymint_commservice")]
     TipcPort { port: 11, name: c"com.android.trusty.keymint.commservice" },
+    #[cfg(feature = "gatekeeper_with_thal")]
+    TipcPort { port: 13, name: c"android.hardware.gatekeeper.IGateKeeper_with_thal" },
 ];
 
 /// Finds the TIPC name associated with a given vsock port number.
