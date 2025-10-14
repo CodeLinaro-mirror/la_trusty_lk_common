@@ -29,6 +29,7 @@ use crate::sys_dev2::VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
 use crate::msg::{VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::{size_of, size_of_val};
+use core::ptr::read_unaligned;
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceStatus;
 use zerocopy::{FromBytes, IntoBytes, KnownLayout};
@@ -294,6 +295,46 @@ impl VirtioMsgResp {
         Ok(payload_copy)
     }
 
+    /// Returns the payload in a virtio_msg response for types which can't impl zerocopy traits.
+    ///
+    /// Returns a copy of the fixed-sized portion of a payload `T` and a slice of the subsection of
+    /// the buffer containing the variably-sized portion of the payload. This is provided for types
+    /// which cannot implement zerocopy traits and `Self::into_v2_resp` should be used if possible.
+    pub fn read_v2_resp_variable_size<T>(&self, msg_id: u32) -> Result<(T, &[u8])> {
+        let resp = sys_dev2::virtio_msg::from_bytes(&self.buf);
+        if u32::from(resp.msg_id) != msg_id {
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+
+        let fixed_payload_size = size_of::<T>();
+        let total_fixed_size = size_of_val(resp) + fixed_payload_size;
+
+        let resp_msg_size = usize::from(resp.msg_size);
+        if resp_msg_size < total_fixed_size {
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+        let variable_payload_size = resp_msg_size - total_fixed_size;
+
+        let payload_ptr: *const u8 = resp.payload.as_ptr();
+        // SAFETY: payload_ptr is non-null and points to a byte buffer at least as big as `T`.
+        let fixed_payload_copy = unsafe { read_unaligned(payload_ptr.cast::<T>()) };
+
+        // SAFETY: The `payload` field on `resp` is right after the header fields and this creates a
+        // `&[u8]` of the remaining portion of the buffer from which `resp` is derived.
+        let payload_slice =
+            unsafe { resp.payload.as_slice(size_of_val(&self.buf) - size_of_val(resp)) };
+
+        // Only return the portion of the buffer containing the variably-sized payload.
+        let variable_payload_end = fixed_payload_size + variable_payload_size;
+        let variable_payload_slice = &payload_slice[fixed_payload_size..variable_payload_end];
+
+        if payload_slice[variable_payload_end..].iter().any(|&b| b != 0) {
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+
+        Ok((fixed_payload_copy, variable_payload_slice))
+    }
+
     pub fn read_bus_ffa_version(self) -> Result<sys_dev2::bus_ffa_version_resp> {
         self.read_v2_resp(sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION)
     }
@@ -310,6 +351,10 @@ impl VirtioMsgResp {
         // SAFETY: `resp` is derived from an array of bytes which is sufficient
         // to initialize all union variants with valid values.
         Ok(unsafe { resp.__bindgen_anon_1.bus_configure_resp })
+    }
+
+    pub fn read_bus_get_devices(&self) -> Result<(sys_dev2::bus_get_devices_resp, &[u8])> {
+        self.read_v2_resp_variable_size(sys_dev2::VIRTIO_MSG_BUS_GET_DEVICES)
     }
 
     pub fn into_get_device_info(self) -> Result<get_device_info_resp> {
