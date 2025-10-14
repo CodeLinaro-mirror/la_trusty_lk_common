@@ -46,6 +46,8 @@ impl FFAMsgTransport {
 
 // TODO: Move this to virtio-drivers once the virtio-msg transport becomes standardized and the
 // vsock-specific parts of this are generalized to other device types.
+// TODO: Most calls to `expect` in these methods should bubble up an Error rather than panic once
+// the trait supports this https://github.com/immunant/virtio-drivers-and-devices/issues/18
 impl Transport for FFAMsgTransport {
     fn device_type(&self) -> DeviceType {
         let dev_info_resp = get_device_info(self.dev_id).expect("get_device_info request failed");
@@ -75,10 +77,12 @@ impl Transport for FFAMsgTransport {
     }
 
     fn get_status(&self) -> DeviceStatus {
-        let req = VirtioMsgReq::get_device_status(self.dev_id);
+        let req = VirtioMsgReq::new_get_device_status(self.dev_id);
         let resp = send_virtio_msg_request(req).expect("get_device_status request failed");
-        let status =
-            resp.into_get_device_status().expect("get_device returned invalid response").status;
+        let status = resp
+            .read_get_device_status()
+            .expect("get_device_status returned invalid response")
+            .status;
         DeviceStatus::from_bits_retain(status)
     }
 

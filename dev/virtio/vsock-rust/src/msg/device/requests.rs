@@ -137,7 +137,7 @@ impl VirtioMsgReq<'_> {
                     })
                 }
                 // GET_DEVICE_STATUS requests don't use the payload
-                VIRTIO_MSG_GET_DEVICE_STATUS => VirtioMsgPayload::GetDeviceStatus,
+                sys_dev2::VIRTIO_MSG_GET_DEVICE_STATUS => VirtioMsgPayload::GetDeviceStatus,
                 VIRTIO_MSG_GET_FEATURES => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
                     // union variants with valid values.
@@ -184,7 +184,6 @@ impl VirtioMsgReq<'_> {
                     VirtioMsgPayload::ResetVqueue(unsafe { req.__bindgen_anon_1.reset_vqueue })
                 }
                 VIRTIO_MSG_CONNECT => todo!("support VIRTIO_MSG_CONNECT"),
-                VIRTIO_MSG_SET_CONFIG => todo!("support VIRTIO_MSG_SET_CONFIG"),
                 VIRTIO_MSG_GET_CONFIG_GEN => VirtioMsgPayload::GetConfigGen,
                 _ => VirtioMsgPayload::UnknownDeviceReq(id),
             }
@@ -292,9 +291,9 @@ impl VirtioMsgResp<'_> {
     }
 
     // Set the payload as the response to a get_device_status request
-    pub fn get_device_status(self, status: u32) {
-        let resp = VirtioMsg::from_bytes_mut(self.buf);
-        resp.__bindgen_anon_1.get_device_status_resp = get_device_status_resp { status }
+    pub fn write_get_device_status(mut self, status: u32) {
+        let resp = self.as_mut_v2_payload::<sys_dev2::get_device_status_resp>();
+        resp.status = status;
     }
 
     // Set the payload as the response to a get_features request

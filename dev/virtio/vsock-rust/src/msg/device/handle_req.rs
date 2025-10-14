@@ -245,7 +245,7 @@ impl VirtioMsgDevice {
             VirtioMsgPayload::GetDeviceStatus => {
                 debug!("received virtio-msg get_device_status request");
                 let state = self.state.lock_unsaved();
-                resp.get_device_status(state.status);
+                resp.write_get_device_status(state.status);
             }
             VirtioMsgPayload::GetFeatures(req) => {
                 debug!("received virtio-msg get_features request {req:x?}");
