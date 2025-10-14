@@ -26,6 +26,7 @@ use crate::msg::device::VSOCK_QUEUE_SIZE;
 use crate::msg::{VirtioMsg, VirtioMsgFFA};
 use crate::sys_dev2;
 use core::mem::size_of_val;
+use core::ptr::{write, write_unaligned};
 // glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
 use crate::sys::*;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
@@ -40,6 +41,7 @@ pub struct VirtioMsgReq<'a> {
 #[derive(Debug)]
 pub enum VirtioMsgPayload {
     BusFFAVersion(sys_dev2::bus_ffa_version),
+    BusGetDevices(sys_dev2::bus_get_devices),
     GetDeviceInfo,
     SetDeviceStatus(set_device_status),
     GetDeviceStatus,
@@ -105,6 +107,9 @@ impl VirtioMsgReq<'_> {
                 sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION => {
                     VirtioMsgPayload::BusFFAVersion(self.get_v2_payload())
                 }
+                sys_dev2::VIRTIO_MSG_BUS_GET_DEVICES => {
+                    VirtioMsgPayload::BusGetDevices(self.get_v2_payload())
+                }
                 VIRTIO_MSG_FFA_AREA_SHARE => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
                     // union variants with valid values.
@@ -116,7 +121,6 @@ impl VirtioMsgReq<'_> {
                     VirtioMsgPayload::AreaUnshare(unsafe { req.__bindgen_anon_1.bus_area_unshare })
                 }
                 VIRTIO_MSG_FFA_ERROR => todo!("support VIRTIO_MSG_FFA_ERROR"),
-                VIRTIO_MSG_FFA_DEACTIVATE => todo!("support VIRTIO_MSG_FFA_DEACTIVATE"),
                 _ => VirtioMsgPayload::UnknownBusReq(id),
             }
         } else {
@@ -242,6 +246,35 @@ impl VirtioMsgResp<'_> {
     pub fn configure(self, features: u64) {
         let resp = VirtioMsgFFA::from_bytes_mut(self.buf);
         resp.__bindgen_anon_1.bus_configure_resp = bus_configure_resp { features }
+    }
+
+    pub fn write_bus_get_devices(self, next_offset: u16, bitmap: u8) {
+        let resp = sys_dev2::virtio_msg::from_bytes_mut(self.buf);
+        let bitmap_size = size_of_val(&bitmap);
+        let total_size =
+            size_of_val(resp) + size_of::<sys_dev2::bus_get_devices_resp>() + bitmap_size;
+        resp.msg_size = total_size.try_into().unwrap();
+
+        // This pointer may be unaligned since virtio_msg is packed
+        let payload_ptr = resp.payload.as_mut_ptr().cast::<sys_dev2::bus_get_devices_resp>();
+
+        // The number of devices described by the bitmap
+        let num_devs = bitmap_size * 8;
+
+        let payload = sys_dev2::bus_get_devices_resp {
+            offset: 0,
+            num: num_devs.try_into().unwrap(),
+            next_offset,
+            ..Default::default()
+        };
+        // SAFETY: payload_ptr is non-null and points to a buffer at least as big as a
+        // bus_get_devices_resp struct because the pointer is derived from a reference to self.buf
+        // with an offset to skip the header in the virtio_msg struct.
+        unsafe { write_unaligned(payload_ptr, payload) }
+        // SAFETY: payload_ptr is non-null and points to a valid bus_get_devices_resp struct
+        let bitmap_ptr = unsafe { &raw mut (*payload_ptr).devices };
+        // SAFETY: bitmap_ptr is non-null and points to a u8
+        unsafe { write(bitmap_ptr.cast::<u8>(), bitmap) }
     }
 
     // Set the payload as the response to a device_info request

@@ -134,6 +134,7 @@ impl VirtioMsgDevice {
                     resp_features,
                 );
             }
+            VirtioMsgPayload::BusGetDevices(_req) => unimplemented!(),
             VirtioMsgPayload::GetDeviceInfo => {
                 debug!("received virtio-msg get_device_info request");
                 let dev_ty = DeviceType::Socket;
