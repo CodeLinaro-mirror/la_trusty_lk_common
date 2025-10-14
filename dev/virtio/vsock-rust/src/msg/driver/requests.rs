@@ -168,11 +168,14 @@ impl VirtioMsgReq {
         Self::new_v2_req(sys_dev2::VIRTIO_MSG_DEVICE_INFO, Some(dev_id))
     }
 
-    pub fn set_device_status(dev_id: u16, status: DeviceStatus) -> Self {
-        Self::new_req(VIRTIO_MSG_SET_DEVICE_STATUS, dev_id, |msg| {
-            let status = status.bits();
-            msg.__bindgen_anon_1.set_device_status = set_device_status { status };
-        })
+    pub fn new_set_device_status(dev_id: u16, status: DeviceStatus) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_SET_DEVICE_STATUS,
+            Some(dev_id),
+            |payload: &mut sys_dev2::set_device_status| {
+                payload.status = status.bits();
+            },
+        )
     }
 
     pub fn new_get_device_status(dev_id: u16) -> Self {
@@ -385,6 +388,10 @@ impl VirtioMsgResp {
 
     pub fn read_get_device_status(self) -> Result<sys_dev2::get_device_status_resp> {
         self.read_v2_resp(sys_dev2::VIRTIO_MSG_GET_DEVICE_STATUS)
+    }
+
+    pub fn read_set_device_status(self) -> Result<sys_dev2::set_device_status_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_SET_DEVICE_STATUS)
     }
 
     pub fn into_get_config_gen(self) -> Result<get_config_gen_resp> {

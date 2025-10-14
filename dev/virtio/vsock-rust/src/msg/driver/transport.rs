@@ -25,6 +25,7 @@ use crate::msg::bus_address;
 use crate::msg::driver::{
     get_device_info, send_virtio_msg_request, VirtioMsgReq, INITIAL_AREA_ID, MAIN_HEAP,
 };
+use crate::sys_dev2::VIRTIO_CONFIG_S_NEEDS_RESET;
 use core::mem::size_of;
 use virtio_drivers_and_devices::transport::{DeviceStatus, DeviceType, InterruptStatus, Transport};
 use virtio_drivers_and_devices::{Error as VirtioError, PhysAddr};
@@ -87,8 +88,17 @@ impl Transport for FFAMsgTransport {
     }
 
     fn set_status(&mut self, status: DeviceStatus) {
-        let req = VirtioMsgReq::set_device_status(self.dev_id, status);
-        send_virtio_msg_request(req).expect("set_device_status request failed");
+        let req = VirtioMsgReq::new_set_device_status(self.dev_id, status);
+        let resp = send_virtio_msg_request(req).expect("set_device_status request failed");
+        let status = resp
+            .read_set_device_status()
+            .expect("set_device_status returned invalid response")
+            .status;
+        if status & VIRTIO_CONFIG_S_NEEDS_RESET != 0 {
+            // TODO: Bubble up an error to allow cleanly resetting the device by dropping the
+            // VirtIOSocket and FFAMsgTransport
+            panic!("virtio-msg device needs reset");
+        }
     }
 
     fn set_guest_page_size(&mut self, _guest_page_size: u32) {

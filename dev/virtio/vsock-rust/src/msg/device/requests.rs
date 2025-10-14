@@ -44,7 +44,7 @@ pub enum VirtioMsgPayload {
     BusFFAVersion(sys_dev2::bus_ffa_version),
     BusGetDevices(sys_dev2::bus_get_devices),
     GetDeviceInfo,
-    SetDeviceStatus(set_device_status),
+    SetDeviceStatus(sys_dev2::set_device_status),
     GetDeviceStatus,
     GetFeatures(get_features),
     SetFeatures(set_features),
@@ -129,12 +129,8 @@ impl VirtioMsgReq<'_> {
             match id {
                 // GET_DEVICE_INFO requests don't use the payload
                 sys_dev2::VIRTIO_MSG_DEVICE_INFO => VirtioMsgPayload::GetDeviceInfo,
-                VIRTIO_MSG_SET_DEVICE_STATUS => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::SetDeviceStatus(unsafe {
-                        req.__bindgen_anon_1.set_device_status
-                    })
+                sys_dev2::VIRTIO_MSG_SET_DEVICE_STATUS => {
+                    VirtioMsgPayload::SetDeviceStatus(self.get_v2_payload())
                 }
                 // GET_DEVICE_STATUS requests don't use the payload
                 sys_dev2::VIRTIO_MSG_GET_DEVICE_STATUS => VirtioMsgPayload::GetDeviceStatus,
@@ -184,7 +180,6 @@ impl VirtioMsgReq<'_> {
                     VirtioMsgPayload::ResetVqueue(unsafe { req.__bindgen_anon_1.reset_vqueue })
                 }
                 VIRTIO_MSG_CONNECT => todo!("support VIRTIO_MSG_CONNECT"),
-                VIRTIO_MSG_GET_CONFIG_GEN => VirtioMsgPayload::GetConfigGen,
                 _ => VirtioMsgPayload::UnknownDeviceReq(id),
             }
         }
