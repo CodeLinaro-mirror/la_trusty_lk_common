@@ -27,9 +27,10 @@ use crate::msg::driver::{
 };
 use crate::sys_dev2::VIRTIO_CONFIG_S_NEEDS_RESET;
 use core::mem::size_of;
+use log::warn;
 use virtio_drivers_and_devices::transport::{DeviceStatus, DeviceType, InterruptStatus, Transport};
 use virtio_drivers_and_devices::{Error as VirtioError, PhysAddr};
-use zerocopy::{transmute_ref, FromBytes, Immutable, IntoBytes};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 type Result<T> = core::result::Result<T, VirtioError>;
 
@@ -157,22 +158,30 @@ impl Transport for FFAMsgTransport {
     }
 
     fn read_config_generation(&self) -> u32 {
-        let req = VirtioMsgReq::get_config_gen(self.dev_id);
-        let resp = send_virtio_msg_request(req).expect("get_config_gen request failed");
-        resp.into_get_config_gen().expect("get_config_gen returned invalid response").generation
+        let req = VirtioMsgReq::new_get_config(self.dev_id, 0 /* offset */, 0 /* size */);
+        let resp = send_virtio_msg_request(req).expect("get_config request failed");
+        let (config_resp_header, _config_data) =
+            resp.read_get_config().expect("get_config returned invalid response");
+        config_resp_header.generation
     }
 
     fn read_config_space<T: FromBytes>(&self, offset: usize) -> Result<T> {
-        let req = VirtioMsgReq::get_config(self.dev_id, offset, size_of::<T>().try_into().unwrap());
+        let req = VirtioMsgReq::new_get_config(
+            self.dev_id,
+            offset as u32,
+            size_of::<T>().try_into().unwrap(),
+        );
         let resp = send_virtio_msg_request(req).expect("get_config request failed");
-        let cfg_resp: [u64; 4] =
-            resp.into_get_config().expect("get_config returned invalid response").data;
-        let cfg_bytes: &[u8; 32] = transmute_ref!(&cfg_resp);
+        let (_config_resp_header, config_data) =
+            resp.read_get_config().expect("get_config returned invalid response");
         // vsock config space is only 8 bytes so the call in virtio-drivers-and-devices should never
         // cause this to panic.
-        let (cfg, _trailing_bytes) = T::read_from_prefix(cfg_bytes.as_slice())
-            .expect("attempted to read more than 32 bytes from config space");
-        Ok(cfg)
+        let (config_data, remainder) = T::read_from_prefix(config_data).unwrap();
+        if remainder.iter().any(|&b| b != 0) {
+            warn!("virtio-msg device returned more config data than expected");
+            return Err(VirtioError::InvalidParam);
+        }
+        Ok(config_data)
     }
 
     fn write_config_space<T: IntoBytes + Immutable>(

@@ -194,16 +194,15 @@ impl VirtioMsgReq {
         })
     }
 
-    pub fn get_config_gen(dev_id: u16) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_CONFIG_GEN, dev_id, |_msg| {})
-    }
-
-    pub fn get_config(dev_id: u16, offset: usize, size: u8) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_CONFIG, dev_id, |msg| {
-            let offset = (offset as u64).to_le_bytes();
-            let offset = [offset[1], offset[2], offset[3]];
-            msg.__bindgen_anon_1.get_config = get_config { offset, size };
-        })
+    pub fn new_get_config(dev_id: u16, offset: u32, size: u8) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_GET_CONFIG,
+            Some(dev_id),
+            |payload: &mut sys_dev2::get_config| {
+                payload.offset = offset;
+                payload.size = u32::from(size);
+            },
+        )
     }
 
     pub fn get_vqueue(dev_id: u16, queue: u16) -> Self {
@@ -394,18 +393,8 @@ impl VirtioMsgResp {
         self.read_v2_resp(sys_dev2::VIRTIO_MSG_SET_DEVICE_STATUS)
     }
 
-    pub fn into_get_config_gen(self) -> Result<get_config_gen_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_CONFIG_GEN)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_config_gen_resp })
-    }
-
-    pub fn into_get_config(self) -> Result<get_config_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_CONFIG)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_config_resp })
+    pub fn read_get_config(&self) -> Result<(sys_dev2::get_config_resp, &[u8])> {
+        self.read_v2_resp_variable_size(sys_dev2::VIRTIO_MSG_GET_CONFIG)
     }
 
     pub fn into_get_vqueue(self) -> Result<get_vqueue_resp> {

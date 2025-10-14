@@ -50,14 +50,13 @@ pub enum VirtioMsgPayload {
     SetFeatures(set_features),
     GetVqueue(get_vqueue),
     SetVqueue(set_vqueue),
-    GetConfig(get_config),
+    GetConfig(sys_dev2::get_config),
     EventAvail(event_avail),
     EventUsed(event_used),
     EventConfig(event_config),
     AreaShare(bus_area_share),
     AreaUnshare(bus_area_unshare),
     ResetVqueue(reset_vqueue),
-    GetConfigGen,
     // Contains the ID for a bus request not defined by the virtio-msg spec
     UnknownBusReq(u32),
     // Contains the ID for a virtio request not defined by the virtio-msg spec
@@ -134,12 +133,12 @@ impl VirtioMsgReq<'_> {
                 }
                 // GET_DEVICE_STATUS requests don't use the payload
                 sys_dev2::VIRTIO_MSG_GET_DEVICE_STATUS => VirtioMsgPayload::GetDeviceStatus,
-                VIRTIO_MSG_GET_FEATURES => {
+                sys_dev2::VIRTIO_MSG_GET_DEV_FEATURES => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
                     // union variants with valid values.
                     VirtioMsgPayload::GetFeatures(unsafe { req.__bindgen_anon_1.get_features })
                 }
-                VIRTIO_MSG_SET_FEATURES => {
+                sys_dev2::VIRTIO_MSG_SET_DRV_FEATURES => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
                     // union variants with valid values.
                     VirtioMsgPayload::SetFeatures(unsafe { req.__bindgen_anon_1.set_features })
@@ -154,10 +153,8 @@ impl VirtioMsgReq<'_> {
                     // union variants with valid values.
                     VirtioMsgPayload::SetVqueue(unsafe { req.__bindgen_anon_1.set_vqueue })
                 }
-                VIRTIO_MSG_GET_CONFIG => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::GetConfig(unsafe { req.__bindgen_anon_1.get_config })
+                sys_dev2::VIRTIO_MSG_GET_CONFIG => {
+                    VirtioMsgPayload::GetConfig(self.get_v2_payload())
                 }
                 VIRTIO_MSG_EVENT_AVAIL => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
@@ -351,13 +348,28 @@ impl VirtioMsgResp<'_> {
     }
 
     // Set the payload as the response to a get_config request
-    pub fn get_config(self, offset: [u8; 3], size: u8, data: [u64; 4]) {
-        let resp = VirtioMsg::from_bytes_mut(self.buf);
-        resp.__bindgen_anon_1.get_config_resp = get_config_resp { offset, size, data };
-    }
+    pub fn write_get_config(self, generation: u32, offset: u32, size: u32, data: u64) {
+        let resp = sys_dev2::virtio_msg::from_bytes_mut(self.buf);
+        let total_size =
+            size_of_val(resp) + size_of::<sys_dev2::get_config_resp>() + size_of_val(&data);
+        resp.msg_size = total_size.try_into().unwrap();
+        let payload_ptr = resp.payload.as_mut_ptr().cast::<sys_dev2::get_config_resp>();
 
-    pub fn get_config_gen(self, generation: u32) {
-        let resp = VirtioMsg::from_bytes_mut(self.buf);
-        resp.__bindgen_anon_1.get_config_gen_resp = get_config_gen_resp { generation };
+        // SAFETY: All calls to write_unaligned take a non-null pointer to a buffer at least as big
+        // as the type of the argument being written since payload_ptr is derived from a reference
+        // self.buf with an offset to skip the header in the virtio_msg struct
+        unsafe {
+            let generation_ptr = &raw mut (*payload_ptr).generation;
+            write_unaligned(generation_ptr, generation);
+
+            let offset_ptr = &raw mut (*payload_ptr).offset;
+            write_unaligned(offset_ptr, offset);
+
+            let size_ptr = &raw mut (*payload_ptr).size;
+            write_unaligned(size_ptr, size);
+
+            let config_ptr = &raw mut (*payload_ptr).config;
+            write_unaligned(config_ptr.cast::<u64>(), data);
+        }
     }
 }

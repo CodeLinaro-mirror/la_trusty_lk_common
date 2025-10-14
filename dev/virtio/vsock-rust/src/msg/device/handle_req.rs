@@ -337,16 +337,13 @@ impl VirtioMsgDevice {
             }
             VirtioMsgPayload::GetConfig(req) => {
                 debug!("received virtio-msg request {req:x?}");
-                let offset = [req.offset[0], req.offset[1], req.offset[2], 0];
-                let offset = u32::from_le_bytes(offset);
                 // The config space for vsock devices must always be in little endian
-                let config = (self.guest_cid as u64).to_le() >> offset;
-                resp.get_config(req.offset, req.size, [config, 0, 0, 0]);
-            }
-            VirtioMsgPayload::GetConfigGen => {
-                debug!("received virtio-msg config generation request");
-                // vsock config should not change so just return a constant
-                resp.get_config_gen(0)
+                let mut config = (self.guest_cid as u64).to_le().unbounded_shr(req.offset);
+                if req.size < 8 {
+                    let mask = (1u64 << (req.size * 8)) - 1;
+                    config &= mask;
+                }
+                resp.write_get_config(0 /* generation */, req.offset, req.size, config);
             }
             VirtioMsgPayload::ResetVqueue(req) => {
                 warn!("ignoring unsupported reset vqueue request {req:x?}");
