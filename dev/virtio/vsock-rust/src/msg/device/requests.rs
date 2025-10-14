@@ -25,6 +25,7 @@ use crate::msg::device::VirtQueue;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
 use crate::msg::{VirtioMsg, VirtioMsgFFA};
 use crate::sys_dev2;
+use crate::VsockVirtioFeatures;
 use core::mem::size_of_val;
 use core::ptr::{write, write_unaligned};
 // glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
@@ -127,7 +128,7 @@ impl VirtioMsgReq<'_> {
             let req = VirtioMsg::from_bytes(self.buf);
             match id {
                 // GET_DEVICE_INFO requests don't use the payload
-                VIRTIO_MSG_DEVICE_INFO => VirtioMsgPayload::GetDeviceInfo,
+                sys_dev2::VIRTIO_MSG_DEVICE_INFO => VirtioMsgPayload::GetDeviceInfo,
                 VIRTIO_MSG_SET_DEVICE_STATUS => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
                     // union variants with valid values.
@@ -183,7 +184,6 @@ impl VirtioMsgReq<'_> {
                     VirtioMsgPayload::ResetVqueue(unsafe { req.__bindgen_anon_1.reset_vqueue })
                 }
                 VIRTIO_MSG_CONNECT => todo!("support VIRTIO_MSG_CONNECT"),
-                VIRTIO_MSG_DISCONNECT => todo!("support VIRTIO_MSG_DISCONNECT"),
                 VIRTIO_MSG_SET_CONFIG => todo!("support VIRTIO_MSG_SET_CONFIG"),
                 VIRTIO_MSG_GET_CONFIG_GEN => VirtioMsgPayload::GetConfigGen,
                 _ => VirtioMsgPayload::UnknownDeviceReq(id),
@@ -278,16 +278,17 @@ impl VirtioMsgResp<'_> {
     }
 
     // Set the payload as the response to a device_info request
-    pub fn device_info(self, device_version: u32, dev_ty: DeviceType, vendor_id: u32) {
-        let resp = VirtioMsg::from_bytes_mut(self.buf);
-        let dev_ty = dev_ty as u32;
-
-        // virtio_msg.h defines the device type field in the payload as "device_id" and the actual
-        // device id in the header as dev_id. Since this virtio-msg bus only implements a single
-        // device the dev_id is kept as it was in the request here and instead validated in
-        // handle_req.
-        resp.__bindgen_anon_1.get_device_info_resp =
-            get_device_info_resp { device_version, device_id: dev_ty, vendor_id }
+    pub fn write_device_info(mut self, dev_ty: DeviceType, vendor_id: u32) {
+        let resp = self.as_mut_v2_payload::<sys_dev2::get_device_info_resp>();
+        resp.device_id = dev_ty as u32;
+        resp.vendor_id = vendor_id;
+        resp.num_feature_bits = u32::try_from(size_of::<VsockVirtioFeatures>()).unwrap() * 8;
+        // vsock config space only includes one u64 for CID
+        resp.config_size = u32::try_from(size_of::<u64>()).unwrap();
+        // vsock devices only support 3 virtqueues
+        resp.max_vq_count = 3;
+        resp.admin_vq_start_idx = 0;
+        resp.admin_vq_count = 0;
     }
 
     // Set the payload as the response to a get_device_status request

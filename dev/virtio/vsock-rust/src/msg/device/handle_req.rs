@@ -152,9 +152,8 @@ impl VirtioMsgDevice {
             VirtioMsgPayload::GetDeviceInfo => {
                 debug!("received virtio-msg get_device_info request");
                 let dev_ty = DeviceType::Socket;
-                let dev_version = 0;
                 let vendor_id = 0;
-                resp.device_info(dev_version, dev_ty, vendor_id);
+                resp.write_device_info(dev_ty, vendor_id);
             }
             VirtioMsgPayload::SetDeviceStatus(req) => {
                 debug!("received virtio-msg set_device_status request {req:x?}");

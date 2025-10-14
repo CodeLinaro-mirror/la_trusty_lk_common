@@ -25,10 +25,9 @@ use crate::msg::driver::hal::{MsgHal, VsockMemAllocator};
 use crate::msg::driver::requests::{VirtioMsgReq, VirtioMsgResp};
 use crate::msg::driver::transport::FFAMsgTransport;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
-use crate::sys::get_device_info_resp as GetDeviceInfoResp;
 use crate::sys_dev2::{
-    bus_ffa_version_resp as BusFFAVersionResp, VIRTIO_MSG_FFA_BUS_VERSION_1_0,
-    VIRTIO_MSG_REVISION_1,
+    bus_ffa_version_resp as BusFFAVersionResp, get_device_info_resp as GetDeviceInfoResp,
+    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_REVISION_1,
 };
 use crate::vsock::{vsock_init, TransportKind};
 use alloc::vec::Vec;
@@ -242,9 +241,9 @@ fn enumerate_devices() -> Result<Vec<u16>> {
 }
 
 fn get_device_info(dev_id: u16) -> Result<GetDeviceInfoResp> {
-    let req = VirtioMsgReq::get_device_info(dev_id);
+    let req = VirtioMsgReq::new_get_device_info(dev_id);
     let resp = send_virtio_msg_request(req)?;
-    resp.into_get_device_info()
+    resp.read_get_device_info()
 }
 
 fn driver_init() -> Result<()> {

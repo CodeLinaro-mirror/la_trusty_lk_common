@@ -164,8 +164,8 @@ impl VirtioMsgReq {
     }
 
     /// Get device info for the specified device
-    pub fn get_device_info(dev_id: u16) -> Self {
-        Self::new_req(VIRTIO_MSG_DEVICE_INFO, dev_id, |_msg| {})
+    pub fn new_get_device_info(dev_id: u16) -> Self {
+        Self::new_v2_req(sys_dev2::VIRTIO_MSG_DEVICE_INFO, Some(dev_id))
     }
 
     pub fn set_device_status(dev_id: u16, status: DeviceStatus) -> Self {
@@ -372,11 +372,8 @@ impl VirtioMsgResp {
         self.read_v2_resp_variable_size(sys_dev2::VIRTIO_MSG_BUS_GET_DEVICES)
     }
 
-    pub fn into_get_device_info(self) -> Result<get_device_info_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_DEVICE_INFO)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_device_info_resp })
+    pub fn read_get_device_info(self) -> Result<sys_dev2::get_device_info_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_DEVICE_INFO)
     }
 
     pub fn into_get_features(self) -> Result<get_features_resp> {
