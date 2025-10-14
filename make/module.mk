@@ -250,11 +250,18 @@ MODULE_ALL_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODU
 ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 
 # In userspace, MODULE_ADD_IMPLICIT_DEPS adds std.
-# In the kernel, it adds core, compiler_builtins and
-# lib/rust_support (except for external crates).
+# In the kernel, it adds core, alloc, compiler_builtins
+# and lib/rust_support (except for external crates).
+# The kernel also adds trusty-std though it only adds
+# the `#[global_allocator]`.
+# TODO(b/450652789): alloc and trusty-std are workarounds
+# for spurious circular dependencies with rust in the
+# kernel. Once this is fixed they may be removed.
 MODULE_ALL_DEPS += \
 	trusty/user/base/lib/libcore-rust \
 	trusty/user/base/lib/libcompiler_builtins-rust \
+	trusty/user/base/lib/liballoc-rust \
+	trusty/user/base/lib/trusty-std \
 
 # rust_support depends on some external crates. We cannot
 # add it as an implicit dependency to any of them because

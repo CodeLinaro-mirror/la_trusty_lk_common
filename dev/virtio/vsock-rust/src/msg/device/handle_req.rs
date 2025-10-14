@@ -301,7 +301,7 @@ impl VirtioMsgDevice {
                     *unshare_req_entry = Some(ext_mem_obj);
                 }
                 // Notify the thread which handles the unmapping of the new request.
-                self.unshare.signal();
+                self.wake_memory_unmap.signal();
                 sm::intc_raise_doorbell_irq();
             }
             VirtioMsgPayload::GetConfig(req) => {
