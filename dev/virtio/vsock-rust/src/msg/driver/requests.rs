@@ -148,6 +148,21 @@ impl VirtioMsgReq {
         })
     }
 
+    pub fn new_bus_get_devices(offset: u16, num_devs: u16) -> Self {
+        // virtio-msg spec 4.4.7.1: The offset and number of device numbers requested MUST be
+        // multiples of 8.
+        assert!(offset.is_multiple_of(8));
+        assert!(num_devs.is_multiple_of(8));
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_BUS_GET_DEVICES,
+            None,
+            |payload: &mut sys_dev2::bus_get_devices| {
+                payload.offset = offset;
+                payload.num = num_devs;
+            },
+        )
+    }
+
     /// Get device info for the specified device
     pub fn get_device_info(dev_id: u16) -> Self {
         Self::new_req(VIRTIO_MSG_DEVICE_INFO, dev_id, |_msg| {})
