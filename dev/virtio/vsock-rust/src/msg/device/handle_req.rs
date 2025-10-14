@@ -134,7 +134,21 @@ impl VirtioMsgDevice {
                     resp_features,
                 );
             }
-            VirtioMsgPayload::BusGetDevices(_req) => unimplemented!(),
+            VirtioMsgPayload::BusGetDevices(req) => {
+                let next_offset = 0;
+                let device_bitmap: u8 = if req.offset == 0 {
+                    // Only one vsock device per VM is currently supported.
+                    0b1
+                } else {
+                    let offset = req.offset;
+                    warn!(
+                        "unexpected virtio-msg bus_get_devices request with offset: {:?}",
+                        offset
+                    );
+                    0b0
+                };
+                resp.write_bus_get_devices(next_offset, device_bitmap);
+            }
             VirtioMsgPayload::GetDeviceInfo => {
                 debug!("received virtio-msg get_device_info request");
                 let dev_ty = DeviceType::Socket;

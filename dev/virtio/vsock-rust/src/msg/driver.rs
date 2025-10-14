@@ -31,6 +31,7 @@ use crate::sys_dev2::{
     VIRTIO_MSG_REVISION_1,
 };
 use crate::vsock::{vsock_init, TransportKind};
+use alloc::vec::Vec;
 use arm_ffa::{
     msg_send_direct_req2, partition_info_get_count, partition_info_get_desc, FFAInitState,
 };
@@ -183,6 +184,63 @@ fn negotiate_version(
     resp.read_bus_ffa_version()
 }
 
+// Enumerate devices and return a Vec with the IDs of the devices available.
+fn enumerate_devices() -> Result<Vec<u16>> {
+    let mut device_ids = Vec::new();
+    debug!("enumerating virtio-msg devices");
+    // virtio-msg spec 4.4.7.1: The offset and number of device numbers requested MUST be
+    // multiples of 8.
+    // This driver implementation requests 8 devices at a time.
+    let num_req_devices = 8;
+    let mut next_bitmap_offset = 0;
+
+    // The next_offset resp field is a u16 which should increase on every iteration or go to zero.
+    // That ensures that this loop will terminate after a fixed amount of time.
+    loop {
+        let current_bitmap_offset = next_bitmap_offset;
+        // Send the BUS_MSG_GET_DEVICES request with bitmap offset = 0 or the value specified by the
+        // response in the previous iteration
+        let req = VirtioMsgReq::new_bus_get_devices(current_bitmap_offset, num_req_devices);
+        let resp = send_virtio_msg_request(req)?;
+        let (get_devices_resp, bitmap) = resp.read_bus_get_devices()?;
+
+        let num_devices = get_devices_resp.num;
+        if usize::from(num_devices) != bitmap.len() * 8 {
+            debug!(
+                "virtio-msg GET_DEVICES returned wrong bitmap for num_devices ({num_devices:?})"
+            );
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+
+        // virtio-msg spec 4.4.7.1: The next offset MUST also be a multiple of 8.
+        let next_is_multiple_of_8 = get_devices_resp.next_offset % 8 == 0;
+
+        let next_increased = get_devices_resp.next_offset > current_bitmap_offset;
+
+        if !next_is_multiple_of_8 || (get_devices_resp.next_offset != 0 && !next_increased) {
+            let bad_next_offset = get_devices_resp.next_offset;
+            debug!("virtio-msg GET_DEVICES returned invalid next_offset {bad_next_offset:?}");
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+
+        for bit in 0..get_devices_resp.num {
+            let mask = 1 << bit;
+            let idx = usize::from(bit / 8);
+            let dev_avail = (bitmap[idx] & mask) != 0;
+            if dev_avail {
+                device_ids.push(bit + current_bitmap_offset);
+            }
+        }
+
+        next_bitmap_offset = get_devices_resp.next_offset;
+        if next_bitmap_offset == 0 {
+            break;
+        }
+    }
+
+    Ok(device_ids)
+}
+
 fn get_device_info(dev_id: u16) -> Result<GetDeviceInfoResp> {
     let req = VirtioMsgReq::get_device_info(dev_id);
     let resp = send_virtio_msg_request(req)?;
@@ -227,11 +285,16 @@ fn driver_init() -> Result<()> {
     debug!("received {negotiate_resp:?} as response to virtio-msg version request");
     MAIN_HEAP.lock().init(VIRTIO_MSG_SHARED_MEMORY_SIZE, INITIAL_AREA_ID)?;
 
-    // TODO: Add BUS_MSG_GET_DEVICES instead of hard-coding this
-    let num_devices = 1;
+    let device_ids = enumerate_devices()?;
+    if device_ids.is_empty() {
+        warn!("no virtio-msg devices found");
+    }
+    // TODO: Add FFA_BUS_MSG_EVENT_CONFIGURE request/response structs to bindgen'ed headers and
+    // configure the event delivery mechanism as described in ARM's virtio-msg-ffa spec section 2.4.
+    // All device/driver implementations currently behave as if polling was configured.
 
     // Go through all the devices on the virtio-msg bus and initialize the vsock devices
-    for dev_id in 0..num_devices {
+    for dev_id in device_ids {
         debug!("getting info for device #{dev_id:?}");
         let dev_info_resp = get_device_info(dev_id)?;
         debug!("get_device_info returned {dev_info_resp:?}");
