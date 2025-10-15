@@ -134,6 +134,11 @@ MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_forwarder"'
 
 endif
 
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_KEYMINT_PROVISIONING)))
+MODULE_RUSTFLAGS += --cfg 'feature="keymint_provisioning"'
+
+endif
+
 MODULE_RUST_USE_CLIPPY := true
 
 # TODO: These are the options used to generate new_bindings.rs from the latest version of the

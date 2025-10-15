@@ -126,6 +126,9 @@ const PORT_MAP: &[TipcPort] = &[
     TipcPort { port: 10, name: c"com.android.trusty.vintf" },
     #[cfg(feature = "keymint_commservice")]
     TipcPort { port: 11, name: c"com.android.trusty.keymint.commservice" },
+    // TODO(b/451194187): Only expose this on desktop.
+    #[cfg(feature = "keymint_provisioning")]
+    TipcPort { port: 12, name: c"com.android.trusty.rust.KeyMintProvisioningService.V1" },
     #[cfg(feature = "gatekeeper_with_thal")]
     TipcPort { port: 13, name: c"android.hardware.gatekeeper.IGateKeeper_with_thal" },
 ];
