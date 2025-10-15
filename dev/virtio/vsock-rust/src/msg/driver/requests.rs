@@ -23,12 +23,14 @@
 
 // glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
 use crate::sys::*;
+use crate::sys_dev2;
 
-use crate::msg::VirtioMsg;
-use crate::msg::VirtioMsgFFA;
+use crate::msg::{VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
+use core::mem::{size_of, size_of_val};
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceStatus;
+use zerocopy::{FromBytes, IntoBytes, KnownLayout};
 
 type Result<T> = core::result::Result<T, LkError>;
 
@@ -36,6 +38,64 @@ type Result<T> = core::result::Result<T, LkError>;
 pub struct VirtioMsgReq([u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]);
 
 impl VirtioMsgReq {
+    /// Creates a VirtioMsgReq using the virtio_msg struct from the new bindings with no payload.
+    ///
+    /// If `dev_id` is `None` the buffer is initialized as a bus message.
+    fn new_v2_req(msg_id: u32, dev_id: Option<u16>) -> Self {
+        // Use a no-op closure for `init_fn` with an arbitrary payload type.
+        Self::new_v2_req_with_payload(msg_id, dev_id, |_: &mut ()| {})
+    }
+
+    /// Creates a VirtioMsgReq using the virtio_msg struct from the new bindings.
+    ///
+    /// If `dev_id` is `None` the buffer is initialized as a bus message.  Unlike the constructors
+    /// for the old bindings this function's `init_fn` takes a mutable reference to the payload
+    /// rather than the entire virtio_msg struct.
+    fn new_v2_req_with_payload<T: KnownLayout + FromBytes + IntoBytes, F: FnOnce(&mut T)>(
+        msg_id: u32,
+        dev_id: Option<u16>,
+        init_fn: F,
+    ) -> Self {
+        let mut buf = [0; ARM_FFA_MSG_EXTENDED_ARGS_COUNT];
+        let buf_size = size_of_val(&buf);
+        let msg = sys_dev2::virtio_msg::from_bytes_mut(&mut buf);
+        msg.msg_id = u8::try_from(msg_id).unwrap();
+        match dev_id {
+            Some(id) => {
+                msg.dev_id = id;
+                // MBZ for device messages
+                msg.type_ = 0;
+            }
+            None => {
+                // MBZ for bus messages
+                msg.dev_id = 0;
+                msg.type_ = sys_dev2::VIRTIO_MSG_TYPE_BUS as u8;
+            }
+        };
+        // Cannot be const since `T` is a generic on the function, but the assertion should be
+        // optimized out.
+        let payload_size = size_of::<T>();
+        let total_size = size_of_val(msg) + payload_size;
+        // virtio-msg spec 7.2: Total length of the message in bytes, include the 6-byte header.
+        // Must be between 6 and 96.
+        assert!(total_size < MAX_VIRTIO_MSG_SIZE);
+
+        // conversion to u16 should not fail since we asserted the max payload size in the spec
+        msg.msg_size = total_size.try_into().unwrap();
+
+        // SAFETY: The `payload` field on `msg` is right after the header fields and this creates a
+        // `&mut [u8]` of the remaining portion of the buffer from which `msg` is derived.
+        let payload_slice = unsafe { msg.payload.as_mut_slice(buf_size - size_of_val(msg)) };
+
+        // The payload slice is at least as big as `T` since we asserted the total size above so
+        // this should never panic. We use the _from_prefix method since the payload may be smaller
+        // than the slice.
+        let (payload_ref, _remainder) = FromBytes::mut_from_prefix(payload_slice).unwrap();
+        init_fn(payload_ref);
+
+        Self(buf)
+    }
+
     fn new_req<F: FnOnce(&mut VirtioMsg)>(id: u32, dev_id: u16, init_fn: F) -> Self {
         let mut buf = [0; ARM_FFA_MSG_EXTENDED_ARGS_COUNT];
         let msg = VirtioMsg::from_bytes_mut(&mut buf);

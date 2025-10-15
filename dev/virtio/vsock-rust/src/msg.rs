@@ -72,6 +72,10 @@ const MAX_NUM_SHM: usize = 255;
 const VIRTIO_MSG_FFA_UUID: Uuid =
     Uuid::new(0xc66028b5, 0x2498, 0x4aa1, [0x9d, 0xe7, 0x77, 0xda, 0x61, 0x22, 0xab, 0xf0]);
 
+// virtio-msg spec 7.2: Total length of the message in bytes, include the 6-byte header.
+// Must be between 6 and 96.
+const MAX_VIRTIO_MSG_SIZE: usize = 96;
+
 // Verify some of the assumptions of the safety comments below.
 const_assert!(size_of::<VirtioMsgFFA>() == size_of::<VirtioMsg>());
 const_assert!(size_of::<VirtioMsgFFA>() == 40);
