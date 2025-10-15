@@ -20,9 +20,11 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#![allow(dead_code)]
 
 use crate::sys::virtio_msg as VirtioMsg;
 use crate::sys::virtio_msg_ffa as VirtioMsgFFA;
+use crate::sys_dev2;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::align_of;
 use core::mem::offset_of;
@@ -126,6 +128,34 @@ impl VirtioMsgFFA {
         // - Same safety considerations as `VirtioMsgFFA::from_bytes` apply. The
         //   mutability does not affect the validity of the reinterpretation.
         // - `VirtioMsgFFA` is a packed struct.
+        unsafe { buf.as_mut().unwrap() }
+    }
+}
+
+impl sys_dev2::virtio_msg {
+    fn from_bytes(buf: &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &Self {
+        let buf = buf.as_ptr().cast::<Self>();
+        // SAFETY:
+        // - The input reference `buf` is valid for the lifetime of this function.
+        // - The returned reference has the same lifetime as the input reference by elision rules.
+        // - `Self` and `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` have compatible layouts:
+        //   - `Self` is a packed struct with a size of 6 bytes and specific field offsets. It is
+        //     terminated by a bindgen-generated ZST representing a flexible array member which may
+        //     only be accessed as a `&[u8]` via unsafe functions where the caller has to ensure the
+        //     offset into it is valid for the buffer from which the virtio_msg struct is derived.
+        //   - `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` is a 112 byte (14 * 8) array.
+        // - The layout of `Self` is such that its size and fields match the first 6 bytes of the input array.
+        // - `Self` and `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` have compatible alignments.
+        // - Therefore, reinterpreting the first 6 bytes of the input array reference as `Self` is safe.
+        unsafe { buf.as_ref().unwrap() }
+    }
+
+    fn from_bytes_mut(buf: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &mut Self {
+        let buf = buf.as_mut_ptr().cast::<Self>();
+        // SAFETY:
+        // - Same safety considerations as `Self::from_bytes` apply. The
+        //   mutability does not affect the validity of the reinterpretation.
+        // - `Self` is a packed struct.
         unsafe { buf.as_mut().unwrap() }
     }
 }
