@@ -252,16 +252,15 @@ impl VirtioMsgDevice {
                 debug!("received virtio-msg get_features request {req:x?}");
                 resp.write_get_device_features(req.index, SUPPORTED_VIRTIO_FEATURES);
             }
-            VirtioMsgPayload::SetFeatures(req) => {
-                debug!("received virtio-msg set_features request {req:x?}");
-                let requested_features = req.features[0];
+            VirtioMsgPayload::SetFeatures((_req, requested_features)) => {
+                debug!("received virtio-msg set_features request {requested_features:x?}");
                 if requested_features & SUPPORTED_VIRTIO_FEATURES != SUPPORTED_VIRTIO_FEATURES {
                     warn!("driver does not support required features: {requested_features:x?}");
                 }
                 // TODO: don't force F_ACCESS_PLATFORM once virtio-drivers accepts it
-                let negotiated_features =
+                let _negotiated_features =
                     (requested_features & SUPPORTED_VIRTIO_FEATURES) | VIRTIO_F_ACCESS_PLATFORM;
-                resp.set_features(0, negotiated_features);
+                // TODO: forbid FEATURES_OK if features are not acceptable
             }
             VirtioMsgPayload::GetVqueue(req) => {
                 debug!("received virtio-msg get_vqueue request {req:x?}");

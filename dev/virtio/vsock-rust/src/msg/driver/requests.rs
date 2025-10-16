@@ -27,9 +27,10 @@ use crate::sys_dev2;
 use crate::sys_dev2::VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
 
 use crate::msg::{MemShareAttr, VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
+use crate::VsockVirtioFeatures;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::{size_of, size_of_val};
-use core::ptr::read_unaligned;
+use core::ptr::{read_unaligned, write_unaligned};
 use rust_support::mmu::ArchMmuFlags;
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceStatus;
@@ -194,10 +195,34 @@ impl VirtioMsgReq {
         )
     }
 
-    pub fn set_features(dev_id: u16, index: u32, features: [u64; 4]) -> Self {
-        Self::new_req(VIRTIO_MSG_SET_FEATURES, dev_id, |msg| {
-            msg.__bindgen_anon_1.set_features = set_features { index, features };
-        })
+    pub fn new_set_driver_features(dev_id: u16, index: u32, features: u64) -> Self {
+        let mut req = Self::new_v2_req(sys_dev2::VIRTIO_MSG_SET_DRV_FEATURES, Some(dev_id));
+        let msg = sys_dev2::virtio_msg::from_bytes_mut(&mut req.0);
+
+        let payload_size = size_of::<sys_dev2::set_features>() + size_of::<u64>();
+        let total_size = size_of::<sys_dev2::virtio_msg>() + payload_size;
+        msg.msg_size = total_size.try_into().unwrap();
+
+        // This pointer may be unaligned since the virtio_msg struct is packed
+        let payload_ptr = msg.payload.as_mut_ptr().cast::<sys_dev2::set_features>();
+
+        // Feature blocks are groups of 32 bits
+        let num_blocks = size_of::<VsockVirtioFeatures>() / size_of::<u32>();
+        let payload = sys_dev2::set_features {
+            index,
+            num: num_blocks.try_into().unwrap(),
+            ..Default::default()
+        };
+        // SAFETY: payload_ptr is non-null and points to a byte buffer at least as big as
+        // `set_features`.
+        unsafe { write_unaligned(payload_ptr, payload) }
+        // This pointer may be unaligned since the set_features struct is packed
+        // SAFETY: payload_ptr is non-null and points to a valid bus_get_devices_resp struct
+        let features_ptr = unsafe { &raw mut (*payload_ptr).features };
+        // SAFETY: features_ptr is non-null and points to a byte buffer at least as big as `u64`.
+        unsafe { write_unaligned(features_ptr.cast::<u64>(), features) }
+
+        req
     }
 
     pub fn new_get_config(dev_id: u16, offset: u32, size: u8) -> Self {

@@ -26,8 +26,8 @@ use crate::msg::device::VSOCK_QUEUE_SIZE;
 use crate::msg::{VirtioMsg, VirtioMsgFFA};
 use crate::sys_dev2;
 use crate::VsockVirtioFeatures;
-use core::mem::size_of_val;
-use core::ptr::{write, write_unaligned};
+use core::mem::{size_of, size_of_val};
+use core::ptr::{read_unaligned, write, write_unaligned};
 // glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
 use crate::sys::*;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
@@ -39,7 +39,6 @@ pub struct VirtioMsgReq<'a> {
     buf: &'a mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
 }
 
-#[derive(Debug)]
 pub enum VirtioMsgPayload {
     BusFFAVersion(sys_dev2::bus_ffa_version),
     BusGetDevices(sys_dev2::bus_get_devices),
@@ -47,7 +46,7 @@ pub enum VirtioMsgPayload {
     SetDeviceStatus(sys_dev2::set_device_status),
     GetDeviceStatus,
     GetFeatures(sys_dev2::get_features),
-    SetFeatures(set_features),
+    SetFeatures((sys_dev2::set_features, VsockVirtioFeatures)),
     GetVqueue(sys_dev2::get_vqueue),
     SetVqueue(sys_dev2::set_vqueue),
     GetConfig(sys_dev2::get_config),
@@ -95,6 +94,28 @@ impl VirtioMsgReq<'_> {
         payload_copy
     }
 
+    fn get_v2_payload_variable_size<T, const N: usize>(&self) -> (T, [u8; N]) {
+        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
+
+        let payload_ptr: *const u8 = req.payload.as_ptr();
+        // SAFETY: payload_ptr is non-null and points to a buffer at least as bit as `T`.
+        let fixed_payload_copy = unsafe { read_unaligned(payload_ptr.cast::<T>()) };
+
+        // SAFETY: The `payload` field on `req` is right after the header fields and this creates a
+        // `&[u8]` of the remaining portion of the buffer from which `req` is derived.
+        let payload_slice =
+            unsafe { req.payload.as_slice(size_of_val(self.buf) - size_of_val(req)) };
+
+        let fixed_payload_size = size_of::<T>();
+        let total_fixed_size = size_of_val(req) + fixed_payload_size;
+        let variable_payload_size = usize::from(req.msg_size) - total_fixed_size;
+        let variable_payload_end = fixed_payload_size + variable_payload_size;
+        let variable_payload_slice = &payload_slice[fixed_payload_size..variable_payload_end];
+
+        // TODO: Return a Result here instead of unwrapping
+        (fixed_payload_copy, variable_payload_slice.try_into().unwrap())
+    }
+
     pub fn get_msg_payload(&self) -> VirtioMsgPayload {
         let req = VirtioMsgFFA::from_bytes(self.buf);
 
@@ -133,9 +154,10 @@ impl VirtioMsgReq<'_> {
                     VirtioMsgPayload::GetFeatures(self.get_v2_payload())
                 }
                 sys_dev2::VIRTIO_MSG_SET_DRV_FEATURES => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::SetFeatures(unsafe { req.__bindgen_anon_1.set_features })
+                    let (set_features_header, set_features_data) =
+                        self.get_v2_payload_variable_size();
+                    let feature_data = u64::from_le_bytes(set_features_data);
+                    VirtioMsgPayload::SetFeatures((set_features_header, feature_data))
                 }
                 sys_dev2::VIRTIO_MSG_GET_VQUEUE => {
                     VirtioMsgPayload::GetVqueue(self.get_v2_payload())

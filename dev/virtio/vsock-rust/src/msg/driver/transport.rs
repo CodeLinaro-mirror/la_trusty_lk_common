@@ -73,7 +73,7 @@ impl Transport for FFAMsgTransport {
     }
 
     fn write_driver_features(&mut self, driver_features: u64) {
-        let req = VirtioMsgReq::set_features(self.dev_id, 0, [driver_features, 0, 0, 0]);
+        let req = VirtioMsgReq::new_set_driver_features(self.dev_id, 0, driver_features);
         send_virtio_msg_request(req).expect("set_features virtio-msg request failed");
     }
 
