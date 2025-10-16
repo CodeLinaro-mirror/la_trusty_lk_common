@@ -48,7 +48,7 @@ pub enum VirtioMsgPayload {
     GetDeviceStatus,
     GetFeatures(get_features),
     SetFeatures(set_features),
-    GetVqueue(get_vqueue),
+    GetVqueue(sys_dev2::get_vqueue),
     SetVqueue(set_vqueue),
     GetConfig(sys_dev2::get_config),
     EventAvail(event_avail),
@@ -141,10 +141,8 @@ impl VirtioMsgReq<'_> {
                     // union variants with valid values.
                     VirtioMsgPayload::SetFeatures(unsafe { req.__bindgen_anon_1.set_features })
                 }
-                VIRTIO_MSG_GET_VQUEUE => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::GetVqueue(unsafe { req.__bindgen_anon_1.get_vqueue })
+                sys_dev2::VIRTIO_MSG_GET_VQUEUE => {
+                    VirtioMsgPayload::GetVqueue(self.get_v2_payload())
                 }
                 VIRTIO_MSG_SET_VQUEUE => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
@@ -303,30 +301,26 @@ impl VirtioMsgResp<'_> {
     }
 
     // Set the payload as the response to a get_vqueue request
-    pub fn get_vqueue(self, index: u32, vqueue: Option<&VirtQueue>) {
-        let resp = VirtioMsg::from_bytes_mut(self.buf);
+    pub fn write_get_vqueue(mut self, index: u32, vqueue: Option<&VirtQueue>) {
+        let resp = self.as_mut_v2_payload::<sys_dev2::get_vqueue_resp>();
         // virtio-msg spec 3.2: If the virtqueue was configured, the current information is returned
         // otherwise all fields other than Max Virtqueue Size are 0.
         match vqueue {
             Some(vqueue) => {
-                resp.__bindgen_anon_1.get_vqueue_resp = get_vqueue_resp {
-                    index,
-                    max_size: VSOCK_QUEUE_SIZE,
-                    size: vqueue.size,
-                    descriptor_addr: vqueue.desc_table as u64,
-                    driver_addr: vqueue.avail_ring as u64,
-                    device_addr: vqueue.used_ring as u64,
-                };
+                resp.index = index;
+                resp.max_size = VSOCK_QUEUE_SIZE;
+                resp.size = vqueue.size;
+                resp.descriptor_addr = vqueue.desc_table as u64;
+                resp.driver_addr = vqueue.avail_ring as u64;
+                resp.device_addr = vqueue.used_ring as u64;
             }
             None => {
-                resp.__bindgen_anon_1.get_vqueue_resp = get_vqueue_resp {
-                    index,
-                    max_size: VSOCK_QUEUE_SIZE,
-                    size: 0,
-                    descriptor_addr: 0,
-                    driver_addr: 0,
-                    device_addr: 0,
-                };
+                resp.index = index;
+                resp.max_size = VSOCK_QUEUE_SIZE;
+                resp.size = 0;
+                resp.descriptor_addr = 0;
+                resp.driver_addr = 0;
+                resp.device_addr = 0;
             }
         }
     }

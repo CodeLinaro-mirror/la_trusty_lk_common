@@ -206,11 +206,14 @@ impl VirtioMsgReq {
         )
     }
 
-    pub fn get_vqueue(dev_id: u16, queue: u16) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_VQUEUE, dev_id, |msg| {
-            let index = u32::from(queue);
-            msg.__bindgen_anon_1.get_vqueue = get_vqueue { index };
-        })
+    pub fn new_get_vqueue(dev_id: u16, queue: u16) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_GET_VQUEUE,
+            Some(dev_id),
+            |payload: &mut sys_dev2::get_vqueue| {
+                payload.index = u32::from(queue);
+            },
+        )
     }
 
     pub fn set_vqueue(
@@ -412,11 +415,8 @@ impl VirtioMsgResp {
         self.read_v2_resp_variable_size(sys_dev2::VIRTIO_MSG_GET_CONFIG)
     }
 
-    pub fn into_get_vqueue(self) -> Result<get_vqueue_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_VQUEUE)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_vqueue_resp })
+    pub fn read_get_vqueue(self) -> Result<sys_dev2::get_vqueue_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_GET_VQUEUE)
     }
 
     pub fn read_bus_area_share(self) -> Result<sys_dev2::bus_area_share_resp> {

@@ -272,7 +272,7 @@ impl VirtioMsgDevice {
                         return Err(LkError::ERR_INVALID_ARGS);
                     }
                 };
-                resp.get_vqueue(req.index, vqueue);
+                resp.write_get_vqueue(req.index, vqueue);
             }
             VirtioMsgPayload::AreaShare(req) => {
                 debug!("received virtio-msg-ffa area_share request {req:x?}");

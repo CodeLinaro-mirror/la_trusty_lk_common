@@ -69,9 +69,9 @@ impl Transport for FFAMsgTransport {
     }
 
     fn max_queue_size(&mut self, queue: u16) -> u32 {
-        let req = VirtioMsgReq::get_vqueue(self.dev_id, queue);
+        let req = VirtioMsgReq::new_get_vqueue(self.dev_id, queue);
         let resp = send_virtio_msg_request(req).expect("get_vqueue request failed");
-        resp.into_get_vqueue().expect("get_vqueue returned invalid response").max_size
+        resp.read_get_vqueue().expect("get_vqueue returned invalid response").max_size
     }
 
     fn notify(&mut self, _queue: u16) {
@@ -142,9 +142,9 @@ impl Transport for FFAMsgTransport {
     }
 
     fn queue_used(&mut self, queue: u16) -> bool {
-        let req = VirtioMsgReq::get_vqueue(self.dev_id, queue);
+        let req = VirtioMsgReq::new_get_vqueue(self.dev_id, queue);
         let resp = send_virtio_msg_request(req).expect("get_vqueue request failed");
-        let get_vqueue = resp.into_get_vqueue().expect("get_vqueue returned invalid response");
+        let get_vqueue = resp.read_get_vqueue().expect("get_vqueue returned invalid response");
         // virtio-msg spec: If the vqueue hasn't been configured all fields are zero
         let all_fields_zero = get_vqueue.size == 0
             && get_vqueue.descriptor_addr == 0
