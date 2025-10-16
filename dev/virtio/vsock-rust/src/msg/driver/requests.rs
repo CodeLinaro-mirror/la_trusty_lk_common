@@ -183,10 +183,15 @@ impl VirtioMsgReq {
         Self::new_v2_req(sys_dev2::VIRTIO_MSG_GET_DEVICE_STATUS, Some(dev_id))
     }
 
-    pub fn get_features(dev_id: u16, index: u32) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_FEATURES, dev_id, |msg| {
-            msg.__bindgen_anon_1.get_features = get_features { index };
-        })
+    pub fn new_get_device_features(dev_id: u16, index: u32, num_blocks: u32) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_GET_DEV_FEATURES,
+            Some(dev_id),
+            |payload: &mut sys_dev2::get_features| {
+                payload.index = index;
+                payload.num = num_blocks;
+            },
+        )
     }
 
     pub fn set_features(dev_id: u16, index: u32, features: [u64; 4]) -> Self {
@@ -403,11 +408,8 @@ impl VirtioMsgResp {
         self.read_v2_resp(sys_dev2::VIRTIO_MSG_DEVICE_INFO)
     }
 
-    pub fn into_get_features(self) -> Result<get_features_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_FEATURES)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_features_resp })
+    pub fn read_get_device_features(&self) -> Result<(sys_dev2::get_features_resp, &[u8])> {
+        self.read_v2_resp_variable_size(sys_dev2::VIRTIO_MSG_GET_DEV_FEATURES)
     }
 
     pub fn read_get_device_status(self) -> Result<sys_dev2::get_device_status_resp> {

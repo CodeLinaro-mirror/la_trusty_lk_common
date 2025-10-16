@@ -26,6 +26,7 @@ use crate::msg::driver::{
     get_device_info, send_virtio_msg_request, VirtioMsgReq, INITIAL_AREA_ID, MAIN_HEAP,
 };
 use crate::sys_dev2::VIRTIO_CONFIG_S_NEEDS_RESET;
+use crate::VsockVirtioFeatures;
 use core::mem::size_of;
 use log::warn;
 use virtio_drivers_and_devices::transport::{DeviceStatus, DeviceType, InterruptStatus, Transport};
@@ -58,9 +59,17 @@ impl Transport for FFAMsgTransport {
     }
 
     fn read_device_features(&mut self) -> u64 {
-        let req = VirtioMsgReq::get_features(self.dev_id, 0);
+        // Feature blocks are groups of 32 bits
+        let num_blocks = size_of::<VsockVirtioFeatures>() / size_of::<u32>();
+        let req = VirtioMsgReq::new_get_device_features(
+            self.dev_id,
+            0, /* index */
+            num_blocks.try_into().unwrap(),
+        );
         let resp = send_virtio_msg_request(req).expect("get_features request failed");
-        resp.into_get_features().expect("get_features returned invalid response").features[0]
+        let feature_data =
+            resp.read_get_device_features().expect("get_features returned invalid response").1;
+        u64::from_le_bytes(feature_data[0..8].try_into().unwrap())
     }
 
     fn write_driver_features(&mut self, driver_features: u64) {

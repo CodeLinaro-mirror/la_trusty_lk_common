@@ -43,5 +43,5 @@ pub use pci::pci_init_mmio;
 type FFAClientId = u16;
 
 // Vsock devices do not need bits above 64
-#[cfg(feature = "virtio_msg_device")]
+#[allow(unused)]
 type VsockVirtioFeatures = u64;

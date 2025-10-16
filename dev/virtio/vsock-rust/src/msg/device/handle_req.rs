@@ -250,7 +250,7 @@ impl VirtioMsgDevice {
             }
             VirtioMsgPayload::GetFeatures(req) => {
                 debug!("received virtio-msg get_features request {req:x?}");
-                resp.get_features(req.index, SUPPORTED_VIRTIO_FEATURES);
+                resp.write_get_device_features(req.index, SUPPORTED_VIRTIO_FEATURES);
             }
             VirtioMsgPayload::SetFeatures(req) => {
                 debug!("received virtio-msg set_features request {req:x?}");
