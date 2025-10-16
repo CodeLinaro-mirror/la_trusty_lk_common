@@ -347,19 +347,6 @@ impl VirtioMsgDevice {
                 }
                 resp.write_get_config(0 /* generation */, req.offset, req.size, config);
             }
-            VirtioMsgPayload::ResetVqueue(req) => {
-                warn!("ignoring unsupported reset vqueue request {req:x?}");
-            }
-            VirtioMsgPayload::EventAvail(req) => {
-                // TODO: Implement this to avoid the need to poll the virtqueues
-                warn!("ignoring unsupported event avail request {req:x?}");
-            }
-            VirtioMsgPayload::EventUsed(req) => {
-                warn!("ignoring unsupported event used request {req:x?}");
-            }
-            VirtioMsgPayload::EventConfig(req) => {
-                warn!("ignoring unsupported event config request {req:x?}");
-            }
             VirtioMsgPayload::UnknownBusReq(req_id) => {
                 error!("ignoring virtio-msg bus request with unknown id {req_id:x?}");
             }

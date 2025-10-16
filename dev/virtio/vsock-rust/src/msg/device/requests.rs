@@ -50,12 +50,8 @@ pub enum VirtioMsgPayload {
     GetVqueue(sys_dev2::get_vqueue),
     SetVqueue(sys_dev2::set_vqueue),
     GetConfig(sys_dev2::get_config),
-    EventAvail(event_avail),
-    EventUsed(event_used),
-    EventConfig(event_config),
     AreaShare(sys_dev2::bus_area_share),
     AreaUnshare(sys_dev2::bus_area_unshare),
-    ResetVqueue(reset_vqueue),
     // Contains the ID for a bus request not defined by the virtio-msg spec
     UnknownBusReq(u32),
     // Contains the ID for a virtio request not defined by the virtio-msg spec
@@ -137,11 +133,9 @@ impl VirtioMsgReq<'_> {
                 sys_dev2::VIRTIO_MSG_FFA_BUS_AREA_UNSHARE => {
                     VirtioMsgPayload::AreaUnshare(self.get_v2_payload())
                 }
-                VIRTIO_MSG_FFA_ERROR => todo!("support VIRTIO_MSG_FFA_ERROR"),
                 _ => VirtioMsgPayload::UnknownBusReq(id),
             }
         } else {
-            let req = VirtioMsg::from_bytes(self.buf);
             match id {
                 // GET_DEVICE_INFO requests don't use the payload
                 sys_dev2::VIRTIO_MSG_DEVICE_INFO => VirtioMsgPayload::GetDeviceInfo,
@@ -168,27 +162,6 @@ impl VirtioMsgReq<'_> {
                 sys_dev2::VIRTIO_MSG_GET_CONFIG => {
                     VirtioMsgPayload::GetConfig(self.get_v2_payload())
                 }
-                VIRTIO_MSG_EVENT_AVAIL => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::EventAvail(unsafe { req.__bindgen_anon_1.event_avail })
-                }
-                VIRTIO_MSG_EVENT_USED => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::EventUsed(unsafe { req.__bindgen_anon_1.event_used })
-                }
-                VIRTIO_MSG_EVENT_CONFIG => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::EventConfig(unsafe { req.__bindgen_anon_1.event_config })
-                }
-                VIRTIO_MSG_RESET_VQUEUE => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::ResetVqueue(unsafe { req.__bindgen_anon_1.reset_vqueue })
-                }
-                VIRTIO_MSG_CONNECT => todo!("support VIRTIO_MSG_CONNECT"),
                 _ => VirtioMsgPayload::UnknownDeviceReq(id),
             }
         }
