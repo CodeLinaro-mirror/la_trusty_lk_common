@@ -25,12 +25,11 @@ use crate::msg::device::VirtQueue;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
 use crate::msg::{VirtioMsg, VirtioMsgFFA};
 use crate::sys_dev2;
+use crate::sys_dev2::{VIRTIO_MSG_TYPE_BUS, VIRTIO_MSG_TYPE_RESPONSE};
 use crate::VsockVirtioFeatures;
+use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::{size_of, size_of_val};
 use core::ptr::{read_unaligned, write, write_unaligned};
-// glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
-use crate::sys::*;
-use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceType;
 use zerocopy::{FromBytes, IntoBytes, KnownLayout};
@@ -71,7 +70,7 @@ impl VirtioMsgReq<'_> {
     }
 
     pub fn is_bus_msg(&self) -> bool {
-        let req = VirtioMsgFFA::from_bytes(self.buf);
+        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
         // Check whether the request is a bus or virtio message
         u32::from(req.type_) & VIRTIO_MSG_TYPE_BUS != 0
     }
@@ -113,11 +112,11 @@ impl VirtioMsgReq<'_> {
     }
 
     pub fn get_msg_payload(&self) -> VirtioMsgPayload {
-        let req = VirtioMsgFFA::from_bytes(self.buf);
+        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
 
         // The request ID determines which field is valid in the payload union. Note that a given ID
         // may represent different requests depending on whether it's a bus or virtio message.
-        let id = u32::from(req.id);
+        let id = u32::from(req.msg_id);
 
         if self.is_bus_msg() {
             match id {
@@ -178,14 +177,6 @@ impl VirtioMsgResp<'_> {
         // Set the RESPONSE bit in the same buffer the request came in
         VirtioMsg::from_bytes_mut(buf).type_ |= VIRTIO_MSG_TYPE_RESPONSE as u8;
         VirtioMsgResp { buf }
-    }
-
-    pub fn ffa_error(self) {
-        let resp = VirtioMsgFFA::from_bytes_mut(self.buf);
-        let is_bus_msg = u32::from(resp.type_) & VIRTIO_MSG_TYPE_BUS != 0;
-        assert!(is_bus_msg);
-        resp.id = u8::try_from(VIRTIO_MSG_FFA_ERROR).unwrap();
-        resp.__bindgen_anon_1.payload_u8 = [0; 36];
     }
 
     fn as_mut_v2_payload<T: FromBytes + IntoBytes + KnownLayout>(&mut self) -> &mut T {
@@ -285,12 +276,6 @@ impl VirtioMsgResp<'_> {
         // the pointer is derived from a reference to self.buf with an offset to skip the header in
         // the virtio_msg struct and the fixed-size part of the get_features_resp struct
         unsafe { write_unaligned(features_ptr.cast::<u64>(), features) }
-    }
-
-    pub fn set_features(self, index: u32, features: u64) {
-        let resp = VirtioMsg::from_bytes_mut(self.buf);
-        resp.__bindgen_anon_1.set_features_resp =
-            set_features_resp { index, features: [features, 0, 0, 0] }
     }
 
     // Set the payload as the response to a get_vqueue request
