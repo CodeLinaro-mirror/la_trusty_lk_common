@@ -49,7 +49,7 @@ pub enum VirtioMsgPayload {
     GetFeatures(get_features),
     SetFeatures(set_features),
     GetVqueue(sys_dev2::get_vqueue),
-    SetVqueue(set_vqueue),
+    SetVqueue(sys_dev2::set_vqueue),
     GetConfig(sys_dev2::get_config),
     EventAvail(event_avail),
     EventUsed(event_used),
@@ -144,10 +144,8 @@ impl VirtioMsgReq<'_> {
                 sys_dev2::VIRTIO_MSG_GET_VQUEUE => {
                     VirtioMsgPayload::GetVqueue(self.get_v2_payload())
                 }
-                VIRTIO_MSG_SET_VQUEUE => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::SetVqueue(unsafe { req.__bindgen_anon_1.set_vqueue })
+                sys_dev2::VIRTIO_MSG_SET_VQUEUE => {
+                    VirtioMsgPayload::SetVqueue(self.get_v2_payload())
                 }
                 sys_dev2::VIRTIO_MSG_GET_CONFIG => {
                     VirtioMsgPayload::GetConfig(self.get_v2_payload())
@@ -323,20 +321,6 @@ impl VirtioMsgResp<'_> {
                 resp.device_addr = 0;
             }
         }
-    }
-
-    // Set the payload as the response to a set_vqueue request
-    pub fn set_vqueue(
-        self,
-        index: u32,
-        size: u32,
-        descriptor_addr: u64,
-        driver_addr: u64,
-        device_addr: u64,
-    ) {
-        let resp = VirtioMsg::from_bytes_mut(self.buf);
-        resp.__bindgen_anon_1.set_vqueue_resp =
-            set_vqueue_resp { index, unused: 0, size, descriptor_addr, driver_addr, device_addr };
     }
 
     // Set the payload as the response to a get_config request

@@ -309,14 +309,6 @@ impl VirtioMsgDevice {
                     avail_ring: req.driver_addr as BusAddress,
                     used_ring: req.device_addr as BusAddress,
                 });
-                // leave request buffer the same
-                resp.set_vqueue(
-                    req.index,
-                    req.size,
-                    req.descriptor_addr,
-                    req.driver_addr,
-                    req.device_addr,
-                )
             }
             VirtioMsgPayload::AreaUnshare(req) => {
                 debug!("received virtio-msg-ffa area_unshare request {req:x?}");

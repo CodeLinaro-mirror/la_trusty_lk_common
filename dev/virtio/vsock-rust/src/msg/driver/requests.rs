@@ -216,7 +216,7 @@ impl VirtioMsgReq {
         )
     }
 
-    pub fn set_vqueue(
+    pub fn new_set_vqueue(
         dev_id: u16,
         queue: u16,
         size: u32,
@@ -224,11 +224,18 @@ impl VirtioMsgReq {
         driver_addr: u64,
         device_addr: u64,
     ) -> Self {
-        Self::new_req(VIRTIO_MSG_SET_VQUEUE, dev_id, |msg| {
-            let index = u32::from(queue);
-            msg.__bindgen_anon_1.set_vqueue =
-                set_vqueue { index, unused: 0, size, descriptor_addr, driver_addr, device_addr };
-        })
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_SET_VQUEUE,
+            Some(dev_id),
+            |payload: &mut sys_dev2::set_vqueue| {
+                payload.index = u32::from(queue);
+                payload.unused = 0;
+                payload.size = size;
+                payload.descriptor_addr = descriptor_addr;
+                payload.driver_addr = driver_addr;
+                payload.device_addr = device_addr;
+            },
+        )
     }
 
     pub fn new_bus_area_share(

@@ -126,7 +126,7 @@ impl Transport for FFAMsgTransport {
         let device_area_bus = bus_address(INITIAL_AREA_ID, (device_area_phys - base_paddr) as u64);
 
         // Send the set_vqueue virtio-msg request
-        let req = VirtioMsgReq::set_vqueue(
+        let req = VirtioMsgReq::new_set_vqueue(
             self.dev_id,
             queue,
             size,
