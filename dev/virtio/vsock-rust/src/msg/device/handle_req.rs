@@ -29,6 +29,7 @@ use crate::msg::device::VirtioMsgResp;
 use crate::msg::device::TRANSPORT;
 use crate::msg::BusAddress;
 use crate::msg::VirtioMsg;
+use crate::msg::MAX_NUM_SHM;
 use crate::FFAClientId;
 // glob import since we only allowlist virtio_msg.h, virtio_msg_ffa.h and virtio_config.h in bindgen
 use crate::sys::*;
@@ -275,17 +276,23 @@ impl VirtioMsgDevice {
             }
             VirtioMsgPayload::AreaShare(req) => {
                 debug!("received virtio-msg-ffa area_share request {req:x?}");
-                let idx = req.area_id as u8;
-                if req.area_id > u8::MAX.into() {
-                    return Err(LkError::ERR_INVALID_ARGS);
-                }
-                // map_requests has 255 elements so this indexing can't panic
-                let mut state = self.state.lock_unsaved();
-                if state.share_requests[usize::from(idx)].is_some() {
-                    return Err(LkError::ERR_INVALID_ARGS);
-                }
-                state.share_requests[usize::from(idx)] = Some(req.mem_handle);
-                // leave area_id field in response buffer unmodified
+                let success = 'block: {
+                    let idx = usize::from(req.area_id);
+                    // This device implementation only supports MAX_NUM_SHM shared memory regions
+                    if idx > MAX_NUM_SHM {
+                        break 'block false;
+                    }
+                    // If the device already received an area share request for this area ID return
+                    // an error. state.share_requests has MAX_NUM_SHM elements so this indexing
+                    // can't panic.
+                    let mut state = self.state.lock_unsaved();
+                    if state.share_requests[idx].is_some() {
+                        break 'block false;
+                    }
+                    state.share_requests[idx] = Some(req.mem_handle);
+                    true
+                };
+                resp.write_bus_area_share(req.area_id, success);
             }
             VirtioMsgPayload::SetVqueue(req) => {
                 debug!("received virtio-msg set_vqueue request {req:x?}");

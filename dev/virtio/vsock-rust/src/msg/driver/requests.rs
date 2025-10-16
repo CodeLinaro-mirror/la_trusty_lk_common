@@ -26,10 +26,11 @@ use crate::sys::*;
 use crate::sys_dev2;
 use crate::sys_dev2::VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
 
-use crate::msg::{VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
+use crate::msg::{MemShareAttr, VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::{size_of, size_of_val};
 use core::ptr::read_unaligned;
+use rust_support::mmu::ArchMmuFlags;
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceStatus;
 use zerocopy::{FromBytes, IntoBytes, KnownLayout};
@@ -227,10 +228,24 @@ impl VirtioMsgReq {
         })
     }
 
-    pub fn area_share(area_id: u32, mem_handle: u64) -> Self {
-        Self::new_ffa_req(VIRTIO_MSG_FFA_AREA_SHARE, |msg| {
-            msg.__bindgen_anon_1.bus_area_share = bus_area_share { area_id, mem_handle };
-        })
+    pub fn new_bus_area_share(
+        area_id: u16,
+        mem_handle: u64,
+        num_pages: usize,
+        arch_mmu_flags: ArchMmuFlags,
+    ) -> Self {
+        let attr = MemShareAttr::from_lk_flags(arch_mmu_flags);
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_FFA_BUS_AREA_SHARE,
+            None,
+            |payload: &mut sys_dev2::bus_area_share| {
+                payload.area_id = area_id;
+                payload.mem_handle = mem_handle;
+                payload.tag = 0;
+                payload.count = u32::try_from(num_pages).unwrap();
+                payload.attr = u32::from(attr);
+            },
+        )
     }
 
     pub fn get_buf(&self) -> &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT] {

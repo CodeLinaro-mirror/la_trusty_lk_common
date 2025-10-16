@@ -40,7 +40,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use rust_support::init::lk_init_level;
-use rust_support::mmu::{ARCH_MMU_FLAG_PERM_NO_EXECUTE, PAGE_SIZE};
+use rust_support::mmu::{ArchMmuFlags, PAGE_SIZE};
 use rust_support::sync::Mutex;
 use rust_support::{Error as LkError, LK_INIT_HOOK};
 use virtio_drivers_and_devices::device::socket::VirtIOSocket;
@@ -66,7 +66,7 @@ fn get_receiver_id() -> u16 {
 // An arbitrary and easily identifiable area id which the main heap will always use. Once the
 // virtio-msg driver supports allocating memory on demand the other shared memory regions must make
 // sure to not use this area id.
-const INITIAL_AREA_ID: u8 = 0x1E;
+const INITIAL_AREA_ID: u16 = 0x001E;
 
 // This shared memory area contains the virtqueues so it cannot be unshared/deallocate until the
 // driver is torn down.
@@ -102,7 +102,7 @@ impl SharedHeap {
         Self { paddr: 0, vaddr: 0, shared: false, allocator: VsockMemAllocator::new() }
     }
 
-    fn init(&mut self, heap_size: usize, area_id: u8) -> Result<()> {
+    fn init(&mut self, heap_size: usize, area_id: u16) -> Result<()> {
         if self.shared {
             return Err(LkError::ERR_ALREADY_STARTED);
         }
@@ -119,13 +119,14 @@ impl SharedHeap {
         // memory region instead of creating references directly to it.
         let (paddr, vaddr) = crate::hal::dma_alloc(num_pages, BufferDirection::Both);
         let vaddr = vaddr.as_ptr().addr();
-        let arch_mmu_flags = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
+        let arch_mmu_flags = ArchMmuFlags::PERM_NO_EXECUTE;
         // SAFETY: This memory came from `vmm_alloc_contiguous` with the same arch_mmu_flags
         // (NO_EXECUTE) used below so it's safe to share with another FFA endpoint.
         let ffa_handle = unsafe {
             arm_ffa::mem_share_kernel_buffer(get_receiver_id(), paddr, num_pages, arch_mmu_flags)?
         };
-        let req = VirtioMsgReq::area_share(u32::from(area_id), ffa_handle.get());
+        let req =
+            VirtioMsgReq::new_bus_area_share(area_id, ffa_handle.get(), num_pages, arch_mmu_flags);
         send_virtio_msg_request(req)?;
 
         self.allocator.init(num_pages)?;

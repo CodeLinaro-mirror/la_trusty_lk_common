@@ -54,7 +54,7 @@ pub enum VirtioMsgPayload {
     EventAvail(event_avail),
     EventUsed(event_used),
     EventConfig(event_config),
-    AreaShare(bus_area_share),
+    AreaShare(sys_dev2::bus_area_share),
     AreaUnshare(bus_area_unshare),
     ResetVqueue(reset_vqueue),
     // Contains the ID for a bus request not defined by the virtio-msg spec
@@ -110,10 +110,8 @@ impl VirtioMsgReq<'_> {
                 sys_dev2::VIRTIO_MSG_BUS_GET_DEVICES => {
                     VirtioMsgPayload::BusGetDevices(self.get_v2_payload())
                 }
-                VIRTIO_MSG_FFA_AREA_SHARE => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::AreaShare(unsafe { req.__bindgen_anon_1.bus_area_share })
+                sys_dev2::VIRTIO_MSG_FFA_BUS_AREA_SHARE => {
+                    VirtioMsgPayload::AreaShare(self.get_v2_payload())
                 }
                 VIRTIO_MSG_FFA_AREA_UNSHARE => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
@@ -371,5 +369,11 @@ impl VirtioMsgResp<'_> {
             let config_ptr = &raw mut (*payload_ptr).config;
             write_unaligned(config_ptr.cast::<u64>(), data);
         }
+    }
+
+    pub fn write_bus_area_share(mut self, area_id: u16, success: bool) {
+        let resp = self.as_mut_v2_payload::<sys_dev2::bus_area_share_resp>();
+        resp.area_id = area_id;
+        resp.result = if success { 0 } else { 1 };
     }
 }

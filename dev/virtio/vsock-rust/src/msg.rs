@@ -44,26 +44,30 @@ mod device;
 #[cfg(feature = "virtio_msg_driver")]
 mod driver;
 
-// virtio-msg spec 4.3.1: To refer to a specific address in one of the shared area, both sides
-// are using a 64bit “bus address” (in Linux this is represented by the type dma_addr_t) which
-// is formed of the area numeric ID and the offset in that area in the following way:
-//   - Bit 63-56: Area numerical ID
-//   - Bit 56-0: Offset in the Area
-// We treat physical address arguments and return values in the dma HALs as bus addresses so we
-// define this as PhysAddr (usize) instead of u64.
+// virtio-msg-ffa spec 4.2 Bus Address Format
+// A bus address is a 64-bit value used by the device endpoint to reference a specific offset within
+// a shared memory area.
+//
+// - Area ID (16 bits): The identifier assigned by the driver when the memory region is shared
+// - Offset (48 bits): A byte offset from the start of the shared area
+//
+// This driver treats physical address arguments and return values in the dma HALs as bus addresses
+// so we define this as PhysAddr (usize) instead of u64.
 const_assert!(size_of::<BusAddress>() == size_of::<u64>());
 type BusAddress = PhysAddr;
-type AreaId = u8;
+type AreaId = u16;
+const BUS_ADDR_AREA_ID_SHIFT: usize = 48;
 
 fn area_id_and_offset(bus_addr: BusAddress) -> (AreaId, u64) {
-    let area_id = bus_addr >> 56;
-    let area_offset = bus_addr & ((1 << 56) - 1);
-    (area_id as u8, area_offset as u64)
+    let area_id = bus_addr >> BUS_ADDR_AREA_ID_SHIFT;
+    let area_offset = bus_addr & ((1 << BUS_ADDR_AREA_ID_SHIFT) - 1);
+    (area_id as AreaId, area_offset as u64)
 }
 
 #[cfg(feature = "virtio_msg_driver")]
 fn bus_address(area_id: AreaId, offset: u64) -> BusAddress {
-    (BusAddress::from(area_id) << 56) | (offset as BusAddress)
+    assert!(offset < 1 << BUS_ADDR_AREA_ID_SHIFT);
+    (BusAddress::from(area_id) << BUS_ADDR_AREA_ID_SHIFT) | (offset as BusAddress)
 }
 
 // virtio-msg over FF-A only supports up to 255 shared memory regions
