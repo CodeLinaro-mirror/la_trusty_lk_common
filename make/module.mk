@@ -23,6 +23,11 @@
 # MODULE_DISABLE_STACK_PROTECTOR : disable stack protector for this module
 # MODULE_DISABLE_SCS : disable shadow call stack for this module
 # MODULE_SKIP_DOCS : skip generating docs for this module
+# MODULE_LIBRARIES : extra .rlib or .so (proc-macro) library files that this module
+#                    requires (Rust-only, internal)
+# MODULE_RLIBS : list of foo=/path/to/libfoo.rlib pairs of Rust crates
+#                (Rust-only, internal) to pass to the compiler that this module
+#                requires; should exactly match the files from MODULE_LIBRARIES
 
 # MODULE_ARM_OVERRIDE_SRCS : list of source files, local path that should be force compiled with ARM (if applicable)
 
@@ -250,18 +255,11 @@ MODULE_ALL_DEPS := $(MODULE_LIBRARY_DEPS) $(MODULE_LIBRARY_EXPORTED_DEPS) $(MODU
 ifeq ($(call TOBOOL,$(MODULE_ADD_IMPLICIT_DEPS)),true)
 
 # In userspace, MODULE_ADD_IMPLICIT_DEPS adds std.
-# In the kernel, it adds core, alloc, compiler_builtins
-# and lib/rust_support (except for external crates).
-# The kernel also adds trusty-std though it only adds
-# the `#[global_allocator]`.
-# TODO(b/450652789): alloc and trusty-std are workarounds
-# for spurious circular dependencies with rust in the
-# kernel. Once this is fixed they may be removed.
+# In the kernel, it adds core, compiler_builtins and
+# lib/rust_support (except for external crates).
 MODULE_ALL_DEPS += \
 	trusty/user/base/lib/libcore-rust \
 	trusty/user/base/lib/libcompiler_builtins-rust \
-	trusty/user/base/lib/liballoc-rust \
-	trusty/user/base/lib/trusty-std \
 
 # rust_support depends on some external crates. We cannot
 # add it as an implicit dependency to any of them because
@@ -489,5 +487,7 @@ MODULE_RUST_STEM :=
 MODULE_SKIP_DOCS :=
 MODULE_ADD_IMPLICIT_DEPS := true
 MODULE_RUSTFLAGS_CONFIG :=
+MODULE_RLIBS :=
+MODULE_LIBRARIES :=
 
 endif # QUERY_MODULE (this line should stay after all other processing)
