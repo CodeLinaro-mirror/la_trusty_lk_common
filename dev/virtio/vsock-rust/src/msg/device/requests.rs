@@ -23,7 +23,6 @@
 
 use crate::msg::device::VirtQueue;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
-use crate::msg::{VirtioMsg, VirtioMsgFFA};
 use crate::sys_dev2;
 use crate::sys_dev2::{VIRTIO_MSG_TYPE_BUS, VIRTIO_MSG_TYPE_RESPONSE};
 use crate::VsockVirtioFeatures;
@@ -61,7 +60,7 @@ impl VirtioMsgReq<'_> {
     pub fn parse(
         buf: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
     ) -> Result<VirtioMsgReq<'_>, LkError> {
-        let req = VirtioMsgFFA::from_bytes(buf);
+        let req = sys_dev2::virtio_msg::from_bytes(buf);
         let msg_ty = u32::from(req.type_);
         if msg_ty & VIRTIO_MSG_TYPE_RESPONSE != 0 {
             return Err(LkError::ERR_INVALID_ARGS);
@@ -175,7 +174,7 @@ impl VirtioMsgResp<'_> {
     pub fn new(req: VirtioMsgReq) -> VirtioMsgResp {
         let buf = req.buf;
         // Set the RESPONSE bit in the same buffer the request came in
-        VirtioMsg::from_bytes_mut(buf).type_ |= VIRTIO_MSG_TYPE_RESPONSE as u8;
+        sys_dev2::virtio_msg::from_bytes_mut(buf).type_ |= VIRTIO_MSG_TYPE_RESPONSE as u8;
         VirtioMsgResp { buf }
     }
 
