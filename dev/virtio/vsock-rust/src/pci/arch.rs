@@ -25,7 +25,6 @@ use alloc::collections::btree_map::BTreeMap;
 
 use lazy_static::lazy_static;
 
-use core::ffi::c_void;
 use core::ops::DerefMut;
 use core::ptr::copy_nonoverlapping;
 use core::ptr::NonNull;
@@ -74,10 +73,10 @@ pub(crate) unsafe fn share(buffer: NonNull<[u8]>, direction: BufferDirection) ->
         panic!("paddr ({:#x}) was already mapped to vaddr ({:#x})", paddr, old_vaddr);
     }
 
-    let dst_ptr = vaddr.as_ptr() as *mut c_void;
+    let dst_ptr = vaddr.as_ptr();
 
     if direction != BufferDirection::DeviceToDriver {
-        let src_ptr = buffer.as_ptr() as *const u8 as *const c_void;
+        let src_ptr = buffer.as_ptr().cast::<u8>();
         // Safety: Both regions are valid, properly aligned, and don't overlap.
         // - Because `vaddr` is a virtual address returned by `dma_alloc`, it is
         // properly aligned and does not overlap with `buffer`.
@@ -94,11 +93,11 @@ pub(crate) unsafe fn share(buffer: NonNull<[u8]>, direction: BufferDirection) ->
 //   has not already been `unshare`d by this function.
 pub(crate) unsafe fn unshare(paddr: PhysAddr, buffer: NonNull<[u8]>, direction: BufferDirection) {
     let size = buffer.len();
-    let vaddr = VADDRS.lock().deref_mut().remove(&paddr).expect("paddr was inserted by share")
-        as *const c_void;
+    let vaddr =
+        VADDRS.lock().deref_mut().remove(&paddr).expect("paddr was inserted by share") as *const u8;
 
     if direction != BufferDirection::DriverToDevice {
-        let dest = buffer.as_ptr() as *mut u8 as *mut c_void;
+        let dest = buffer.as_ptr().cast::<u8>();
         // Safety: Both regions are valid, properly aligned, and don't overlap.
         // - Because `vaddr` was retrieved from `VADDRS`, it must have been returned
         //   from the call to `dma_alloc` in `share`.

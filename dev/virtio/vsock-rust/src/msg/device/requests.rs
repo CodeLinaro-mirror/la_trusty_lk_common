@@ -63,7 +63,7 @@ pub enum VirtioMsgPayload {
 impl VirtioMsgReq<'_> {
     pub fn parse(
         buf: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
-    ) -> Result<VirtioMsgReq, LkError> {
+    ) -> Result<VirtioMsgReq<'_>, LkError> {
         let req = VirtioMsgFFA::from_bytes(buf);
         let msg_ty = u32::from(req.type_);
         if msg_ty & VIRTIO_MSG_TYPE_RESPONSE != 0 {

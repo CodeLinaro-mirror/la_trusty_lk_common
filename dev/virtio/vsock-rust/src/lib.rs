@@ -5,12 +5,13 @@
 #![cfg_attr(not(version("1.79")), feature(cstr_count_bytes))]
 // C string literals were stabilized in Rust 1.77
 #![cfg_attr(not(version("1.77")), feature(c_str_literals))]
-// unsigned_is_multiple_of feature was added in Rust 1.82
-#![cfg_attr(version("1.82"), feature(unsigned_is_multiple_of))]
+// unsigned_is_multiple_of feature was stabilized in Rust 1.87
+#![cfg_attr(not(version("1.87")), feature(unsigned_is_multiple_of))]
 
 mod err;
 mod hal;
 #[cfg(target_arch = "aarch64")]
+#[cfg(any(feature = "virtio_msg_device", feature = "virtio_msg_driver"))]
 mod msg;
 mod pci;
 mod vsock;
@@ -27,5 +28,16 @@ mod vsock;
 #[path = "bindings.rs"]
 mod sys;
 
+#[allow(clippy::upper_case_acronyms)]
+#[allow(unused)]
+#[allow(non_camel_case_types)]
+#[allow(non_upper_case_globals)]
+#[rustfmt::skip]
+#[path = "new_bindings.rs"]
+mod sys_dev2;
+
 pub use err::Error;
 pub use pci::pci_init_mmio;
+
+// FF-A partitions use 16-bit IDs
+type FFAClientId = u16;

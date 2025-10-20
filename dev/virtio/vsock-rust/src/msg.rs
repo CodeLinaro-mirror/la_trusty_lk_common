@@ -20,27 +20,27 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 #![allow(dead_code)]
 
 use crate::sys::virtio_msg as VirtioMsg;
 use crate::sys::virtio_msg_ffa as VirtioMsgFFA;
+use crate::sys_dev2;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::align_of;
 use core::mem::offset_of;
 use core::mem::size_of;
-use rust_support::uuid::Uuid;
+use peer_id::Uuid;
 use static_assertions::const_assert;
 use virtio_drivers_and_devices::PhysAddr;
 
-#[cfg(all(feature = "virtio_device_side", feature = "virtio_driver_side"))]
+#[cfg(all(feature = "virtio_msg_device", feature = "virtio_msg_driver"))]
 compile_error!(
-    "Features 'virtio_device_side' and 'virtio_driver_side' cannot be enabled simultaneously."
+    "Features 'virtio_msg_device' and 'virtio_msg_driver' cannot be enabled simultaneously."
 );
 
-#[cfg(feature = "virtio_device_side")]
+#[cfg(feature = "virtio_msg_device")]
 mod device;
-#[cfg(feature = "virtio_driver_side")]
+#[cfg(feature = "virtio_msg_driver")]
 mod driver;
 
 // virtio-msg spec 4.3.1: To refer to a specific address in one of the shared area, both sides
@@ -60,17 +60,21 @@ fn area_id_and_offset(bus_addr: BusAddress) -> (AreaId, u64) {
     (area_id as u8, area_offset as u64)
 }
 
-#[cfg(feature = "virtio_driver_side")]
+#[cfg(feature = "virtio_msg_driver")]
 fn bus_address(area_id: AreaId, offset: u64) -> BusAddress {
     (BusAddress::from(area_id) << 56) | (offset as BusAddress)
 }
 
 // virtio-msg over FF-A only supports up to 255 shared memory regions
-#[cfg(feature = "virtio_device_side")]
+#[cfg(feature = "virtio_msg_device")]
 const MAX_NUM_SHM: usize = 255;
 
 const VIRTIO_MSG_FFA_UUID: Uuid =
     Uuid::new(0xc66028b5, 0x2498, 0x4aa1, [0x9d, 0xe7, 0x77, 0xda, 0x61, 0x22, 0xab, 0xf0]);
+
+// virtio-msg spec 7.2: Total length of the message in bytes, include the 6-byte header.
+// Must be between 6 and 96.
+const MAX_VIRTIO_MSG_SIZE: usize = 96;
 
 // Verify some of the assumptions of the safety comments below.
 const_assert!(size_of::<VirtioMsgFFA>() == size_of::<VirtioMsg>());
@@ -128,6 +132,34 @@ impl VirtioMsgFFA {
         // - Same safety considerations as `VirtioMsgFFA::from_bytes` apply. The
         //   mutability does not affect the validity of the reinterpretation.
         // - `VirtioMsgFFA` is a packed struct.
+        unsafe { buf.as_mut().unwrap() }
+    }
+}
+
+impl sys_dev2::virtio_msg {
+    fn from_bytes(buf: &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &Self {
+        let buf = buf.as_ptr().cast::<Self>();
+        // SAFETY:
+        // - The input reference `buf` is valid for the lifetime of this function.
+        // - The returned reference has the same lifetime as the input reference by elision rules.
+        // - `Self` and `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` have compatible layouts:
+        //   - `Self` is a packed struct with a size of 6 bytes and specific field offsets. It is
+        //     terminated by a bindgen-generated ZST representing a flexible array member which may
+        //     only be accessed as a `&[u8]` via unsafe functions where the caller has to ensure the
+        //     offset into it is valid for the buffer from which the virtio_msg struct is derived.
+        //   - `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` is a 112 byte (14 * 8) array.
+        // - The layout of `Self` is such that its size and fields match the first 6 bytes of the input array.
+        // - `Self` and `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` have compatible alignments.
+        // - Therefore, reinterpreting the first 6 bytes of the input array reference as `Self` is safe.
+        unsafe { buf.as_ref().unwrap() }
+    }
+
+    fn from_bytes_mut(buf: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &mut Self {
+        let buf = buf.as_mut_ptr().cast::<Self>();
+        // SAFETY:
+        // - Same safety considerations as `Self::from_bytes` apply. The
+        //   mutability does not affect the validity of the reinterpretation.
+        // - `Self` is a packed struct.
         unsafe { buf.as_mut().unwrap() }
     }
 }

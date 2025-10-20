@@ -100,7 +100,7 @@ impl TrustyHal {
                     // Ignore not supported which implies that guard is not used.
                     Ok(()) | Err(LkError::ERR_NOT_SUPPORTED) | Err(LkError::ERR_INVALID_ARGS) => {}
                     Err(err) => {
-                        log::error!("mmio_map_region returned unexpected error: {:?}", err);
+                        log::error!("mmio_map_region returned unexpected error: {err:?}");
                         return Err(Error::Lk(err));
                     }
                 }
@@ -115,9 +115,6 @@ impl TrustyHal {
         Ok(())
     }
 }
-
-// Safety: TrustyHal is stateless and thus trivially safe to send to another thread
-unsafe impl Send for TrustyHal {}
 
 // Safety: See function specific comments
 unsafe impl Hal for TrustyHal {
