@@ -93,6 +93,7 @@ ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_KEYMINT)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="keymint"' \
 	--cfg 'feature="keymint_commservice"' \
+	--cfg 'feature="keymint_provisioning_with_thal"' \
 
 endif
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_AUTHMGR)))
