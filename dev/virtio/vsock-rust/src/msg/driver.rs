@@ -31,7 +31,9 @@ use crate::sys::{
     VIRTIO_MSG_FFA_FEATURE_NUM_SHM, VIRTIO_MSG_FFA_VERSION_1_0,
 };
 use crate::vsock::{vsock_init, TransportKind};
-use arm_ffa::{msg_send_direct_req2, partition_info_get_count, partition_info_get_desc};
+use arm_ffa::{
+    msg_send_direct_req2, partition_info_get_count, partition_info_get_desc, FFAInitState,
+};
 use core::ffi::c_uint;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -214,6 +216,19 @@ fn validate_features(features: u64, req_num_shm: u8) -> Result<()> {
 }
 
 fn driver_init() -> Result<()> {
+    match arm_ffa::get_init_state() {
+        FFAInitState::ARM_FFA_INIT_FAILED => {
+            // FFA is not supported so log that the vsock driver is not enabled and continue booting
+            info!("disabling virtio-msg vsock driver (FFA not supported)");
+            return Ok(());
+        }
+        FFAInitState::ARM_FFA_INIT_UNINIT => {
+            error!("virtio-msg vsock driver hook ran before ARM FFA hook");
+            return Err(LkError::ERR_NOT_CONFIGURED);
+        }
+        FFAInitState::ARM_FFA_INIT_SUCCESS => (),
+    }
+
     // Call FFA_PARTITION_INFO_GET to get the FFA ID for the partition with the virtio-msg device
     let ffa_id = init_receiver_id()?;
 
@@ -284,17 +299,9 @@ fn driver_init() -> Result<()> {
 
 extern "C" fn virtio_msg_driver_init_func(_: c_uint) {
     debug!("initializing virtio-msg vsock driver...");
-    match driver_init() {
-        Ok(_) => {}
-        Err(LkError::ERR_NOT_SUPPORTED) => {
-            // FFA is not supported so log that the vsock driver is not enabled and continue booting
-            info!("disabling virtio-msg vsock driver (FFA not supported")
-        }
-        Err(_) => {
-            // Any error other than ERR_NOT_SUPPORTED is unexpected
-            panic!("failed to initialize virtio-msg vsock driver")
-        }
-    }
+    if driver_init().is_err() {
+        panic!("failed to initialize virtio-msg vsock driver");
+    };
 }
 
 LK_INIT_HOOK!(
