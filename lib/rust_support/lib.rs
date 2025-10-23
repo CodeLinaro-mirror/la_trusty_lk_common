@@ -75,6 +75,7 @@ pub use sys::paddr_t;
 pub use sys::status_t;
 pub use sys::vaddr_t;
 pub use sys::Error;
+pub use sys::SMP_MAX_CPUS;
 
 // NOTE: `INFINITE_TIME` is defined in `lk/types.h` as `UINT32_MAX`,
 // which in turn is defined as `UINT_MAX`, which is not recognized
