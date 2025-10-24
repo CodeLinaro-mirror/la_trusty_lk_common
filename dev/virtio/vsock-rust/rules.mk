@@ -8,6 +8,7 @@ MODULE_EXPORT_INCLUDES += \
 	$(LOCAL_DIR)/include
 
 MODULE_LIBRARY_DEPS := \
+	trusty/kernel/lib/shared/peer_id/rust \
 	trusty/kernel/lib/rand/rust \
 	trusty/kernel/lib/trusty/rust \
 	trusty/user/base/lib/liballoc-rust \
@@ -104,6 +105,11 @@ MODULE_RUSTFLAGS += \
 	--cfg 'feature="vintf_ta"' \
 
 endif
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_PLACEHOLDER_SHARED_SECRET)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="placeholder_shared_secret"' \
+
+endif
 
 ifeq (true,$(call TOBOOL,$(VSOCK_WITH_VIRTIO_MSG_DEVICE)))
 MODULE_RUSTFLAGS += \
@@ -117,6 +123,12 @@ MODULE_RUSTFLAGS += \
 
 endif
 
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_GATEKEEPER_WITH_THAL)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="gatekeeper_with_thal"' \
+
+endif
+
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_AUTHMGR_VIA_VSOCK)))
 MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_authmgr"'
 
@@ -124,6 +136,16 @@ endif
 
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_TIPC_PORT_VIA_VSOCK)))
 MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_forwarder"'
+
+endif
+
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_KEYMINT_PROVISIONING)))
+MODULE_RUSTFLAGS += --cfg 'feature="keymint_provisioning"'
+
+endif
+
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_FINGERGUARD)))
+MODULE_RUSTFLAGS += --cfg 'feature="fingerguard"'
 
 endif
 

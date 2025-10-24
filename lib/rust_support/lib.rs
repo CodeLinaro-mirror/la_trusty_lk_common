@@ -47,7 +47,7 @@ mod sys {
     #![allow(unsafe_op_in_unsafe_fn)]
     #![allow(clippy::missing_safety_doc)]
     use num_derive::FromPrimitive;
-    use peer_id::{uuid, uuid as uuid_t};
+    use peer_id::{trusty_peer_id, uuid, uuid as uuid_t};
 
     include!(env!("BINDGEN_INC_FILE"));
 }
