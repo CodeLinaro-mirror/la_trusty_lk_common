@@ -25,10 +25,10 @@ use crate::msg::driver::hal::{MsgHal, VsockMemAllocator};
 use crate::msg::driver::requests::{VirtioMsgReq, VirtioMsgResp};
 use crate::msg::driver::transport::FFAMsgTransport;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
-use crate::sys::{
-    bus_activate_resp as BusActivateResp, bus_configure_resp as BusConfigureResp,
-    get_device_info_resp as GetDeviceInfoResp, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP,
-    VIRTIO_MSG_FFA_FEATURE_NUM_SHM, VIRTIO_MSG_FFA_VERSION_1_0,
+use crate::sys::get_device_info_resp as GetDeviceInfoResp;
+use crate::sys_dev2::{
+    bus_ffa_version_resp as BusFFAVersionResp, VIRTIO_MSG_FFA_BUS_VERSION_1_0,
+    VIRTIO_MSG_REVISION_1,
 };
 use crate::vsock::{vsock_init, TransportKind};
 use arm_ffa::{
@@ -43,7 +43,6 @@ use rust_support::init::lk_init_level;
 use rust_support::mmu::{ARCH_MMU_FLAG_PERM_NO_EXECUTE, PAGE_SIZE};
 use rust_support::sync::Mutex;
 use rust_support::{Error as LkError, LK_INIT_HOOK};
-use static_assertions::const_assert_eq;
 use virtio_drivers_and_devices::device::socket::VirtIOSocket;
 use virtio_drivers_and_devices::transport::DeviceType;
 use virtio_drivers_and_devices::{BufferDirection, PhysAddr};
@@ -174,45 +173,20 @@ fn send_virtio_msg_request(req: VirtioMsgReq) -> Result<VirtioMsgResp> {
     VirtioMsgResp::new(resp.params)
 }
 
-fn activate_device(driver_version: u32) -> Result<BusActivateResp> {
-    let req = VirtioMsgReq::activate(driver_version);
+fn negotiate_version(
+    driver_version: u32,
+    vmsg_revision: u32,
+    num_shm: u16,
+) -> Result<BusFFAVersionResp> {
+    let req = VirtioMsgReq::new_bus_ffa_version(driver_version, vmsg_revision, num_shm);
     let resp = send_virtio_msg_request(req)?;
-    resp.into_activate()
-}
-
-fn configure_device(num_shm: u8) -> Result<BusConfigureResp> {
-    // This VirtioMsgReq constructor only takes the number of shared memory regions as an argument
-    // and hard-codes direct message as supported
-    let req = VirtioMsgReq::configure(num_shm);
-    let resp = send_virtio_msg_request(req)?;
-    resp.into_configure()
+    resp.read_bus_ffa_version()
 }
 
 fn get_device_info(dev_id: u16) -> Result<GetDeviceInfoResp> {
     let req = VirtioMsgReq::get_device_info(dev_id);
     let resp = send_virtio_msg_request(req)?;
     resp.into_get_device_info()
-}
-
-// Validates that the `features` bitmask supports direct messages and at least the requested number
-// of shared memory regions.
-fn validate_features(features: u64, req_num_shm: u8) -> Result<()> {
-    if features & VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP as u64 == 0 {
-        // The driver requires support for direct messages
-        return Err(LkError::ERR_NOT_VALID);
-    }
-    // This constant is a 16-bit bitmask so ensure the u32 generated for the macro by bindgen is
-    // correct.
-    const_assert_eq!(VIRTIO_MSG_FFA_FEATURE_NUM_SHM >> 16, 0);
-    // Also ensure that the lower 8 bits are zero
-    const_assert_eq!(VIRTIO_MSG_FFA_FEATURE_NUM_SHM & 0x1FF, 0x100);
-    // `as u8` cannot truncate since the constant is a 16-bit bitmask and we shifted down by 8
-    let features_num_shm = ((features & VIRTIO_MSG_FFA_FEATURE_NUM_SHM as u64) >> 8) as u8;
-    if features_num_shm < req_num_shm {
-        // Number of shared memory regions in the feature bits didn't match the expected num_shm
-        return Err(LkError::ERR_NOT_VALID);
-    }
-    Ok(())
 }
 
 fn driver_init() -> Result<()> {
@@ -241,40 +215,20 @@ fn driver_init() -> Result<()> {
     // Call FFA_PARTITION_INFO_GET to get the FFA ID for the partition with the virtio-msg device
     let ffa_id = init_receiver_id()?;
 
-    // Send an activate request to the virtio-msg device over FFA
-    let activate_resp = activate_device(VIRTIO_MSG_FFA_VERSION_1_0).inspect_err(|e| {
-        error!("virtio-msg activate request failed with {e}");
+    let negotiate_resp = negotiate_version(
+        VIRTIO_MSG_FFA_BUS_VERSION_1_0,
+        VIRTIO_MSG_REVISION_1,
+        /* FEATURE_DIRECT_MSG_TX_SUPP is hard-coded since that's the only thing Trusty supports */
+        1, /* num_shm */
+    )
+    .inspect_err(|e| {
+        error!("virtio-msg version request failed with {e}");
     })?;
-    debug!("received {activate_resp:x?} as response to virtio-msg activate request");
-
-    // Make sure the virtio-msg protocol version is what we expect. There is currently only one
-    // version
-    let dev_version = activate_resp.device_version;
-    if dev_version != VIRTIO_MSG_FFA_VERSION_1_0 {
-        error!("found unexpected device version {dev_version:x?}");
-        return Err(LkError::ERR_NOT_VALID);
-    }
-
-    // Validate that the device supports direct messages and at least one shared memory region.
-    let features = activate_resp.features;
-    validate_features(features, 1).inspect_err(|e| {
-        error!("failed to validate features bitmask {features:x?} {e}");
-    })?;
-
-    // Send a configure device request with one shared memory region to negotiate features
-    let configure_resp = configure_device(1).inspect_err(|e| {
-        error!("failed to configure vsock device {e}");
-    })?;
-    debug!("device configuration returned {configure_resp:x?}");
-
-    // Ensure the features accepted by the device are valid and match what the driver requested.
-    validate_features(configure_resp.features, 1).inspect_err(|e| {
-        error!("failed to validate features bitmask {features:x?} {e}");
-    })?;
-
+    debug!("received {negotiate_resp:?} as response to virtio-msg version request");
     MAIN_HEAP.lock().init(VIRTIO_MSG_SHARED_MEMORY_SIZE, INITIAL_AREA_ID)?;
 
-    let num_devices = activate_resp.num as u16;
+    // TODO: Add BUS_MSG_GET_DEVICES instead of hard-coding this
+    let num_devices = 1;
 
     // Go through all the devices on the virtio-msg bus and initialize the vsock devices
     for dev_id in 0..num_devices {

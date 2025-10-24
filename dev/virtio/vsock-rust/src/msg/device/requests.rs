@@ -40,8 +40,6 @@ pub struct VirtioMsgReq<'a> {
 #[derive(Debug)]
 pub enum VirtioMsgPayload {
     BusFFAVersion(sys_dev2::bus_ffa_version),
-    Activate(bus_activate),
-    Configure(bus_configure),
     GetDeviceInfo,
     SetDeviceStatus(set_device_status),
     GetDeviceStatus,
@@ -106,16 +104,6 @@ impl VirtioMsgReq<'_> {
             match id {
                 sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION => {
                     VirtioMsgPayload::BusFFAVersion(self.get_v2_payload())
-                }
-                VIRTIO_MSG_FFA_ACTIVATE => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::Activate(unsafe { req.__bindgen_anon_1.bus_activate })
-                }
-                VIRTIO_MSG_FFA_CONFIGURE => {
-                    // SAFETY: `req` is an array of bytes which is sufficient to initialize all
-                    // union variants with valid values.
-                    VirtioMsgPayload::Configure(unsafe { req.__bindgen_anon_1.bus_configure })
                 }
                 VIRTIO_MSG_FFA_AREA_SHARE => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all

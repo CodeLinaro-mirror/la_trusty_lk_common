@@ -32,6 +32,10 @@ use crate::msg::VirtioMsg;
 use crate::FFAClientId;
 // glob import since we only allowlist virtio_msg.h, virtio_msg_ffa.h and virtio_config.h in bindgen
 use crate::sys::*;
+use crate::sys_dev2::{
+    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP,
+    VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP, VIRTIO_MSG_REVISION_1,
+};
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use log::debug;
 use log::error;
@@ -79,44 +83,56 @@ impl VirtioMsgDevice {
         // as a virtio-msg response which will be filled in depending on how we handle the request
         let resp = VirtioMsgResp::new(req);
         match req_payload {
-            VirtioMsgPayload::BusFFAVersion(_req) => unimplemented!(),
-            VirtioMsgPayload::Activate(req) => {
-                debug!("received virtio-msg-ffa activate request {req:?}");
-                if req.driver_version != VIRTIO_MSG_FFA_VERSION_1_0 {
-                    error!("only virtio-msg-ffa version 1.0 is supported");
-                    resp.ffa_error();
-                } else {
-                    // Fill in the array with a response for the activate request
-                    resp.activate(
-                        req.driver_version,
-                        VIRTIO_MSG_FEATURES,
-                        1, /* number of devices */
+            VirtioMsgPayload::BusFFAVersion(req) => {
+                const DEVICE_FFA_BUS_VERSION: u32 = VIRTIO_MSG_FFA_BUS_VERSION_1_0;
+                let req_driver_version = req.driver_version;
+                let resp_device_version = match req_driver_version {
+                    0..DEVICE_FFA_BUS_VERSION => {
+                        debug!(
+                            "requested virtio-msg version not supported {:?}",
+                            req_driver_version
+                        );
+                        None
+                    }
+                    DEVICE_FFA_BUS_VERSION => {
+                        // Return the exact version in the request in case the device supports a
+                        // range of versions in the future.
+                        Some(req_driver_version)
+                    }
+                    _higher_versions => Some(DEVICE_FFA_BUS_VERSION),
+                };
+
+                const DEVICE_VIRTIO_MSG_REVISION: u32 = VIRTIO_MSG_REVISION_1;
+                let req_driver_revision = req.vmsg_revision;
+                let resp_device_revision = match req_driver_revision {
+                    0..DEVICE_VIRTIO_MSG_REVISION => {
+                        debug!(
+                            "requested virtio-msg revision not supported {:?}",
+                            req_driver_revision
+                        );
+                        None
+                    }
+                    DEVICE_VIRTIO_MSG_REVISION => {
+                        // Return the exact revision in the request in case the device supports a
+                        // range of revisions in the future.
+                        Some(req_driver_revision)
+                    }
+                    _higher_revisions => Some(DEVICE_VIRTIO_MSG_REVISION),
+                };
+
+                let req_features = req.features;
+                if req_features & VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP == 0 {
+                    debug!(
+                        "requested virtio-msg features don't include direct TX {:x?}",
+                        req_features
                     );
-                }
-            }
-            VirtioMsgPayload::Configure(req) => {
-                debug!("received virtio-msg-ffa configure request {req:x?}");
-                let mut respond_err = false;
-                // If the driver tries to configure without support for direct messages respond with an error
-                if req.features & u64::from(VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP) == 0 {
-                    error!("virtio-msg device only supports direct messages");
-                    respond_err = true;
-                }
-                // If the driver tries to configure support for indirect messages respond with an error
-                if req.features & u64::from(VIRTIO_MSG_FFA_FEATURE_INDIRECT_MSG_SUPP) != 0 {
-                    error!("virtio-msg device does not support indirect messages");
-                    respond_err = true;
-                }
-                if respond_err {
-                    resp.ffa_error();
-                    return Ok(());
-                }
-
-                let num_shm_supported = ((req.features >> 8) & 0xFF) as u8;
-                debug!("virtio-msg driver using {num_shm_supported}/255 shared memory regions");
-
-                // Fill in the array with a response for the configure request
-                resp.configure(req.features);
+                };
+                let resp_features = VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP;
+                resp.write_bus_ffa_version(
+                    resp_device_version.unwrap_or(0),
+                    resp_device_revision.unwrap_or(0),
+                    resp_features,
+                );
             }
             VirtioMsgPayload::GetDeviceInfo => {
                 debug!("received virtio-msg get_device_info request");
