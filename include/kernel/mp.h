@@ -39,7 +39,13 @@ typedef uint32_t mp_cpu_mask_t;
  */
 #define MP_RESCHEDULE_FLAG_REALTIME (0x1)
 
-typedef enum {
+/**
+ * enum mp_ipi - All the IPIs supported by Trusty.
+ * @MP_IPI_GENERIC: General-purpose IPI.
+ * @MP_IPI_RESCHEDULE: Signal the target processor to reschedule
+ *                     the current thread.
+ */
+typedef enum mp_ipi {
     MP_IPI_GENERIC,
     MP_IPI_RESCHEDULE,
 } mp_ipi_t;

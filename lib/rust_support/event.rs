@@ -21,12 +21,14 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use crate::sys::{event_init, event_signal, event_wait_timeout};
-use crate::sys::{event_t, status_t, uint};
+use crate::sys::{event_destroy, event_init, event_signal, event_wait_timeout};
+use crate::sys::{event_t, lk_time_t, status_t, uint};
+use crate::Error;
 use crate::INFINITE_TIME;
 use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::mem;
+use core::time::Duration;
 
 pub use crate::sys::EVENT_FLAG_AUTOUNSIGNAL;
 
@@ -55,6 +57,17 @@ impl Event {
         unsafe { event_wait_timeout(self.0.get(), INFINITE_TIME) }
     }
 
+    pub fn wait_timeout(&self, timeout: Duration) -> Result<(), Error> {
+        let timeout_ms: lk_time_t =
+            timeout.as_millis().try_into().map_err(|_| Error::ERR_INVALID_ARGS)?;
+        // SAFETY: One or more threads are allowed to wait for an event to be signaled
+        let rc = unsafe { event_wait_timeout(self.0.get(), timeout_ms) };
+        if rc < 0 {
+            Error::from_lk(rc)?;
+        }
+        Ok(())
+    }
+
     pub fn signal(&self) -> status_t {
         // SAFETY: Events may be signaled from any thread or interrupt context if the reschedule
         // parameter is false
@@ -71,3 +84,12 @@ unsafe impl Sync for Event {}
 // SAFETY: Event is heap allocated so it may be freely sent across threads without invalidating it.
 // It may also be waited on and signaled from any thread.
 unsafe impl Send for Event {}
+
+impl Drop for Event {
+    fn drop(&mut self) {
+        // SAFETY: The event_t was initialized to a valid value in Event::new. We know Other threads
+        // are not waiting on the Event at this point since this is the Drop impl (although
+        // event_destroy allows that anyway by resuming those threads).
+        unsafe { event_destroy(self.0.get()) }
+    }
+}

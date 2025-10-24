@@ -33,14 +33,14 @@ use rust_support::uuid::Uuid;
 use static_assertions::const_assert;
 use virtio_drivers_and_devices::PhysAddr;
 
-#[cfg(all(feature = "virtio_device_side", feature = "virtio_driver_side"))]
+#[cfg(all(feature = "virtio_msg_device", feature = "virtio_msg_driver"))]
 compile_error!(
-    "Features 'virtio_device_side' and 'virtio_driver_side' cannot be enabled simultaneously."
+    "Features 'virtio_msg_device' and 'virtio_msg_driver' cannot be enabled simultaneously."
 );
 
-#[cfg(feature = "virtio_device_side")]
+#[cfg(feature = "virtio_msg_device")]
 mod device;
-#[cfg(feature = "virtio_driver_side")]
+#[cfg(feature = "virtio_msg_driver")]
 mod driver;
 
 // virtio-msg spec 4.3.1: To refer to a specific address in one of the shared area, both sides
@@ -60,13 +60,13 @@ fn area_id_and_offset(bus_addr: BusAddress) -> (AreaId, u64) {
     (area_id as u8, area_offset as u64)
 }
 
-#[cfg(feature = "virtio_driver_side")]
+#[cfg(feature = "virtio_msg_driver")]
 fn bus_address(area_id: AreaId, offset: u64) -> BusAddress {
     (BusAddress::from(area_id) << 56) | (offset as BusAddress)
 }
 
 // virtio-msg over FF-A only supports up to 255 shared memory regions
-#[cfg(feature = "virtio_device_side")]
+#[cfg(feature = "virtio_msg_device")]
 const MAX_NUM_SHM: usize = 255;
 
 const VIRTIO_MSG_FFA_UUID: Uuid =

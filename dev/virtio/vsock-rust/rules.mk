@@ -73,11 +73,6 @@ MODULE_RUSTFLAGS += \
 	-A clippy::upper-case-acronyms \
 	-D clippy::undocumented_unsafe_blocks \
 
-ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_HW_CRYPTO_HAL)))
-MODULE_RUSTFLAGS += \
-	--cfg 'feature="hwcrypto_hal"' \
-
-endif
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_USE_WIDEVINE_AIDL_COMM)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="widevine_aidl_comm"' \
@@ -94,11 +89,6 @@ MODULE_RUSTFLAGS += \
 	--cfg 'feature="keymint_commservice"' \
 
 endif
-ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_SECURE_STORAGE_HAL)))
-MODULE_RUSTFLAGS += \
-	--cfg 'feature="securestorage_hal"' \
-
-endif
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_AUTHMGR)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="authmgr"' \
@@ -111,16 +101,22 @@ MODULE_RUSTFLAGS += \
 endif
 ifeq (false,$(call TOBOOL,$(TRUSTY_VM_GUEST)))
 MODULE_RUSTFLAGS += \
-	--cfg 'feature="virtio_device_side"' \
+	--cfg 'feature="virtio_msg_device"' \
 
 else
 MODULE_RUSTFLAGS += \
-	--cfg 'feature="virtio_driver_side"' \
+	--cfg 'feature="virtio_msg_driver"' \
 
 endif
 
-ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_TIPC_VSOCK_AUTHMGR)))
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_AUTHMGR_VIA_VSOCK)))
 MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_authmgr"'
+
+endif
+
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_TIPC_PORT_VIA_VSOCK)))
+MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_forwarder"'
+
 endif
 
 MODULE_RUST_USE_CLIPPY := true

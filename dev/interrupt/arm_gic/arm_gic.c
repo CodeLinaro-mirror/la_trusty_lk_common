@@ -77,6 +77,7 @@ static spin_lock_t gicd_lock;
 #endif
 #define GIC_MAX_PER_CPU_INT 32
 #define GIC_MAX_SGI_INT 16
+#define GIC_IPI_BASE (14)
 
 #if ARM_GIC_USE_DOORBELL_NS_IRQ
 #ifndef GIC_MAX_DEFERRED_ACTIVE_IRQS
@@ -857,6 +858,29 @@ void platform_fiq(struct iframe *frame)
     PANIC_UNIMPLEMENTED;
 #endif
 }
+
+#if WITH_SMP
+status_t arch_mp_send_ipi(mp_cpu_mask_t target, mp_ipi_t ipi)
+{
+    uint gic_ipi_num = ipi + GIC_IPI_BASE;
+
+    LTRACEF("target 0x%x, ipi %u\n", target, ipi);
+
+    /* filter out targets outside of the range of cpus we care about */
+    target &= ((1UL << SMP_MAX_CPUS) - 1);
+    if (target != 0) {
+        LTRACEF("target 0x%x, gic_ipi %u\n", target, gic_ipi_num);
+        arm_gic_sgi(gic_ipi_num, 0, target);
+    }
+
+    return NO_ERROR;
+}
+
+void arch_mp_register_ipi_handler(mp_ipi_t ipi, int_handler handler, void *arg)
+{
+    register_int_handler(GIC_IPI_BASE + ipi, handler, arg);
+}
+#endif
 
 #if WITH_LIB_SM
 static status_t arm_gic_get_next_irq_locked(u_int min_irq, uint type)

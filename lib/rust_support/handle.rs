@@ -28,6 +28,7 @@ use core::ptr::null_mut;
 
 pub use crate::sys::handle_close;
 pub use crate::sys::handle_decref;
+pub use crate::sys::handle_incref;
 pub use crate::sys::handle_wait;
 
 pub use crate::sys::IPC_HANDLE_POLL_ERROR;
@@ -79,9 +80,26 @@ impl Default for handle_ref {
 pub struct HandleRef {
     // Box the `handle_ref` so it doesn't get moved with the `HandleRef`
     inner: Box<handle_ref>,
+    owns_refcount: bool,
 }
 
 impl HandleRef {
+    /// Grabs a refcount to the handle and returns a HandleRef
+    ///
+    /// # Safety
+    ///
+    /// The argument must point to a handle initialized either directly by `handle_init` or by
+    /// another initialization function that wraps `handle_init`.
+    pub unsafe fn new(h: *mut handle) -> Self {
+        // SAFETY: The `HandleRef::new` caller must ensure that `h` points to an initialized handle.
+        // This refcount then gets dropped when the HandleRef gets dropped to avoid leaking it.
+        unsafe { handle_incref(h) };
+        let mut href = Self::default();
+        href.inner.handle = h;
+        href.owns_refcount = true;
+        href
+    }
+
     pub fn is_attached(&self) -> bool {
         // SAFETY: `self.inner` was initialized, and `handle_ref_is_attached`
         // is otherwise safe to call no matter the state of the `handle_ref`.
@@ -103,7 +121,14 @@ impl HandleRef {
         }
     }
 
-    pub fn handle_decref(&mut self) {
+    /// Releases a refcount if the handle is non-null.
+    ///
+    /// # Safety
+    ///
+    /// The refcount must've been incremented at least once per call to `handle_decref`. This may
+    /// happen with `handle_incref` or through other functions that grab a refcount to the
+    /// `handle_ref` or `HandleRef`.
+    pub unsafe fn handle_decref(&mut self) {
         if self.inner.handle.is_null() {
             panic!("handle is null; can't decrease its reference count");
         }
@@ -151,7 +176,15 @@ impl HandleRef {
 
 impl Drop for HandleRef {
     fn drop(&mut self) {
-        self.detach()
+        self.detach();
+        // Release the refcount grabbed by `HandleRef::new`
+        if self.owns_refcount && !self.inner.handle.is_null() {
+            // SAFETY: If owns_refcount is set then HandleRef::new was used to create this and it
+            // incremented the refcount.
+            unsafe {
+                self.handle_decref();
+            }
+        }
     }
 }
 
