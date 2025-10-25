@@ -1315,6 +1315,7 @@ impl<M: VsockManager> Drop for VsockDevice<M> {
 pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
     driver: VirtIOSocket<H, T, 4096>,
     transport_kind: TransportKind,
+    _irq_vector: Option<u32>, /* only used on aarch64 and x86_64 */
 ) -> Result<(), Error> {
     let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
     let device_for_rx = Arc::new(VsockDevice::new(manager));
@@ -1327,19 +1328,10 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            // TODO: follow-up CL parses vector out of interrupt-map; hardcode it here.
-            // Offset(32) is added to IRQ(5) because the first cell in the interrupt is
-            // zero indicating an SPI which ranges from 32 and up on arm,gic-v3.
-            #[cfg(target_arch = "aarch64")]
-            const VECTOR: u32 = 32 + 5;
-
-            // TODO: follow-up CL parses vector out of PCI routing tables; hardcode it here.
-            #[cfg(target_arch = "x86_64")]
-            const VECTOR: u32 = 0x30 + 11;
-
             // Register interrupt handler when using PCI transport
             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-            let device_for_rx_ptr = if transport_kind.supports_interrupts() {
+            let device_for_rx_ptr = if let Some(vector) = _irq_vector {
+                assert!(transport_kind.supports_interrupts());
                 let device_for_rx_ptr = Arc::<VsockDevice<_>>::into_raw(device_for_rx.clone());
 
                 // SAFETY:
@@ -1347,7 +1339,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
                 //    - `device_for_rx_ptr` is a valid, initialized pointer obtained
                 //    from `Arc::into_raw`.
                 //    - The `VsockDevice` pointee is ready to acknowledge interrupts.
-                //    - `VECTOR` will be validated by callee; invalid values cause panics.
+                //    - `vector` will be validated by callee; invalid values cause panics.
                 //
                 // 2. **Lifetime**: The `VsockDevice` is guaranteed to outlive all interrupt
                 //    handler executions because:
@@ -1365,19 +1357,19 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
                 //      invalidate the MMIO mappings while this handler is registered.
                 unsafe {
                     rust_support::interrupt::register_int_handler(
-                        VECTOR,
+                        vector,
                         Some(vsock_pci_interrupt),
                         device_for_rx_ptr as *mut core::ffi::c_void,
                     );
                 }
 
                 // SAFETY:
-                // - `VECTOR` was validated by preceding call to `register_int_handler`.
+                // - `vector` was validated by preceding call to `register_int_handler`.
                 // - a valid interrupt handler and interrupt handler argument has been
-                //   registered for this `VECTOR`.
-                let res = unsafe { rust_support::interrupt::unmask_interrupt(VECTOR) };
+                //   registered for this `vector`.
+                let res = unsafe { rust_support::interrupt::unmask_interrupt(vector) };
                 if res != LkError::NO_ERROR.into() {
-                    panic!("Failed to unmask interrupt vector({VECTOR}): {res}");
+                    panic!("Failed to unmask interrupt vector({vector}): {res}");
                 }
 
                 Some(device_for_rx_ptr)
@@ -1394,29 +1386,29 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
             // If we installed an interrupt handler, de-register it to remove
             // the pointer to the `VsockDevice` used as the handler argument.
             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-            if matches!(transport_kind, TransportKind::DriverPCI) {
+            if let Some(vector) = _irq_vector {
                 // SAFETY:
-                // - `VECTOR` was validated by preceding call to `register_int_handler`.
-                // - interrupts for this `VECTOR` were previously unmasked
-                let res = unsafe { rust_support::interrupt::mask_interrupt(VECTOR) };
+                // - `vector` was validated by preceding call to `register_int_handler`.
+                // - interrupts for this `vector` were previously unmasked
+                let res = unsafe { rust_support::interrupt::mask_interrupt(vector) };
                 if res != LkError::NO_ERROR.into() {
-                    panic!("Failed to mask interrupt vector({VECTOR}): {res}");
+                    panic!("Failed to mask interrupt vector({vector}): {res}");
                 }
 
                 // De-register interrupt handler
                 //
                 // SAFETY:
-                // - `VECTOR` was validated by preceding call to `register_int_handler`.
-                // - interrupts masked for `VECTOR`
+                // - `vector` was validated by preceding call to `register_int_handler`.
+                // - interrupts masked for `vector`
                 // - None is a valid value for handler
                 // - A null-ptr is a valid value for handler arg
                 unsafe {
-                    rust_support::interrupt::register_int_handler(VECTOR, None, ptr::null_mut());
+                    rust_support::interrupt::register_int_handler(vector, None, ptr::null_mut());
                 }
 
                 let device_for_rx_ptr = device_for_rx_ptr.unwrap();
 
-                // Safety:
+                // SAFETY:
                 // - `device_for_rx_ptr` was returned by `Arc<...>::into_raw`
                 // - `device_for_rx_ptr` points to memory allocated by global allocator
                 //   and has the expected size and alignment for this operation.
