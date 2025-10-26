@@ -45,6 +45,7 @@ use log::error;
 use log::info;
 use log::warn;
 
+use peer_id::Uuid;
 use rand::rand_get_bytes;
 use rust_support::event::Event;
 use rust_support::event::EVENT_FLAG_AUTOUNSIGNAL;
@@ -57,7 +58,7 @@ use rust_support::ipc::ipc_get_msg;
 use rust_support::ipc::ipc_msg_info;
 use rust_support::ipc::ipc_msg_kern;
 use rust_support::ipc::ipc_port_accept;
-use rust_support::ipc::ipc_port_connect_async;
+use rust_support::ipc::ipc_port_connect_async_peer_id;
 use rust_support::ipc::ipc_port_create;
 use rust_support::ipc::ipc_port_publish;
 use rust_support::ipc::ipc_put_msg;
@@ -71,8 +72,6 @@ use rust_support::thread;
 use rust_support::thread::sleep;
 use rust_support::thread::Builder;
 use rust_support::thread::Priority;
-use rust_support::uuid::Uuid;
-use rust_support::uuid_t;
 use trusty::EventClient;
 use virtio_drivers_and_devices::device::socket::SocketError;
 use virtio_drivers_and_devices::device::socket::VirtIOSocket;
@@ -127,6 +126,15 @@ const PORT_MAP: &[TipcPort] = &[
     TipcPort { port: 10, name: c"com.android.trusty.vintf" },
     #[cfg(feature = "keymint_commservice")]
     TipcPort { port: 11, name: c"com.android.trusty.keymint.commservice" },
+    // TODO(b/451194187): Only expose this on desktop.
+    #[cfg(feature = "keymint_provisioning")]
+    TipcPort { port: 12, name: c"com.android.trusty.rust.KeyMintProvisioningService.V1" },
+    #[cfg(feature = "gatekeeper_with_thal")]
+    TipcPort { port: 13, name: c"android.hardware.gatekeeper.IGateKeeper_with_thal" },
+    #[cfg(feature = "placeholder_shared_secret")]
+    TipcPort { port: 14, name: c"android.hardware.security.hwcrypto.sharedsecret/default.bnd" },
+    #[cfg(feature = "fingerguard")]
+    TipcPort { port: 15, name: c"com.android.desktop.trusty.fingerguard" },
 ];
 
 /// Finds the TIPC name associated with a given vsock port number.
@@ -482,7 +490,12 @@ where
         get_port_name(port).is_some()
     }
 
-    fn vsock_rx_op_request(&self, peer: VsockAddr, local: VsockAddr) -> Result<(), Error> {
+    fn vsock_rx_op_request(
+        &self,
+        transport_kind: TransportKind,
+        peer: VsockAddr,
+        local: VsockAddr,
+    ) -> Result<(), Error> {
         debug!("dst_port {}, src_port {}", local.port, peer.port);
 
         // do we already have a connection?
@@ -499,7 +512,7 @@ where
         let port_name = get_port_name(local.port).ok_or(LkError::ERR_OUT_OF_RANGE)?;
         if port_name != c"" {
             c.tipc_port_name = Some(port_name.to_owned());
-            self.vsock_connect_tipc(&mut c)?;
+            self.vsock_connect_tipc(transport_kind, &mut c)?;
         }
         guard.deref_mut().push(c);
 
@@ -509,6 +522,7 @@ where
     fn vsock_connect_on_rx(
         &self,
         c: &mut VsockConnection,
+        transport_kind: TransportKind,
         length: usize,
         source: VsockAddr,
         destination: VsockAddr,
@@ -537,7 +551,7 @@ where
         c.tipc_port_name = CString::new(port_name).ok();
         info!("tipc port name set to {}", c.tipc_port_name());
 
-        self.vsock_connect_tipc(c)
+        self.vsock_connect_tipc(transport_kind, c)
     }
 
     fn create_tipc_ports(
@@ -561,7 +575,7 @@ where
             //   after the callee returns.
             let ret = unsafe {
                 ipc_port_create(
-                    uuid_t::zero(),
+                    Uuid::zero(),
                     port.name.as_ptr(),
                     1,
                     PAGE_SIZE,
@@ -671,10 +685,34 @@ where
         Ok(c)
     }
 
-    fn vsock_connect_tipc(&self, c: &mut VsockConnection) -> Result<(), Error> {
+    fn vsock_connect_tipc(
+        &self,
+        transport_kind: TransportKind,
+        c: &mut VsockConnection,
+    ) -> Result<(), Error> {
         let port_name = c.tipc_port_name.as_ref().expect("tipc port name has been set");
         // invariant: port_name.count_bytes() + 1 <= IPC_PORT_PATH_MAX
         debug_assert!(port_name.count_bytes() < IPC_PORT_PATH_MAX as usize);
+        let peer_id = match transport_kind {
+            TransportKind::DeviceFFAMsg(ffa_id) | TransportKind::DriverFFAMsg(ffa_id) => {
+                peer_id::TrustyPeerIdStorageSized::from_concrete(
+                    &peer_id::trusty_peer_id_vmid_ffa {
+                        kind: peer_id::TRUSTY_PEER_ID_KIND_VMID_FFA,
+                        reserved_1: 1, // Mandated by doccomment in trusty_peer_id.h
+                        id: ffa_id,
+                        padding: Default::default(),
+                    },
+                )
+            }
+            TransportKind::DriverPCI => {
+                peer_id::TrustyPeerIdStorageSized::from_concrete(&peer_id::trusty_peer_id_uuid {
+                    kind: peer_id::TRUSTY_PEER_ID_KIND_UUID,
+                    id: *Uuid::zero(),
+                })
+            }
+        };
+
+        let (peer_id_ptr, peer_id_len) = peer_id.as_generic().into_raw_parts();
 
         // Safety:
         // - `sid`` is a valid uuid with static lifetime
@@ -686,8 +724,9 @@ where
         // - `chandle_ptr` points to memory that the kernel can store a pointer into
         //   after the callee returns.
         let ret = unsafe {
-            ipc_port_connect_async(
-                uuid_t::zero(),
+            ipc_port_connect_async_peer_id(
+                peer_id_ptr,
+                peer_id_len,
                 port_name.as_ptr(),
                 port_name.count_bytes() + 1, /* count_bytes excludes null-byte */
                 IPC_CONNECT_WAIT_FOR_PORT,
@@ -770,7 +809,7 @@ where
 // event.
 pub(crate) fn vsock_rx_loop<M>(
     device: Arc<VsockDevice<M>>,
-    _transport_kind: TransportKind,
+    transport_kind: TransportKind,
     _vm_ref: Option<VmRef>,
 ) -> Result<(), Error>
 where
@@ -820,7 +859,7 @@ where
 
         match event_type {
             VsockEventType::ConnectionRequest => {
-                if let Err(e) = device.vsock_rx_op_request(source, destination) {
+                if let Err(e) = device.vsock_rx_op_request(transport_kind, source, destination) {
                     error!("error during vsock connection request: {e:?}");
                     device.vsock_send_reset(source, destination.port);
                 }
@@ -853,9 +892,14 @@ where
                 let lp = destination.port;
                 let _ = vsock_connection_lookup_peer(connections, source, lp, |connection| {
                     let res = match connection {
-                        VsockConnection { state: VsockConnectionState::VsockOnly, .. } => {
-                            device.vsock_connect_on_rx(connection, length, source, destination)
-                        }
+                        VsockConnection { state: VsockConnectionState::VsockOnly, .. } => device
+                            .vsock_connect_on_rx(
+                                connection,
+                                transport_kind,
+                                length,
+                                source,
+                                destination,
+                            ),
                         VsockConnection { state: VsockConnectionState::Active, .. } => {
                             device.vsock_rx_channel(connection, length, source, destination)
                         }
