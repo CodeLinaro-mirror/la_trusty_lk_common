@@ -66,10 +66,8 @@ pub mod mmu;
 pub mod spinlock;
 pub mod sync;
 pub mod thread;
-pub mod uuid;
 pub mod vmm;
 
-pub use peer_id::uuid as uuid_t;
 pub use sys::list_node;
 pub use sys::lk_obj_ref_init;
 pub use sys::obj_ref;

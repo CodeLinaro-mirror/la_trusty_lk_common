@@ -23,13 +23,15 @@
 
 use crate::msg::device::VirtQueue;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
-use crate::msg::VirtioMsg;
-use crate::msg::VirtioMsgFFA;
+use crate::msg::{VirtioMsg, VirtioMsgFFA};
+use crate::sys_dev2;
+use core::mem::size_of_val;
 // glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
 use crate::sys::*;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceType;
+use zerocopy::{FromBytes, IntoBytes, KnownLayout};
 
 pub struct VirtioMsgReq<'a> {
     buf: &'a mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
@@ -37,6 +39,7 @@ pub struct VirtioMsgReq<'a> {
 
 #[derive(Debug)]
 pub enum VirtioMsgPayload {
+    BusFFAVersion(sys_dev2::bus_ffa_version),
     Activate(bus_activate),
     Configure(bus_configure),
     GetDeviceInfo,
@@ -78,6 +81,20 @@ impl VirtioMsgReq<'_> {
         u32::from(req.type_) & VIRTIO_MSG_TYPE_BUS != 0
     }
 
+    fn get_v2_payload<T: FromBytes>(&self) -> T {
+        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
+        // SAFETY: The `payload` field on `req` is right after the header fields and this creates a
+        // `&[u8]` of the remaining portion of the buffer from which `req` is derived.
+        let payload_slice =
+            unsafe { req.payload.as_slice(size_of_val(self.buf) - size_of_val(req)) };
+
+        // The payload slice is at least as big as any virtio-msg request which we handle so this
+        // should not panic
+        let (payload_copy, _remainder) = FromBytes::read_from_prefix(payload_slice).unwrap();
+        // TODO: Check that _remainder is zeroed out
+        payload_copy
+    }
+
     pub fn get_msg_payload(&self) -> VirtioMsgPayload {
         let req = VirtioMsgFFA::from_bytes(self.buf);
 
@@ -87,6 +104,9 @@ impl VirtioMsgReq<'_> {
 
         if self.is_bus_msg() {
             match id {
+                sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION => {
+                    VirtioMsgPayload::BusFFAVersion(self.get_v2_payload())
+                }
                 VIRTIO_MSG_FFA_ACTIVATE => {
                     // SAFETY: `req` is an array of bytes which is sufficient to initialize all
                     // union variants with valid values.
@@ -198,6 +218,29 @@ impl VirtioMsgResp<'_> {
         assert!(is_bus_msg);
         resp.id = u8::try_from(VIRTIO_MSG_FFA_ERROR).unwrap();
         resp.__bindgen_anon_1.payload_u8 = [0; 36];
+    }
+
+    fn as_mut_v2_payload<T: FromBytes + IntoBytes + KnownLayout>(&mut self) -> &mut T {
+        let buf_size = size_of_val(self.buf);
+        let resp = sys_dev2::virtio_msg::from_bytes_mut(self.buf);
+        let total_size = size_of_val(resp) + size_of::<T>();
+        resp.msg_size = total_size.try_into().unwrap();
+        // SAFETY: The `payload` field on `resp` is right after the header fields and this creates a
+        // `&mut [u8]` of the remaining portion of the buffer from which `resp` is derived.
+        let payload_slice = unsafe { resp.payload.as_mut_slice(buf_size - size_of_val(resp)) };
+        // The payload slice is at least as big as any virtio-msg response which we write so this
+        // should not panic
+        let (payload_ref, remainder) = FromBytes::mut_from_prefix(payload_slice).unwrap();
+        // Zero out unused space in the response buffer
+        remainder.fill(0);
+        payload_ref
+    }
+
+    pub fn write_bus_ffa_version(mut self, device_version: u32, vmsg_revision: u32, features: u32) {
+        let resp = self.as_mut_v2_payload::<sys_dev2::bus_ffa_version_resp>();
+        resp.device_version = device_version;
+        resp.vmsg_revision = vmsg_revision;
+        resp.features = features;
     }
 
     // Set the payload as the response to an activate request
