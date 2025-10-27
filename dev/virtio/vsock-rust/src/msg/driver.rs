@@ -106,7 +106,7 @@ impl SharedHeap {
             return Err(LkError::ERR_ALREADY_STARTED);
         }
         let num_pages = heap_size / PAGE_SIZE as usize;
-        if heap_size % PAGE_SIZE as usize != 0 {
+        if !heap_size.is_multiple_of(PAGE_SIZE as usize) {
             return Err(LkError::ERR_INVALID_ARGS);
         }
         // Call the Trusty-specific DMA allocation function to pre-allocate memory which can be
