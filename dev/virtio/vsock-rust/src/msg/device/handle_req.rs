@@ -79,6 +79,7 @@ impl VirtioMsgDevice {
         // as a virtio-msg response which will be filled in depending on how we handle the request
         let resp = VirtioMsgResp::new(req);
         match req_payload {
+            VirtioMsgPayload::BusFFAVersion(_req) => unimplemented!(),
             VirtioMsgPayload::Activate(req) => {
                 debug!("received virtio-msg-ffa activate request {req:?}");
                 if req.driver_version != VIRTIO_MSG_FFA_VERSION_1_0 {
