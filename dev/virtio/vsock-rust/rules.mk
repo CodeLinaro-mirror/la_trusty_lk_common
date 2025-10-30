@@ -129,6 +129,7 @@ MODULE_RUSTFLAGS += \
 	--cfg 'feature="device_tree"' \
 
 MODULE_LIBRARY_DEPS += \
+	$(LKROOT)/lib/region_alloc \
 	packages/modules/Virtualization/libs/libfdt \
 	trusty/kernel/lib/dtb_service/rust \
 

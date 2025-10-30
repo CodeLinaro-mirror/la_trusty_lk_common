@@ -24,7 +24,10 @@
 use alloc::vec::Vec;
 use core::ops::Range;
 use dtb_service::{get_dtb, DtbServiceError};
+use lazy_static::lazy_static;
 use libfdt::{FdtError, FdtNode};
+use region_alloc::RegionAllocator;
+use rust_support::sync::Mutex;
 
 fn parse_fdt_dma_pool_reg(dma_pool: &FdtNode) -> libfdt::Result<Range<u64>> {
     let mut reg_iter = dma_pool.reg()?.ok_or(FdtError::NotFound)?;
@@ -60,4 +63,39 @@ fn get_fdt_dma_pools() -> Result<Vec<Range<u64>>, DmaPoolError> {
         result.push(pool);
     }
     Ok(result)
+}
+
+lazy_static! {
+    pub(crate) static ref DMA_POOL_ALLOCS: Mutex<Vec<RegionAllocator>> = Mutex::new(
+        get_fdt_dma_pools()
+            .unwrap_or_else(|e| {
+                log::error!("Failed to parse restricted-dma-pool: {e:?}");
+                Vec::new()
+            })
+            .into_iter()
+            .filter_map(|region| {
+                let start_paddr = match region.start.try_into() {
+                    Ok(paddr) => paddr,
+                    Err(e) => {
+                        log::error!("Start address of restricted-dma-pool out of range: {e}");
+                        return None;
+                    }
+                };
+                let end_paddr = match region.end.try_into() {
+                    Ok(paddr) => paddr,
+                    Err(e) => {
+                        log::error!("End address of restricted-dma-pool out of range: {e}");
+                        return None;
+                    }
+                };
+                match RegionAllocator::try_new(start_paddr..end_paddr) {
+                    Ok(paddr) => Some(paddr),
+                    Err(e) => {
+                        log::error!("Failed to create region allocator: {e}");
+                        None
+                    }
+                }
+            })
+            .collect()
+    );
 }
