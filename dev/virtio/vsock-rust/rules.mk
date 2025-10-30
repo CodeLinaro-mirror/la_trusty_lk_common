@@ -124,6 +124,16 @@ MODULE_RUSTFLAGS += \
 
 endif
 
+ifeq (true,$(call TOBOOL,$(VSOCK_WITH_DEVICE_TREE)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="device_tree"' \
+
+MODULE_LIBRARY_DEPS += \
+	packages/modules/Virtualization/libs/libfdt \
+	trusty/kernel/lib/dtb_service/rust \
+
+endif
+
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_GATEKEEPER_WITH_THAL)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="gatekeeper_with_thal"' \
