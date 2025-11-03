@@ -146,14 +146,14 @@ pub fn share_pages(paddr: usize, size: usize) -> KvmResult<()> {
     }
 
     for page in (paddr..paddr + size).step_by(hypervisor_page_size) {
-        hypervisor.share(page as u64).map_err(|err| {
+        hypervisor.share(page).map_err(|err| {
             error!("failed to share page 0x{page:x}: {err}");
 
             // unmap any previously shared pages on error
             // if sharing fail on the first page, the half-open range below is empty
             for prev in (paddr..page).step_by(hypervisor_page_size) {
                 // keep going even if we fail
-                let _ = hypervisor.unshare(prev as u64);
+                let _ = hypervisor.unshare(prev);
             }
 
             match err {
@@ -185,7 +185,7 @@ pub fn unshare_pages(paddr: usize, size: usize) -> KvmResult<()> {
     }
 
     for page in (paddr..paddr + size).step_by(hypervisor_page_size) {
-        hypervisor.unshare(page as u64).map_err(|err| {
+        hypervisor.unshare(page).map_err(|err| {
             error!("failed to unshare page 0x{page:x}: {err:?}");
 
             match err {
