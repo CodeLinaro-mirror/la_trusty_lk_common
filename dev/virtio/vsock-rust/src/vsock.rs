@@ -135,6 +135,8 @@ const PORT_MAP: &[TipcPort] = &[
     TipcPort { port: 14, name: c"android.hardware.security.hwcrypto.sharedsecret/default.bnd" },
     #[cfg(feature = "fingerguard")]
     TipcPort { port: 15, name: c"com.android.desktop.trusty.fingerguard" },
+    #[cfg(feature = "keymint_provisioning_with_thal")]
+    TipcPort { port: 16, name: c"android.trusty.provisioning.IProvisioning/security_vm_keymint" },
 ];
 
 /// Finds the TIPC name associated with a given vsock port number.
