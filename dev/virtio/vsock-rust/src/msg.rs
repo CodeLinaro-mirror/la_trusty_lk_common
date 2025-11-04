@@ -30,6 +30,7 @@ use core::mem::align_of;
 use core::mem::offset_of;
 use core::mem::size_of;
 use peer_id::Uuid;
+use rust_support::mmu::ArchMmuFlags;
 use static_assertions::const_assert;
 use virtio_drivers_and_devices::PhysAddr;
 
@@ -161,5 +162,117 @@ impl sys_dev2::virtio_msg {
         //   mutability does not affect the validity of the reinterpretation.
         // - `Self` is a packed struct.
         unsafe { buf.as_mut().unwrap() }
+    }
+}
+
+// The virtio-msg-ffa spec describes shared memory attributes using a different format than FF-A
+// memory attributes. The following defines a MemShareAttr to describe these attributes and allows
+// converting LK's ArchMmuFlags to it and converting MemShareAttr to its u32 representation.
+#[repr(u32)]
+enum ShareType {
+    Share = 0b00,
+    Lend = 0b01,
+    Donate = 0b10,
+}
+
+#[allow(clippy::enum_variant_names)]
+#[repr(u32)]
+enum Shareability {
+    NonShareable = 0b00,
+    OuterShareable = 0b10,
+    InnerShareable = 0b11,
+}
+
+#[repr(u32)]
+enum Cacheability {
+    NonCacheable = 0b01,
+    WriteBack = 0b11,
+}
+
+#[repr(u32)]
+enum DeviceMemoryAttr {
+    nGnRnE = 0b00,
+    nGnRE = 0b01,
+    nGRE = 0b10,
+    GRE = 0b11,
+}
+
+enum MemoryType {
+    Device(DeviceMemoryAttr),
+    Normal(Cacheability),
+}
+
+impl MemoryType {
+    const DEVICE: u32 = 0b01;
+    const NORMAL: u32 = 0b10;
+}
+
+struct MemShareAttr {
+    share_type: ShareType,
+    read_write: bool,
+    executable: bool,
+    shareability: Shareability,
+    memory_type: MemoryType,
+    non_secure: bool,
+}
+
+impl MemShareAttr {
+    const WRITEABLE_SHIFT: u32 = 2;
+    const EXECUTABLE_SHIFT: u32 = 3;
+    const SHAREABILITY_SHIFT: u32 = 4;
+    const CACHEABILITY_SHIFT: u32 = 6;
+    const DEVICE_MEMORY_ATTR_SHIFT: u32 = 6;
+    const MEMORY_TYPE_SHIFT: u32 = 8;
+    const NS_BIT_SHIFT: u32 = 10;
+}
+
+impl From<MemShareAttr> for u32 {
+    fn from(attr: MemShareAttr) -> u32 {
+        let mut res = 0;
+        res |= attr.share_type as u32;
+        if attr.read_write {
+            res |= 1 << MemShareAttr::WRITEABLE_SHIFT;
+        }
+        if attr.executable {
+            res |= 1 << MemShareAttr::EXECUTABLE_SHIFT;
+        }
+        res |= (attr.shareability as u32) << MemShareAttr::SHAREABILITY_SHIFT;
+        match attr.memory_type {
+            MemoryType::Normal(cacheability) => {
+                res |= MemoryType::NORMAL << MemShareAttr::MEMORY_TYPE_SHIFT;
+                res |= (cacheability as u32) << MemShareAttr::CACHEABILITY_SHIFT;
+            }
+            MemoryType::Device(device_memory_attr) => {
+                res |= MemoryType::DEVICE << MemShareAttr::MEMORY_TYPE_SHIFT;
+                res |= (device_memory_attr as u32) << MemShareAttr::DEVICE_MEMORY_ATTR_SHIFT;
+            }
+        }
+        if attr.non_secure {
+            res |= 1 << MemShareAttr::NS_BIT_SHIFT;
+        }
+        res
+    }
+}
+
+impl MemShareAttr {
+    fn from_lk_flags(flags: ArchMmuFlags) -> Self {
+        let non_secure = flags.contains(ArchMmuFlags::NS);
+        let read_write = !flags.contains(ArchMmuFlags::PERM_RO);
+        let executable = !flags.contains(ArchMmuFlags::PERM_NO_EXECUTE);
+        let (shareability, memory_type) = if flags.contains(ArchMmuFlags::UNCACHED_DEVICE) {
+            (Shareability::NonShareable, MemoryType::Device(DeviceMemoryAttr::nGnRE))
+        } else if flags.contains(ArchMmuFlags::UNCACHED) {
+            (Shareability::NonShareable, MemoryType::Normal(Cacheability::NonCacheable))
+        } else {
+            (Shareability::InnerShareable, MemoryType::Normal(Cacheability::WriteBack))
+        };
+        Self {
+            share_type: ShareType::Share,
+            read_write,
+            executable,
+            shareability,
+            memory_type,
+            non_secure,
+        }
     }
 }
