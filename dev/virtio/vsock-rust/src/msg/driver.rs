@@ -217,16 +217,25 @@ fn validate_features(features: u64, req_num_shm: u8) -> Result<()> {
 
 fn driver_init() -> Result<()> {
     match arm_ffa::get_init_state() {
-        FFAInitState::ARM_FFA_INIT_FAILED => {
-            // FFA is not supported so log that the vsock driver is not enabled and continue booting
-            info!("disabling virtio-msg vsock driver (FFA not supported)");
+        FFAInitState::InitFailed => {
+            // FFA init hook failed so log that the vsock driver is not enabled and continue booting
+            info!("disabling virtio-msg vsock driver (FFA init failed)");
             return Ok(());
         }
-        FFAInitState::ARM_FFA_INIT_UNINIT => {
+        FFAInitState::Uninit => {
             error!("virtio-msg vsock driver hook ran before ARM FFA hook");
             return Err(LkError::ERR_NOT_CONFIGURED);
         }
-        FFAInitState::ARM_FFA_INIT_SUCCESS => (),
+        FFAInitState::InitSuccess { major_version: 1, minor_version } if minor_version >= 2 => {
+            // If FFA 1.x where x >= 2 was negotiated continue driver init
+        }
+        FFAInitState::InitSuccess { major_version, minor_version } => {
+            info!(
+                "disabling virtio-msg vsock driver (FFA version {:?}.{:?} unsupported)",
+                major_version, minor_version
+            );
+            return Ok(());
+        }
     }
 
     // Call FFA_PARTITION_INFO_GET to get the FFA ID for the partition with the virtio-msg device
