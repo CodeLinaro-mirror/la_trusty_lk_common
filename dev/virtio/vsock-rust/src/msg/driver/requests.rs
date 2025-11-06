@@ -413,4 +413,8 @@ impl VirtioMsgResp {
         // to initialize all union variants with valid values.
         Ok(unsafe { resp.__bindgen_anon_1.get_vqueue_resp })
     }
+
+    pub fn read_bus_area_share(self) -> Result<sys_dev2::bus_area_share_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_FFA_BUS_AREA_SHARE)
+    }
 }

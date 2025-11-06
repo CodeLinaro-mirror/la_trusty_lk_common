@@ -140,6 +140,12 @@ impl<T: ?Sized> Mutex<T> {
     }
 }
 
+impl<T: ?Sized> MutexGuard<'_, T> {
+    pub fn unlock(self) {
+        drop(self)
+    }
+}
+
 impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // SAFETY: `mutex_release` is thread safe and it was `mutex_init`ialized.
