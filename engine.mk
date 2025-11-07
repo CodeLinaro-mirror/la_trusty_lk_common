@@ -120,6 +120,8 @@ GLOBAL_HOST_RUSTFLAGS := -L "$(RUST_HOST_LIBDIR)" -L dependency=$(TRUSTY_HOST_LI
 # Rust flags, based on the flags used in AOSP
 GLOBAL_SHARED_RUSTFLAGS := -C codegen-units=1 -C debuginfo=2 -C opt-level=3 -C relocation-model=pic
 GLOBAL_SHARED_RUSTFLAGS += -C overflow-checks=on
+# Required to reliably get backtraces with Rust in the call stack
+GLOBAL_SHARED_RUSTFLAGS += -C force-frame-pointers=y
 # Use v0 mangling to distinguish from C++ symbols
 GLOBAL_SHARED_RUSTFLAGS += -C symbol-mangling-version=v0
 GLOBAL_SHARED_RUSTFLAGS += -C panic=abort -Z link-native-libraries=no
