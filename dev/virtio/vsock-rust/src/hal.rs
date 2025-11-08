@@ -54,15 +54,9 @@ pub(crate) fn dma_alloc(
     if _use_dma_pools {
         let mut allocs = device_tree::DMA_POOL_ALLOCS.lock();
         for alloc in allocs.iter_mut() {
-            match alloc.alloc(size, 1 << align_pow2, true) {
-                Ok(Some((paddr, vaddr))) => {
-                    log::trace!("Allocated {size} bytes from DMA pool: {paddr:#x}");
-                    return (paddr, vaddr);
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    log::error!("Failed to allocate {size} bytes from DMA pool: {e}");
-                }
+            if let Some((paddr, vaddr)) = alloc.alloc(size, 1 << align_pow2, true) {
+                log::trace!("Allocated {size} bytes from DMA pool: {paddr:#x}");
+                return (paddr, vaddr);
             }
         }
         if !allocs.is_empty() {

@@ -68,13 +68,13 @@ impl RegionAllocator {
         size: usize,
         align: paddr_t,
         zeroed: bool,
-    ) -> Result<Option<(paddr_t, NonNull<u8>)>, LkError> {
+    ) -> Option<(paddr_t, NonNull<u8>)> {
         // TODO: this should be debug_assert!
         // but right now those are always disabled on Trusty
         assert!(self.allocs.is_sorted_by_key(|r| r.start));
 
         if size == 0 {
-            return Ok(None);
+            return None;
         }
 
         // Poor man's allocator: linear time first fit
@@ -125,11 +125,11 @@ impl RegionAllocator {
                 }
             }
 
-            return Ok(Some((aligned_start, vaddr)));
+            return Some((aligned_start, vaddr));
         }
 
         // No space left in this allocator
-        Ok(None)
+        None
     }
 
     pub fn dealloc(&mut self, paddr: paddr_t) {
