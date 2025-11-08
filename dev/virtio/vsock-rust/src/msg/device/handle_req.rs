@@ -278,7 +278,7 @@ impl VirtioMsgDevice {
                 let success = 'block: {
                     let idx = usize::from(req.area_id);
                     // This device implementation only supports MAX_NUM_SHM shared memory regions
-                    if idx > MAX_NUM_SHM {
+                    if idx >= MAX_NUM_SHM {
                         break 'block false;
                     }
                     // If the device already received an area share request for this area ID return
@@ -314,7 +314,7 @@ impl VirtioMsgDevice {
                 let success = 'block: {
                     let idx = usize::from(req.area_id);
                     // This device implementation only supports MAX_NUM_SHM shared memory regions
-                    if idx > MAX_NUM_SHM {
+                    if idx >= MAX_NUM_SHM {
                         break 'block false;
                     }
                     // Take ownership of the ExtMemObj from memory_map in the device if it exists
