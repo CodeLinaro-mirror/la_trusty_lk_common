@@ -26,10 +26,12 @@ use crate::sys::*;
 use crate::sys_dev2;
 use crate::sys_dev2::VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
 
-use crate::msg::{VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
+use crate::msg::{MemShareAttr, VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
+use crate::VsockVirtioFeatures;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::{size_of, size_of_val};
-use core::ptr::read_unaligned;
+use core::ptr::{read_unaligned, write_unaligned};
+use rust_support::mmu::ArchMmuFlags;
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceStatus;
 use zerocopy::{FromBytes, IntoBytes, KnownLayout};
@@ -164,53 +166,87 @@ impl VirtioMsgReq {
     }
 
     /// Get device info for the specified device
-    pub fn get_device_info(dev_id: u16) -> Self {
-        Self::new_req(VIRTIO_MSG_DEVICE_INFO, dev_id, |_msg| {})
+    pub fn new_get_device_info(dev_id: u16) -> Self {
+        Self::new_v2_req(sys_dev2::VIRTIO_MSG_DEVICE_INFO, Some(dev_id))
     }
 
-    pub fn set_device_status(dev_id: u16, status: DeviceStatus) -> Self {
-        Self::new_req(VIRTIO_MSG_SET_DEVICE_STATUS, dev_id, |msg| {
-            let status = status.bits();
-            msg.__bindgen_anon_1.set_device_status = set_device_status { status };
-        })
+    pub fn new_set_device_status(dev_id: u16, status: DeviceStatus) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_SET_DEVICE_STATUS,
+            Some(dev_id),
+            |payload: &mut sys_dev2::set_device_status| {
+                payload.status = status.bits();
+            },
+        )
     }
 
-    pub fn get_device_status(dev_id: u16) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_DEVICE_STATUS, dev_id, |_msg| {})
+    pub fn new_get_device_status(dev_id: u16) -> Self {
+        Self::new_v2_req(sys_dev2::VIRTIO_MSG_GET_DEVICE_STATUS, Some(dev_id))
     }
 
-    pub fn get_features(dev_id: u16, index: u32) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_FEATURES, dev_id, |msg| {
-            msg.__bindgen_anon_1.get_features = get_features { index };
-        })
+    pub fn new_get_device_features(dev_id: u16, index: u32, num_blocks: u32) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_GET_DEV_FEATURES,
+            Some(dev_id),
+            |payload: &mut sys_dev2::get_features| {
+                payload.index = index;
+                payload.num = num_blocks;
+            },
+        )
     }
 
-    pub fn set_features(dev_id: u16, index: u32, features: [u64; 4]) -> Self {
-        Self::new_req(VIRTIO_MSG_SET_FEATURES, dev_id, |msg| {
-            msg.__bindgen_anon_1.set_features = set_features { index, features };
-        })
+    pub fn new_set_driver_features(dev_id: u16, index: u32, features: u64) -> Self {
+        let mut req = Self::new_v2_req(sys_dev2::VIRTIO_MSG_SET_DRV_FEATURES, Some(dev_id));
+        let msg = sys_dev2::virtio_msg::from_bytes_mut(&mut req.0);
+
+        let payload_size = size_of::<sys_dev2::set_features>() + size_of::<u64>();
+        let total_size = size_of::<sys_dev2::virtio_msg>() + payload_size;
+        msg.msg_size = total_size.try_into().unwrap();
+
+        // This pointer may be unaligned since the virtio_msg struct is packed
+        let payload_ptr = msg.payload.as_mut_ptr().cast::<sys_dev2::set_features>();
+
+        // Feature blocks are groups of 32 bits
+        let num_blocks = size_of::<VsockVirtioFeatures>() / size_of::<u32>();
+        let payload = sys_dev2::set_features {
+            index,
+            num: num_blocks.try_into().unwrap(),
+            ..Default::default()
+        };
+        // SAFETY: payload_ptr is non-null and points to a byte buffer at least as big as
+        // `set_features`.
+        unsafe { write_unaligned(payload_ptr, payload) }
+        // This pointer may be unaligned since the set_features struct is packed
+        // SAFETY: payload_ptr is non-null and points to a valid bus_get_devices_resp struct
+        let features_ptr = unsafe { &raw mut (*payload_ptr).features };
+        // SAFETY: features_ptr is non-null and points to a byte buffer at least as big as `u64`.
+        unsafe { write_unaligned(features_ptr.cast::<u64>(), features) }
+
+        req
     }
 
-    pub fn get_config_gen(dev_id: u16) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_CONFIG_GEN, dev_id, |_msg| {})
+    pub fn new_get_config(dev_id: u16, offset: u32, size: u8) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_GET_CONFIG,
+            Some(dev_id),
+            |payload: &mut sys_dev2::get_config| {
+                payload.offset = offset;
+                payload.size = u32::from(size);
+            },
+        )
     }
 
-    pub fn get_config(dev_id: u16, offset: usize, size: u8) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_CONFIG, dev_id, |msg| {
-            let offset = (offset as u64).to_le_bytes();
-            let offset = [offset[1], offset[2], offset[3]];
-            msg.__bindgen_anon_1.get_config = get_config { offset, size };
-        })
+    pub fn new_get_vqueue(dev_id: u16, queue: u16) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_GET_VQUEUE,
+            Some(dev_id),
+            |payload: &mut sys_dev2::get_vqueue| {
+                payload.index = u32::from(queue);
+            },
+        )
     }
 
-    pub fn get_vqueue(dev_id: u16, queue: u16) -> Self {
-        Self::new_req(VIRTIO_MSG_GET_VQUEUE, dev_id, |msg| {
-            let index = u32::from(queue);
-            msg.__bindgen_anon_1.get_vqueue = get_vqueue { index };
-        })
-    }
-
-    pub fn set_vqueue(
+    pub fn new_set_vqueue(
         dev_id: u16,
         queue: u16,
         size: u32,
@@ -218,17 +254,38 @@ impl VirtioMsgReq {
         driver_addr: u64,
         device_addr: u64,
     ) -> Self {
-        Self::new_req(VIRTIO_MSG_SET_VQUEUE, dev_id, |msg| {
-            let index = u32::from(queue);
-            msg.__bindgen_anon_1.set_vqueue =
-                set_vqueue { index, unused: 0, size, descriptor_addr, driver_addr, device_addr };
-        })
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_SET_VQUEUE,
+            Some(dev_id),
+            |payload: &mut sys_dev2::set_vqueue| {
+                payload.index = u32::from(queue);
+                payload.unused = 0;
+                payload.size = size;
+                payload.descriptor_addr = descriptor_addr;
+                payload.driver_addr = driver_addr;
+                payload.device_addr = device_addr;
+            },
+        )
     }
 
-    pub fn area_share(area_id: u32, mem_handle: u64) -> Self {
-        Self::new_ffa_req(VIRTIO_MSG_FFA_AREA_SHARE, |msg| {
-            msg.__bindgen_anon_1.bus_area_share = bus_area_share { area_id, mem_handle };
-        })
+    pub fn new_bus_area_share(
+        area_id: u16,
+        mem_handle: u64,
+        num_pages: usize,
+        arch_mmu_flags: ArchMmuFlags,
+    ) -> Self {
+        let attr = MemShareAttr::from_lk_flags(arch_mmu_flags);
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_FFA_BUS_AREA_SHARE,
+            None,
+            |payload: &mut sys_dev2::bus_area_share| {
+                payload.area_id = area_id;
+                payload.mem_handle = mem_handle;
+                payload.tag = 0;
+                payload.count = u32::try_from(num_pages).unwrap();
+                payload.attr = u32::from(attr);
+            },
+        )
     }
 
     pub fn get_buf(&self) -> &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT] {
@@ -372,46 +429,28 @@ impl VirtioMsgResp {
         self.read_v2_resp_variable_size(sys_dev2::VIRTIO_MSG_BUS_GET_DEVICES)
     }
 
-    pub fn into_get_device_info(self) -> Result<get_device_info_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_DEVICE_INFO)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_device_info_resp })
+    pub fn read_get_device_info(self) -> Result<sys_dev2::get_device_info_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_DEVICE_INFO)
     }
 
-    pub fn into_get_features(self) -> Result<get_features_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_FEATURES)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_features_resp })
+    pub fn read_get_device_features(&self) -> Result<(sys_dev2::get_features_resp, &[u8])> {
+        self.read_v2_resp_variable_size(sys_dev2::VIRTIO_MSG_GET_DEV_FEATURES)
     }
 
-    pub fn into_get_device_status(self) -> Result<get_device_status_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_DEVICE_STATUS)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_device_status_resp })
+    pub fn read_get_device_status(self) -> Result<sys_dev2::get_device_status_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_GET_DEVICE_STATUS)
     }
 
-    pub fn into_get_config_gen(self) -> Result<get_config_gen_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_CONFIG_GEN)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_config_gen_resp })
+    pub fn read_set_device_status(self) -> Result<sys_dev2::set_device_status_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_SET_DEVICE_STATUS)
     }
 
-    pub fn into_get_config(self) -> Result<get_config_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_CONFIG)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_config_resp })
+    pub fn read_get_config(&self) -> Result<(sys_dev2::get_config_resp, &[u8])> {
+        self.read_v2_resp_variable_size(sys_dev2::VIRTIO_MSG_GET_CONFIG)
     }
 
-    pub fn into_get_vqueue(self) -> Result<get_vqueue_resp> {
-        let resp = self.into_resp(VIRTIO_MSG_GET_VQUEUE)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.get_vqueue_resp })
+    pub fn read_get_vqueue(self) -> Result<sys_dev2::get_vqueue_resp> {
+        self.read_v2_resp(sys_dev2::VIRTIO_MSG_GET_VQUEUE)
     }
 
     pub fn read_bus_area_share(self) -> Result<sys_dev2::bus_area_share_resp> {

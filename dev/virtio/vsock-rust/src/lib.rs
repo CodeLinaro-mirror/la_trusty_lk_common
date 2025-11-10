@@ -41,3 +41,7 @@ pub use pci::pci_init_mmio;
 
 // FF-A partitions use 16-bit IDs
 type FFAClientId = u16;
+
+// Vsock devices do not need bits above 64
+#[allow(unused)]
+type VsockVirtioFeatures = u64;

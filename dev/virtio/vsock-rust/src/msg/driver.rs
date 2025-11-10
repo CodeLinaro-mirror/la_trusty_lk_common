@@ -25,23 +25,24 @@ use crate::msg::driver::hal::{MsgHal, VsockMemAllocator};
 use crate::msg::driver::requests::{VirtioMsgReq, VirtioMsgResp};
 use crate::msg::driver::transport::FFAMsgTransport;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
-use crate::sys::{
-    bus_activate_resp as BusActivateResp, bus_configure_resp as BusConfigureResp,
-    get_device_info_resp as GetDeviceInfoResp, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP,
-    VIRTIO_MSG_FFA_FEATURE_NUM_SHM, VIRTIO_MSG_FFA_VERSION_1_0,
+use crate::sys_dev2::{
+    bus_ffa_version_resp as BusFFAVersionResp, get_device_info_resp as GetDeviceInfoResp,
+    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_REVISION_1,
 };
 use crate::vsock::{vsock_init, TransportKind};
-use arm_ffa::{msg_send_direct_req2, partition_info_get_count, partition_info_get_desc};
+use alloc::vec::Vec;
+use arm_ffa::{
+    msg_send_direct_req2, partition_info_get_count, partition_info_get_desc, FFAInitState,
+};
 use core::ffi::c_uint;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU32, Ordering};
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use rust_support::init::lk_init_level;
-use rust_support::mmu::{ARCH_MMU_FLAG_PERM_NO_EXECUTE, PAGE_SIZE};
+use rust_support::mmu::{ArchMmuFlags, PAGE_SIZE};
 use rust_support::sync::Mutex;
 use rust_support::{Error as LkError, LK_INIT_HOOK};
-use static_assertions::const_assert_eq;
 use virtio_drivers_and_devices::device::socket::VirtIOSocket;
 use virtio_drivers_and_devices::transport::DeviceType;
 use virtio_drivers_and_devices::{BufferDirection, PhysAddr};
@@ -65,7 +66,7 @@ fn get_receiver_id() -> u16 {
 // An arbitrary and easily identifiable area id which the main heap will always use. Once the
 // virtio-msg driver supports allocating memory on demand the other shared memory regions must make
 // sure to not use this area id.
-const INITIAL_AREA_ID: u8 = 0x1E;
+const INITIAL_AREA_ID: u16 = 0x001E;
 
 // This shared memory area contains the virtqueues so it cannot be unshared/deallocate until the
 // driver is torn down.
@@ -101,7 +102,7 @@ impl SharedHeap {
         Self { paddr: 0, vaddr: 0, shared: false, allocator: VsockMemAllocator::new() }
     }
 
-    fn init(&mut self, heap_size: usize, area_id: u8) -> Result<()> {
+    fn init(&mut self, heap_size: usize, area_id: u16) -> Result<()> {
         if self.shared {
             return Err(LkError::ERR_ALREADY_STARTED);
         }
@@ -116,15 +117,18 @@ impl SharedHeap {
         // accesses on both sides according to the virtio spec. We also prevent a situation where
         // the other side can trigger UB in rust by always copying data into and out of the shared
         // memory region instead of creating references directly to it.
-        let (paddr, vaddr) = crate::hal::dma_alloc(num_pages, BufferDirection::Both);
+        //
+        // Do not use the restricted DMA pools because those are shared with the host.
+        let (paddr, vaddr) = crate::hal::dma_alloc(num_pages, BufferDirection::Both, false);
         let vaddr = vaddr.as_ptr().addr();
-        let arch_mmu_flags = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
+        let arch_mmu_flags = ArchMmuFlags::PERM_NO_EXECUTE;
         // SAFETY: This memory came from `vmm_alloc_contiguous` with the same arch_mmu_flags
         // (NO_EXECUTE) used below so it's safe to share with another FFA endpoint.
         let ffa_handle = unsafe {
             arm_ffa::mem_share_kernel_buffer(get_receiver_id(), paddr, num_pages, arch_mmu_flags)?
         };
-        let req = VirtioMsgReq::area_share(u32::from(area_id), ffa_handle.get());
+        let req =
+            VirtioMsgReq::new_bus_area_share(area_id, ffa_handle.get(), num_pages, arch_mmu_flags);
         send_virtio_msg_request(req)?;
 
         self.allocator.init(num_pages)?;
@@ -172,88 +176,127 @@ fn send_virtio_msg_request(req: VirtioMsgReq) -> Result<VirtioMsgResp> {
     VirtioMsgResp::new(resp.params)
 }
 
-fn activate_device(driver_version: u32) -> Result<BusActivateResp> {
-    let req = VirtioMsgReq::activate(driver_version);
+fn negotiate_version(
+    driver_version: u32,
+    vmsg_revision: u32,
+    num_shm: u16,
+) -> Result<BusFFAVersionResp> {
+    let req = VirtioMsgReq::new_bus_ffa_version(driver_version, vmsg_revision, num_shm);
     let resp = send_virtio_msg_request(req)?;
-    resp.into_activate()
+    resp.read_bus_ffa_version()
 }
 
-fn configure_device(num_shm: u8) -> Result<BusConfigureResp> {
-    // This VirtioMsgReq constructor only takes the number of shared memory regions as an argument
-    // and hard-codes direct message as supported
-    let req = VirtioMsgReq::configure(num_shm);
-    let resp = send_virtio_msg_request(req)?;
-    resp.into_configure()
+// Enumerate devices and return a Vec with the IDs of the devices available.
+fn enumerate_devices() -> Result<Vec<u16>> {
+    let mut device_ids = Vec::new();
+    debug!("enumerating virtio-msg devices");
+    // virtio-msg spec 4.4.7.1: The offset and number of device numbers requested MUST be
+    // multiples of 8.
+    // This driver implementation requests 8 devices at a time.
+    let num_req_devices = 8;
+    let mut next_bitmap_offset = 0;
+
+    // The next_offset resp field is a u16 which should increase on every iteration or go to zero.
+    // That ensures that this loop will terminate after a fixed amount of time.
+    loop {
+        let current_bitmap_offset = next_bitmap_offset;
+        // Send the BUS_MSG_GET_DEVICES request with bitmap offset = 0 or the value specified by the
+        // response in the previous iteration
+        let req = VirtioMsgReq::new_bus_get_devices(current_bitmap_offset, num_req_devices);
+        let resp = send_virtio_msg_request(req)?;
+        let (get_devices_resp, bitmap) = resp.read_bus_get_devices()?;
+
+        let num_devices = get_devices_resp.num;
+        if usize::from(num_devices) != bitmap.len() * 8 {
+            debug!(
+                "virtio-msg GET_DEVICES returned wrong bitmap for num_devices ({num_devices:?})"
+            );
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+
+        // virtio-msg spec 4.4.7.1: The next offset MUST also be a multiple of 8.
+        let next_is_multiple_of_8 = get_devices_resp.next_offset % 8 == 0;
+
+        let next_increased = get_devices_resp.next_offset > current_bitmap_offset;
+
+        if !next_is_multiple_of_8 || (get_devices_resp.next_offset != 0 && !next_increased) {
+            let bad_next_offset = get_devices_resp.next_offset;
+            debug!("virtio-msg GET_DEVICES returned invalid next_offset {bad_next_offset:?}");
+            return Err(LkError::ERR_INVALID_ARGS);
+        }
+
+        for bit in 0..get_devices_resp.num {
+            let mask = 1 << bit;
+            let idx = usize::from(bit / 8);
+            let dev_avail = (bitmap[idx] & mask) != 0;
+            if dev_avail {
+                device_ids.push(bit + current_bitmap_offset);
+            }
+        }
+
+        next_bitmap_offset = get_devices_resp.next_offset;
+        if next_bitmap_offset == 0 {
+            break;
+        }
+    }
+
+    Ok(device_ids)
 }
 
 fn get_device_info(dev_id: u16) -> Result<GetDeviceInfoResp> {
-    let req = VirtioMsgReq::get_device_info(dev_id);
+    let req = VirtioMsgReq::new_get_device_info(dev_id);
     let resp = send_virtio_msg_request(req)?;
-    resp.into_get_device_info()
-}
-
-// Validates that the `features` bitmask supports direct messages and at least the requested number
-// of shared memory regions.
-fn validate_features(features: u64, req_num_shm: u8) -> Result<()> {
-    if features & VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP as u64 == 0 {
-        // The driver requires support for direct messages
-        return Err(LkError::ERR_NOT_VALID);
-    }
-    // This constant is a 16-bit bitmask so ensure the u32 generated for the macro by bindgen is
-    // correct.
-    const_assert_eq!(VIRTIO_MSG_FFA_FEATURE_NUM_SHM >> 16, 0);
-    // Also ensure that the lower 8 bits are zero
-    const_assert_eq!(VIRTIO_MSG_FFA_FEATURE_NUM_SHM & 0x1FF, 0x100);
-    // `as u8` cannot truncate since the constant is a 16-bit bitmask and we shifted down by 8
-    let features_num_shm = ((features & VIRTIO_MSG_FFA_FEATURE_NUM_SHM as u64) >> 8) as u8;
-    if features_num_shm < req_num_shm {
-        // Number of shared memory regions in the feature bits didn't match the expected num_shm
-        return Err(LkError::ERR_NOT_VALID);
-    }
-    Ok(())
+    resp.read_get_device_info()
 }
 
 fn driver_init() -> Result<()> {
+    match arm_ffa::get_init_state() {
+        FFAInitState::InitFailed => {
+            // FFA init hook failed so log that the vsock driver is not enabled and continue booting
+            info!("disabling virtio-msg vsock driver (FFA init failed)");
+            return Ok(());
+        }
+        FFAInitState::Uninit => {
+            error!("virtio-msg vsock driver hook ran before ARM FFA hook");
+            return Err(LkError::ERR_NOT_CONFIGURED);
+        }
+        FFAInitState::InitSuccess { major_version: 1, minor_version } if minor_version >= 2 => {
+            // If FFA 1.x where x >= 2 was negotiated continue driver init
+        }
+        FFAInitState::InitSuccess { major_version, minor_version } => {
+            info!(
+                "disabling virtio-msg vsock driver (FFA version {:?}.{:?} unsupported)",
+                major_version, minor_version
+            );
+            return Ok(());
+        }
+    }
+
     // Call FFA_PARTITION_INFO_GET to get the FFA ID for the partition with the virtio-msg device
     let ffa_id = init_receiver_id()?;
 
-    // Send an activate request to the virtio-msg device over FFA
-    let activate_resp = activate_device(VIRTIO_MSG_FFA_VERSION_1_0).inspect_err(|e| {
-        error!("virtio-msg activate request failed with {e}");
+    let negotiate_resp = negotiate_version(
+        VIRTIO_MSG_FFA_BUS_VERSION_1_0,
+        VIRTIO_MSG_REVISION_1,
+        /* FEATURE_DIRECT_MSG_TX_SUPP is hard-coded since that's the only thing Trusty supports */
+        1, /* num_shm */
+    )
+    .inspect_err(|e| {
+        error!("virtio-msg version request failed with {e}");
     })?;
-    debug!("received {activate_resp:x?} as response to virtio-msg activate request");
-
-    // Make sure the virtio-msg protocol version is what we expect. There is currently only one
-    // version
-    let dev_version = activate_resp.device_version;
-    if dev_version != VIRTIO_MSG_FFA_VERSION_1_0 {
-        error!("found unexpected device version {dev_version:x?}");
-        return Err(LkError::ERR_NOT_VALID);
-    }
-
-    // Validate that the device supports direct messages and at least one shared memory region.
-    let features = activate_resp.features;
-    validate_features(features, 1).inspect_err(|e| {
-        error!("failed to validate features bitmask {features:x?} {e}");
-    })?;
-
-    // Send a configure device request with one shared memory region to negotiate features
-    let configure_resp = configure_device(1).inspect_err(|e| {
-        error!("failed to configure vsock device {e}");
-    })?;
-    debug!("device configuration returned {configure_resp:x?}");
-
-    // Ensure the features accepted by the device are valid and match what the driver requested.
-    validate_features(configure_resp.features, 1).inspect_err(|e| {
-        error!("failed to validate features bitmask {features:x?} {e}");
-    })?;
-
+    debug!("received {negotiate_resp:?} as response to virtio-msg version request");
     MAIN_HEAP.lock().init(VIRTIO_MSG_SHARED_MEMORY_SIZE, INITIAL_AREA_ID)?;
 
-    let num_devices = activate_resp.num as u16;
+    let device_ids = enumerate_devices()?;
+    if device_ids.is_empty() {
+        warn!("no virtio-msg devices found");
+    }
+    // TODO: Add FFA_BUS_MSG_EVENT_CONFIGURE request/response structs to bindgen'ed headers and
+    // configure the event delivery mechanism as described in ARM's virtio-msg-ffa spec section 2.4.
+    // All device/driver implementations currently behave as if polling was configured.
 
     // Go through all the devices on the virtio-msg bus and initialize the vsock devices
-    for dev_id in 0..num_devices {
+    for dev_id in device_ids {
         debug!("getting info for device #{dev_id:?}");
         let dev_info_resp = get_device_info(dev_id)?;
         debug!("get_device_info returned {dev_info_resp:?}");
@@ -284,17 +327,9 @@ fn driver_init() -> Result<()> {
 
 extern "C" fn virtio_msg_driver_init_func(_: c_uint) {
     debug!("initializing virtio-msg vsock driver...");
-    match driver_init() {
-        Ok(_) => {}
-        Err(LkError::ERR_NOT_SUPPORTED) => {
-            // FFA is not supported so log that the vsock driver is not enabled and continue booting
-            info!("disabling virtio-msg vsock driver (FFA not supported")
-        }
-        Err(_) => {
-            // Any error other than ERR_NOT_SUPPORTED is unexpected
-            panic!("failed to initialize virtio-msg vsock driver")
-        }
-    }
+    if driver_init().is_err() {
+        panic!("failed to initialize virtio-msg vsock driver");
+    };
 }
 
 LK_INIT_HOOK!(
