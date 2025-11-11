@@ -73,6 +73,10 @@ impl RegionAllocator {
         // but right now those are always disabled on Trusty
         assert!(self.allocs.is_sorted_by_key(|r| r.start));
 
+        if size == 0 {
+            return Ok(None);
+        }
+
         // Poor man's allocator: linear time first fit
         //
         // Iterate over the unallocated gaps in our region
