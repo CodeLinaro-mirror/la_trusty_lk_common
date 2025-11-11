@@ -698,12 +698,7 @@ where
         let peer_id = match transport_kind {
             TransportKind::DeviceFFAMsg(ffa_id) | TransportKind::DriverFFAMsg(ffa_id) => {
                 peer_id::TrustyPeerIdStorageSized::from_concrete(
-                    &peer_id::trusty_peer_id_vmid_ffa {
-                        kind: peer_id::TRUSTY_PEER_ID_KIND_VMID_FFA,
-                        reserved_1: 1, // Mandated by doccomment in trusty_peer_id.h
-                        id: ffa_id,
-                        padding: Default::default(),
-                    },
+                    &peer_id::trusty_peer_id_vmid_ffa::new(ffa_id),
                 )
             }
             TransportKind::DriverPCI => {
