@@ -184,3 +184,8 @@ impl Drop for VmmPageArray {
         unsafe { vmm_free_region(aspace, self.ptr as usize) };
     }
 }
+
+// Safety: VmmPageArray allocates some pages in the kernel address
+// space, which should be identically visible to all threads and
+// valid until the object is dropped, regardless which thread does it.
+unsafe impl Send for VmmPageArray {}
