@@ -250,18 +250,17 @@ impl VirtioMsgDevice {
             }
             VirtioMsgPayload::GetFeatures(req) => {
                 debug!("received virtio-msg get_features request {req:x?}");
-                resp.get_features(req.index, SUPPORTED_VIRTIO_FEATURES);
+                resp.write_get_device_features(req.index, SUPPORTED_VIRTIO_FEATURES);
             }
-            VirtioMsgPayload::SetFeatures(req) => {
-                debug!("received virtio-msg set_features request {req:x?}");
-                let requested_features = req.features[0];
+            VirtioMsgPayload::SetFeatures((_req, requested_features)) => {
+                debug!("received virtio-msg set_features request {requested_features:x?}");
                 if requested_features & SUPPORTED_VIRTIO_FEATURES != SUPPORTED_VIRTIO_FEATURES {
                     warn!("driver does not support required features: {requested_features:x?}");
                 }
                 // TODO: don't force F_ACCESS_PLATFORM once virtio-drivers accepts it
-                let negotiated_features =
+                let _negotiated_features =
                     (requested_features & SUPPORTED_VIRTIO_FEATURES) | VIRTIO_F_ACCESS_PLATFORM;
-                resp.set_features(0, negotiated_features);
+                // TODO: forbid FEATURES_OK if features are not acceptable
             }
             VirtioMsgPayload::GetVqueue(req) => {
                 debug!("received virtio-msg get_vqueue request {req:x?}");
@@ -272,7 +271,7 @@ impl VirtioMsgDevice {
                         return Err(LkError::ERR_INVALID_ARGS);
                     }
                 };
-                resp.get_vqueue(req.index, vqueue);
+                resp.write_get_vqueue(req.index, vqueue);
             }
             VirtioMsgPayload::AreaShare(req) => {
                 debug!("received virtio-msg-ffa area_share request {req:x?}");
@@ -309,38 +308,34 @@ impl VirtioMsgDevice {
                     avail_ring: req.driver_addr as BusAddress,
                     used_ring: req.device_addr as BusAddress,
                 });
-                // leave request buffer the same
-                resp.set_vqueue(
-                    req.index,
-                    req.size,
-                    req.descriptor_addr,
-                    req.driver_addr,
-                    req.device_addr,
-                )
             }
             VirtioMsgPayload::AreaUnshare(req) => {
                 debug!("received virtio-msg-ffa area_unshare request {req:x?}");
-                let idx = req.area_id as u8;
-                if idx as u32 != req.area_id {
-                    return Err(LkError::ERR_INVALID_ARGS);
-                }
-                // Take ownership of the ExtMemObj from memory_map in the device if it exists
-                let mapped_mem = self.state.lock_unsaved().memory_map[usize::from(idx)].take();
-
-                // If there was an ExtMemObj for the entry move ownership to
-                // unshare_requests since it cannot be dropped (i.e. unmapped
-                // from the kernel address space) in this thread.
-                if let Some(ext_mem_obj) = mapped_mem {
-                    let unshare_req_entry =
-                        &mut self.unshare_requests.lock_unsaved()[usize::from(idx)];
-                    if unshare_req_entry.is_some() {
-                        return Err(LkError::ERR_BAD_STATE);
+                let success = 'block: {
+                    let idx = usize::from(req.area_id);
+                    // This device implementation only supports MAX_NUM_SHM shared memory regions
+                    if idx > MAX_NUM_SHM {
+                        break 'block false;
                     }
-                    *unshare_req_entry = Some(ext_mem_obj);
-                }
-                // Notify the thread which handles the unmapping of the new request.
-                self.wake_memory_unmap.signal();
-                sm::intc_raise_doorbell_irq();
+                    // Take ownership of the ExtMemObj from memory_map in the device if it exists
+                    let mapped_mem = self.state.lock_unsaved().memory_map[idx].take();
+
+                    // If there was an ExtMemObj for the entry move ownership to
+                    // unshare_requests since it cannot be dropped (i.e. unmapped
+                    // from the kernel address space) in this thread.
+                    if let Some(ext_mem_obj) = mapped_mem {
+                        let unshare_req_entry = &mut self.unshare_requests.lock_unsaved()[idx];
+                        if unshare_req_entry.is_some() {
+                            break 'block false;
+                        }
+                        *unshare_req_entry = Some(ext_mem_obj);
+                    }
+                    // Notify the thread which handles the unmapping of the new request.
+                    self.wake_memory_unmap.signal();
+                    sm::intc_raise_doorbell_irq();
+                    true
+                };
+                resp.write_bus_area_unshare(req.area_id, success);
             }
             VirtioMsgPayload::GetConfig(req) => {
                 debug!("received virtio-msg request {req:x?}");

@@ -123,7 +123,7 @@ unsafe impl Hal for TrustyHal {
     // The call to `vmm_alloc_contiguous` ensures that the pointed to memory is zeroed.
     fn dma_alloc(pages: usize, direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
         let size = pages * PAGE_SIZE;
-        let (paddr, vaddr) = crate::hal::dma_alloc(pages, direction);
+        let (paddr, vaddr) = crate::hal::dma_alloc(pages, direction, true);
         arch::dma_alloc_share(paddr, size);
         (paddr, vaddr)
     }

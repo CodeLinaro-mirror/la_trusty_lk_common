@@ -26,6 +26,7 @@ use crate::msg::driver::{
     get_device_info, send_virtio_msg_request, VirtioMsgReq, INITIAL_AREA_ID, MAIN_HEAP,
 };
 use crate::sys_dev2::VIRTIO_CONFIG_S_NEEDS_RESET;
+use crate::VsockVirtioFeatures;
 use core::mem::size_of;
 use log::warn;
 use virtio_drivers_and_devices::transport::{DeviceStatus, DeviceType, InterruptStatus, Transport};
@@ -58,20 +59,28 @@ impl Transport for FFAMsgTransport {
     }
 
     fn read_device_features(&mut self) -> u64 {
-        let req = VirtioMsgReq::get_features(self.dev_id, 0);
+        // Feature blocks are groups of 32 bits
+        let num_blocks = size_of::<VsockVirtioFeatures>() / size_of::<u32>();
+        let req = VirtioMsgReq::new_get_device_features(
+            self.dev_id,
+            0, /* index */
+            num_blocks.try_into().unwrap(),
+        );
         let resp = send_virtio_msg_request(req).expect("get_features request failed");
-        resp.into_get_features().expect("get_features returned invalid response").features[0]
+        let feature_data =
+            resp.read_get_device_features().expect("get_features returned invalid response").1;
+        u64::from_le_bytes(feature_data[0..8].try_into().unwrap())
     }
 
     fn write_driver_features(&mut self, driver_features: u64) {
-        let req = VirtioMsgReq::set_features(self.dev_id, 0, [driver_features, 0, 0, 0]);
+        let req = VirtioMsgReq::new_set_driver_features(self.dev_id, 0, driver_features);
         send_virtio_msg_request(req).expect("set_features virtio-msg request failed");
     }
 
     fn max_queue_size(&mut self, queue: u16) -> u32 {
-        let req = VirtioMsgReq::get_vqueue(self.dev_id, queue);
+        let req = VirtioMsgReq::new_get_vqueue(self.dev_id, queue);
         let resp = send_virtio_msg_request(req).expect("get_vqueue request failed");
-        resp.into_get_vqueue().expect("get_vqueue returned invalid response").max_size
+        resp.read_get_vqueue().expect("get_vqueue returned invalid response").max_size
     }
 
     fn notify(&mut self, _queue: u16) {
@@ -126,7 +135,7 @@ impl Transport for FFAMsgTransport {
         let device_area_bus = bus_address(INITIAL_AREA_ID, (device_area_phys - base_paddr) as u64);
 
         // Send the set_vqueue virtio-msg request
-        let req = VirtioMsgReq::set_vqueue(
+        let req = VirtioMsgReq::new_set_vqueue(
             self.dev_id,
             queue,
             size,
@@ -142,9 +151,9 @@ impl Transport for FFAMsgTransport {
     }
 
     fn queue_used(&mut self, queue: u16) -> bool {
-        let req = VirtioMsgReq::get_vqueue(self.dev_id, queue);
+        let req = VirtioMsgReq::new_get_vqueue(self.dev_id, queue);
         let resp = send_virtio_msg_request(req).expect("get_vqueue request failed");
-        let get_vqueue = resp.into_get_vqueue().expect("get_vqueue returned invalid response");
+        let get_vqueue = resp.read_get_vqueue().expect("get_vqueue returned invalid response");
         // virtio-msg spec: If the vqueue hasn't been configured all fields are zero
         let all_fields_zero = get_vqueue.size == 0
             && get_vqueue.descriptor_addr == 0

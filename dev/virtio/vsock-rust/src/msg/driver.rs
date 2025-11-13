@@ -117,7 +117,9 @@ impl SharedHeap {
         // accesses on both sides according to the virtio spec. We also prevent a situation where
         // the other side can trigger UB in rust by always copying data into and out of the shared
         // memory region instead of creating references directly to it.
-        let (paddr, vaddr) = crate::hal::dma_alloc(num_pages, BufferDirection::Both);
+        //
+        // Do not use the restricted DMA pools because those are shared with the host.
+        let (paddr, vaddr) = crate::hal::dma_alloc(num_pages, BufferDirection::Both, false);
         let vaddr = vaddr.as_ptr().addr();
         let arch_mmu_flags = ArchMmuFlags::PERM_NO_EXECUTE;
         // SAFETY: This memory came from `vmm_alloc_contiguous` with the same arch_mmu_flags
