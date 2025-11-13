@@ -33,6 +33,10 @@ use virtio_drivers_and_devices::BufferDirection;
 use virtio_drivers_and_devices::PhysAddr;
 use virtio_drivers_and_devices::PAGE_SIZE;
 
+#[allow(unused)]
+#[cfg(feature = "device_tree")]
+mod device_tree;
+
 pub(crate) fn dma_alloc(pages: usize, _direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
     const NAME: &CStr = c"vsock-rust";
     // dma_alloc requests num pages but vmm_alloc_contiguous expects bytes.

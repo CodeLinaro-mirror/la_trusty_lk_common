@@ -25,10 +25,12 @@ use crate::msg::bus_address;
 use crate::msg::driver::{
     get_device_info, send_virtio_msg_request, VirtioMsgReq, INITIAL_AREA_ID, MAIN_HEAP,
 };
+use crate::sys_dev2::VIRTIO_CONFIG_S_NEEDS_RESET;
 use core::mem::size_of;
+use log::warn;
 use virtio_drivers_and_devices::transport::{DeviceStatus, DeviceType, InterruptStatus, Transport};
 use virtio_drivers_and_devices::{Error as VirtioError, PhysAddr};
-use zerocopy::{transmute_ref, FromBytes, Immutable, IntoBytes};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 type Result<T> = core::result::Result<T, VirtioError>;
 
@@ -46,6 +48,8 @@ impl FFAMsgTransport {
 
 // TODO: Move this to virtio-drivers once the virtio-msg transport becomes standardized and the
 // vsock-specific parts of this are generalized to other device types.
+// TODO: Most calls to `expect` in these methods should bubble up an Error rather than panic once
+// the trait supports this https://github.com/immunant/virtio-drivers-and-devices/issues/18
 impl Transport for FFAMsgTransport {
     fn device_type(&self) -> DeviceType {
         let dev_info_resp = get_device_info(self.dev_id).expect("get_device_info request failed");
@@ -75,16 +79,27 @@ impl Transport for FFAMsgTransport {
     }
 
     fn get_status(&self) -> DeviceStatus {
-        let req = VirtioMsgReq::get_device_status(self.dev_id);
+        let req = VirtioMsgReq::new_get_device_status(self.dev_id);
         let resp = send_virtio_msg_request(req).expect("get_device_status request failed");
-        let status =
-            resp.into_get_device_status().expect("get_device returned invalid response").status;
+        let status = resp
+            .read_get_device_status()
+            .expect("get_device_status returned invalid response")
+            .status;
         DeviceStatus::from_bits_retain(status)
     }
 
     fn set_status(&mut self, status: DeviceStatus) {
-        let req = VirtioMsgReq::set_device_status(self.dev_id, status);
-        send_virtio_msg_request(req).expect("set_device_status request failed");
+        let req = VirtioMsgReq::new_set_device_status(self.dev_id, status);
+        let resp = send_virtio_msg_request(req).expect("set_device_status request failed");
+        let status = resp
+            .read_set_device_status()
+            .expect("set_device_status returned invalid response")
+            .status;
+        if status & VIRTIO_CONFIG_S_NEEDS_RESET != 0 {
+            // TODO: Bubble up an error to allow cleanly resetting the device by dropping the
+            // VirtIOSocket and FFAMsgTransport
+            panic!("virtio-msg device needs reset");
+        }
     }
 
     fn set_guest_page_size(&mut self, _guest_page_size: u32) {
@@ -143,22 +158,30 @@ impl Transport for FFAMsgTransport {
     }
 
     fn read_config_generation(&self) -> u32 {
-        let req = VirtioMsgReq::get_config_gen(self.dev_id);
-        let resp = send_virtio_msg_request(req).expect("get_config_gen request failed");
-        resp.into_get_config_gen().expect("get_config_gen returned invalid response").generation
+        let req = VirtioMsgReq::new_get_config(self.dev_id, 0 /* offset */, 0 /* size */);
+        let resp = send_virtio_msg_request(req).expect("get_config request failed");
+        let (config_resp_header, _config_data) =
+            resp.read_get_config().expect("get_config returned invalid response");
+        config_resp_header.generation
     }
 
     fn read_config_space<T: FromBytes>(&self, offset: usize) -> Result<T> {
-        let req = VirtioMsgReq::get_config(self.dev_id, offset, size_of::<T>().try_into().unwrap());
+        let req = VirtioMsgReq::new_get_config(
+            self.dev_id,
+            offset as u32,
+            size_of::<T>().try_into().unwrap(),
+        );
         let resp = send_virtio_msg_request(req).expect("get_config request failed");
-        let cfg_resp: [u64; 4] =
-            resp.into_get_config().expect("get_config returned invalid response").data;
-        let cfg_bytes: &[u8; 32] = transmute_ref!(&cfg_resp);
+        let (_config_resp_header, config_data) =
+            resp.read_get_config().expect("get_config returned invalid response");
         // vsock config space is only 8 bytes so the call in virtio-drivers-and-devices should never
         // cause this to panic.
-        let (cfg, _trailing_bytes) = T::read_from_prefix(cfg_bytes.as_slice())
-            .expect("attempted to read more than 32 bytes from config space");
-        Ok(cfg)
+        let (config_data, remainder) = T::read_from_prefix(config_data).unwrap();
+        if remainder.iter().any(|&b| b != 0) {
+            warn!("virtio-msg device returned more config data than expected");
+            return Err(VirtioError::InvalidParam);
+        }
+        Ok(config_data)
     }
 
     fn write_config_space<T: IntoBytes + Immutable>(
