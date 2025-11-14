@@ -33,7 +33,14 @@ use virtio_drivers_and_devices::BufferDirection;
 use virtio_drivers_and_devices::PhysAddr;
 use virtio_drivers_and_devices::PAGE_SIZE;
 
-pub(crate) fn dma_alloc(pages: usize, _direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
+#[cfg(feature = "device_tree")]
+mod device_tree;
+
+pub(crate) fn dma_alloc(
+    pages: usize,
+    _direction: BufferDirection,
+    _use_dma_pools: bool,
+) -> (PhysAddr, NonNull<u8>) {
     const NAME: &CStr = c"vsock-rust";
     // dma_alloc requests num pages but vmm_alloc_contiguous expects bytes.
     let size = pages * PAGE_SIZE;
@@ -42,6 +49,26 @@ pub(crate) fn dma_alloc(pages: usize, _direction: BufferDirection) -> (PhysAddr,
     let vmm_flags = 0;
     let arch_mmu_flags = ARCH_MMU_FLAG_PERM_NO_EXECUTE;
     let aspace = vmm_get_kernel_aspace();
+
+    #[cfg(feature = "device_tree")]
+    if _use_dma_pools {
+        let mut allocs = device_tree::DMA_POOL_ALLOCS.lock();
+        for alloc in allocs.iter_mut() {
+            match alloc.alloc(size, 1 << align_pow2, true) {
+                Ok(Some((paddr, vaddr))) => {
+                    log::trace!("Allocated {size} bytes from DMA pool: {paddr:#x}");
+                    return (paddr, vaddr);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    log::error!("Failed to allocate {size} bytes from DMA pool: {e}");
+                }
+            }
+        }
+        if !allocs.is_empty() {
+            panic!("out of memory in DMA pools, need {size} bytes");
+        }
+    }
 
     // NOTE: the allocated memory will be zeroed since vmm_alloc_contiguous
     // calls vmm_alloc_pmm which does not set the PMM_ALLOC_FLAG_NO_CLEAR
@@ -83,5 +110,18 @@ pub(crate) unsafe fn dma_dealloc(_paddr: PhysAddr, vaddr: NonNull<u8>, _pages: u
     // - function-level requirements
     // - `aspace` points to the kernel address space object
     // - `vaddr` is a region in `aspace`
-    unsafe { vmm_free_region(aspace, vaddr as usize) }
+    let rc = unsafe { vmm_free_region(aspace, vaddr as usize) };
+
+    #[cfg(feature = "device_tree")]
+    if rc == 0 {
+        let mut dma_pools = device_tree::DMA_POOL_ALLOCS.lock();
+        for pool in dma_pools.iter_mut() {
+            if pool.region().contains(&_paddr) {
+                pool.dealloc(_paddr);
+                break;
+            }
+        }
+    }
+
+    rc
 }
