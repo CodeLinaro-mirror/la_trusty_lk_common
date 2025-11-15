@@ -819,6 +819,7 @@ where
 {
     const TEN_MS: Duration = Duration::from_millis(10);
     let mut pending: VecDeque<VsockEvent> = VecDeque::new();
+    let mut terminate = false;
 
     debug!("starting vsock_rx_loop");
 
@@ -840,14 +841,22 @@ where
             .or_else(|| device.connection_manager.lock().deref_mut().poll().expect("poll failed"));
 
         if event.is_none() {
+            if terminate {
+                debug!("stopping vsock_rx_loop");
+                vsock_connection_close_all(&mut device.connections.lock());
+                return Ok(());
+            }
+
             let res = device.rx_event.event.wait_timeout(TEN_MS);
             match res {
                 Ok(()) => {
                     let wake_reason = device.rx_event.wake_reason.load(Ordering::Relaxed);
                     if (wake_reason & VsockRxEvent::TERMINATE) != 0 {
-                        debug!("stopping vsock_rx_loop");
-                        vsock_connection_close_all(&mut device.connections.lock());
-                        return Ok(());
+                        // When terminate is set, we shouldn't be waiting or woken up
+                        assert!(!terminate);
+                        // Flag termination so we can process any remaining events
+                        // before exiting the rx loop.
+                        terminate = true;
                     }
                 }
                 Err(LkError::ERR_TIMED_OUT) => (),
