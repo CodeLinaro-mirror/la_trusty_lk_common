@@ -63,9 +63,9 @@ lazy_static! {
 // virtio-drivers requires 4k pages, check that we meet requirement
 const_assert_eq!(PAGE_SIZE, rust_support::mmu::PAGE_SIZE as usize);
 
-pub struct TrustyHal;
+pub struct PciHal;
 
-impl TrustyHal {
+impl PciHal {
     pub fn mmio_alloc(
         pci_root: &mut PciRoot<impl ConfigurationAccess>,
         device_function: DeviceFunction,
@@ -117,7 +117,7 @@ impl TrustyHal {
 }
 
 // Safety: See function specific comments
-unsafe impl Hal for TrustyHal {
+unsafe impl Hal for PciHal {
     // Safety:
     // Function either returns a non-null, properly aligned pointer or panics the kernel.
     // The call to `vmm_alloc_contiguous` ensures that the pointed to memory is zeroed.

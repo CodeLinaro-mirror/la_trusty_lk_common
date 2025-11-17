@@ -56,7 +56,7 @@ use rust_support::Error as LkError;
 use crate::err::Error;
 use crate::vsock::vsock_init;
 use crate::vsock::TransportKind;
-use hal::TrustyHal;
+use hal::PciHal;
 
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 mod arch;
@@ -65,7 +65,7 @@ mod arch;
 mod arch;
 mod hal;
 
-impl TrustyHal {
+impl PciHal {
     fn init_all_vsocks(
         mut pci_root: PciRoot<impl ConfigurationAccess>,
         pci_size: usize,
@@ -120,7 +120,7 @@ impl TrustyHal {
                     )?)
                 };
 
-                let driver: VirtIOSocket<TrustyHal, SomeTransport, 4096> =
+                let driver: VirtIOSocket<PciHal, SomeTransport, 4096> =
                     VirtIOSocket::new(transport)?;
                 vsock_init(driver, TransportKind::DriverPCI)?;
             }
@@ -196,7 +196,7 @@ unsafe fn map_pci_root_and_init_vsock(
         #[cfg(target_arch = "x86_64")]
         {
             let pci_root = PciRoot::new(HypCam::new(pci_paddr, cam));
-            TrustyHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport)?;
+            PciHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport)?;
         }
     } else {
         // Safety:
@@ -206,7 +206,7 @@ unsafe fn map_pci_root_and_init_vsock(
         // so it, too, has `'static` lifetime.
         // We also check that the `cam` size is valid.
         let pci_root = PciRoot::new(unsafe { MmioCam::new(pci_vaddr.cast(), cam) });
-        TrustyHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport)?;
+        PciHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport)?;
     }
     Ok(())
 }

@@ -817,7 +817,7 @@ pub(crate) fn vsock_rx_loop<M>(
 where
     M: VsockManager,
 {
-    let ten_ms = Duration::from_millis(10);
+    const TEN_MS: Duration = Duration::from_millis(10);
     let mut pending: VecDeque<VsockEvent> = VecDeque::new();
 
     debug!("starting vsock_rx_loop");
@@ -840,7 +840,7 @@ where
             .or_else(|| device.connection_manager.lock().deref_mut().poll().expect("poll failed"));
 
         if event.is_none() {
-            let res = device.rx_event.event.wait_timeout(ten_ms);
+            let res = device.rx_event.event.wait_timeout(TEN_MS);
             match res {
                 Ok(()) => {
                     let wake_reason = device.rx_event.wake_reason.load(Ordering::Relaxed);
@@ -939,7 +939,7 @@ where
                                 // or unblocked. on the other, we want to pick up incoming events as soon as we
                                 // can...
                                 // TODO: We could wait on an event here rather than sleeping until tipc is ready.
-                                sleep(ten_ms);
+                                sleep(TEN_MS);
                                 Ok(())
                             }
                         }
