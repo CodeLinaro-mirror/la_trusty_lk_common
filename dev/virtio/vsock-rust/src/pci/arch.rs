@@ -32,7 +32,7 @@ use core::ptr::NonNull;
 use hypervisor::share_pages;
 use hypervisor::unshare_pages;
 
-use crate::pci::hal::TrustyHal;
+use crate::pci::hal::PciHal;
 
 use rust_support::paddr_t;
 use rust_support::sync::Mutex;
@@ -68,7 +68,7 @@ pub(crate) unsafe fn share(buffer: NonNull<[u8]>, direction: BufferDirection) ->
     let size = buffer.len();
     let pages = to_pages(size);
 
-    let (paddr, vaddr) = TrustyHal::dma_alloc(pages, direction);
+    let (paddr, vaddr) = PciHal::dma_alloc(pages, direction);
     if let Some(old_vaddr) = VADDRS.lock().deref_mut().insert(paddr, vaddr.as_ptr() as usize) {
         panic!("paddr ({:#x}) was already mapped to vaddr ({:#x})", paddr, old_vaddr);
     }
@@ -110,7 +110,7 @@ pub(crate) unsafe fn unshare(paddr: PhysAddr, buffer: NonNull<[u8]>, direction: 
     let vaddr = NonNull::<u8>::new(vaddr as *mut u8).unwrap();
     // Safety: memory was allocated by `share` and not previously `unshare`d.
     unsafe {
-        TrustyHal::dma_dealloc(paddr, vaddr, to_pages(size));
+        PciHal::dma_dealloc(paddr, vaddr, to_pages(size));
     }
 }
 
