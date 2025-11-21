@@ -22,7 +22,6 @@
  */
 
 #![deny(unsafe_op_in_unsafe_fn)]
-use core::ffi::c_int;
 use core::ptr;
 
 use log::debug;
@@ -218,26 +217,6 @@ unsafe fn map_pci_root_and_init_vsock(
         PciHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport, get_int_vector)?;
     }
     Ok(())
-}
-
-/// # Safety
-///
-/// See [`map_pci_root_and_init_vsock`].
-#[no_mangle]
-pub unsafe extern "C" fn pci_init_mmio(
-    pci_paddr: paddr_t,
-    pci_size: usize,
-    cfg_size: usize,
-) -> c_int {
-    debug!("initializing vsock: pci_paddr 0x{pci_paddr:x}, pci_size 0x{pci_size:x}");
-    || -> Result<(), Error> {
-        // Safety: Delegated to `map_pci_root_and_init_vsock`.
-        unsafe { map_pci_root_and_init_vsock(pci_paddr, pci_size, cfg_size, |_, _, _| None) }?;
-        Ok(())
-    }()
-    .err()
-    .unwrap_or(LkError::NO_ERROR.into())
-    .into_c()
 }
 
 /// # Safety
