@@ -44,7 +44,8 @@
 #if ARM64_CPU_CORTEX_A53 || ARM64_CPU_CORTEX_A57 || ARM64_CPU_CORTEX_A72
 #define CACHE_LINE 64
 #else
-#define CACHE_LINE 32
+/* The most common arch64 CPUs use a 64-byte cache line size */
+#define CACHE_LINE 64
 #endif
 #endif
 
