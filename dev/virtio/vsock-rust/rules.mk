@@ -161,6 +161,18 @@ MODULE_RUSTFLAGS += --cfg 'feature="fingerguard"'
 
 endif
 
+ifeq (true,$(call TOBOOL,$(INCLUDE_CMD_PROCESSOR)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="cmd_processor_service"' \
+
+endif
+
+ifeq (true,$(call TOBOOL,$(INCLUDE_MEM_SHARE)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="mem_share_service"' \
+
+endif
+
 MODULE_RUST_USE_CLIPPY := true
 
 # TODO: These are the options used to generate new_bindings.rs from the latest version of the

@@ -28,15 +28,15 @@ use crate::msg::device::VirtioMsgReq;
 use crate::msg::device::VirtioMsgResp;
 use crate::msg::device::TRANSPORT;
 use crate::msg::BusAddress;
-use crate::msg::VirtioMsg;
 use crate::msg::MAX_NUM_SHM;
-use crate::FFAClientId;
-// glob import since we only allowlist virtio_msg.h, virtio_msg_ffa.h and virtio_config.h in bindgen
-use crate::sys::*;
+use crate::sys_dev2;
 use crate::sys_dev2::{
-    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP,
-    VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP, VIRTIO_MSG_REVISION_1,
+    VIRTIO_CONFIG_S_ACKNOWLEDGE, VIRTIO_CONFIG_S_DRIVER, VIRTIO_CONFIG_S_DRIVER_OK,
+    VIRTIO_CONFIG_S_FAILED, VIRTIO_CONFIG_S_FEATURES_OK, VIRTIO_MSG_FFA_BUS_VERSION_1_0,
+    VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP,
+    VIRTIO_MSG_REVISION_1,
 };
+use crate::FFAClientId;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use log::debug;
 use log::error;
@@ -52,7 +52,7 @@ impl VirtioMsgDevice {
         &self,
         buf_ref: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
     ) -> Result<(), LkError> {
-        let dev_id = VirtioMsg::from_bytes(buf_ref).dev_id;
+        let dev_id = sys_dev2::virtio_msg::from_bytes(buf_ref).dev_id;
         // Pass ownership of the `buf_ref` argument to a `VirtioMsgReq` to reinterpret the array as
         // a virtio-msg request
         let req = VirtioMsgReq::parse(buf_ref)?;
@@ -63,12 +63,6 @@ impl VirtioMsgDevice {
             error!("invalid dev_id field {dev_id:x?} in virtio-msg request");
             return Err(LkError::ERR_INVALID_ARGS);
         }
-
-        // Define features specific to the virtio-msg transport protocol. Currently indirect messages
-        // are not supported and Trusty supports the max number of shared memory regions (255). All
-        // other bits are reserved (MBZ).
-        const VIRTIO_MSG_FEATURES: u64 =
-            (VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP | VIRTIO_MSG_FFA_FEATURE_NUM_SHM) as u64;
 
         const VIRTIO_VSOCK_F_STREAM: u64 = 0;
         const VIRTIO_F_VERSION_1: u64 = 32;
@@ -346,19 +340,6 @@ impl VirtioMsgDevice {
                     config &= mask;
                 }
                 resp.write_get_config(0 /* generation */, req.offset, req.size, config);
-            }
-            VirtioMsgPayload::ResetVqueue(req) => {
-                warn!("ignoring unsupported reset vqueue request {req:x?}");
-            }
-            VirtioMsgPayload::EventAvail(req) => {
-                // TODO: Implement this to avoid the need to poll the virtqueues
-                warn!("ignoring unsupported event avail request {req:x?}");
-            }
-            VirtioMsgPayload::EventUsed(req) => {
-                warn!("ignoring unsupported event used request {req:x?}");
-            }
-            VirtioMsgPayload::EventConfig(req) => {
-                warn!("ignoring unsupported event config request {req:x?}");
             }
             VirtioMsgPayload::UnknownBusReq(req_id) => {
                 error!("ignoring virtio-msg bus request with unknown id {req_id:x?}");

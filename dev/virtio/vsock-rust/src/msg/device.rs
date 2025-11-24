@@ -30,7 +30,7 @@ use crate::msg::device::transport::FFAMsgTransport;
 use crate::msg::BusAddress;
 use crate::msg::MAX_NUM_SHM;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
-use crate::sys::VIRTIO_CONFIG_S_DRIVER_OK;
+use crate::sys_dev2::VIRTIO_CONFIG_S_DRIVER_OK;
 use crate::vsock::TransportKind;
 use crate::vsock::VsockDevice;
 use crate::vsock::VsockRxEvent;
@@ -389,7 +389,7 @@ fn virtio_msg_vm_destroy(client_id: ext_mem_obj_id_t) -> Result<(), LkError> {
     // Signal the event_source so the event_client in the tx loop gets notified.
     vsock_evts.tx_stop.signal().expect("failed to signal tx event_source");
     // Signal for the rx loop to shutdown.
-    vsock_evts.rx_stop.signal_stop();
+    vsock_evts.rx_stop.signal(VsockRxEvent::TERMINATE);
 
     // The tx and rx loops may take some time before returning but this function is called from the
     // sm-vm-notifier thread which should not block (since it handles other VMs) so just return and
