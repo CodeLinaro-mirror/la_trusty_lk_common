@@ -238,19 +238,6 @@ impl VirtioMsgResp<'_> {
         resp.features = features;
     }
 
-    // Set the payload as the response to an activate request
-    pub fn activate(self, device_version: u32, features: u64, num_dev: u64) {
-        let resp = VirtioMsgFFA::from_bytes_mut(self.buf);
-        resp.__bindgen_anon_1.bus_activate_resp =
-            bus_activate_resp { device_version, features, num: num_dev }
-    }
-
-    // Set the payload as the response to a configure request
-    pub fn configure(self, features: u64) {
-        let resp = VirtioMsgFFA::from_bytes_mut(self.buf);
-        resp.__bindgen_anon_1.bus_configure_resp = bus_configure_resp { features }
-    }
-
     pub fn write_bus_get_devices(self, next_offset: u16, bitmap: u8) {
         let resp = sys_dev2::virtio_msg::from_bytes_mut(self.buf);
         let bitmap_size = size_of_val(&bitmap);
