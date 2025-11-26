@@ -32,7 +32,7 @@ use rust_support::sync::Mutex;
 fn parse_fdt_dma_pool_reg(dma_pool: &FdtNode) -> libfdt::Result<Range<u64>> {
     let mut reg_iter = dma_pool.reg()?.ok_or(FdtError::NotFound)?;
     let reg = reg_iter.next().ok_or(FdtError::NotFound)?;
-    let reg_size = reg.size.ok_or(FdtError::NotFound)?;
+    let reg_size = reg.size.ok_or(FdtError::BadValue)?;
     let reg_end = reg.addr.checked_add(reg_size).ok_or(FdtError::BadValue)?;
     Ok(reg.addr..reg_end)
 }
@@ -69,7 +69,13 @@ lazy_static! {
     pub(crate) static ref DMA_POOL_ALLOCS: Mutex<Vec<RegionAllocator>> = Mutex::new(
         get_fdt_dma_pools()
             .unwrap_or_else(|e| {
-                log::error!("Failed to parse restricted-dma-pool: {e:?}");
+                match e {
+                    DmaPoolError::FindCompatible(FdtError::NotFound)
+                    | DmaPoolError::ParseReg(FdtError::NotFound) => {
+                        log::warn!("restricted-dma-pool not found in device tree");
+                    }
+                    _ => log::error!("Failed to parse restricted-dma-pool: {e:?}"),
+                }
                 Vec::new()
             })
             .into_iter()

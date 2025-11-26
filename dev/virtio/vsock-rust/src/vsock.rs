@@ -845,6 +845,7 @@ where
                 Ok(()) => {
                     let wake_reason = device.rx_event.wake_reason.load(Ordering::Relaxed);
                     if (wake_reason & VsockRxEvent::TERMINATE) != 0 {
+                        debug!("stopping vsock_rx_loop");
                         vsock_connection_close_all(&mut device.connections.lock());
                         return Ok(());
                     }
@@ -1045,7 +1046,7 @@ where
 
         if let Some(ref evt_client) = &evt_client {
             if href.handle() == evt_client.handle() {
-                debug!("stopping vsock tx loop");
+                debug!("stopping vsock_tx_loop");
                 return Ok(());
             }
         };
@@ -1221,9 +1222,11 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_rx_loop(device_for_rx, transport_kind, None);
-            error!("vsock_rx_loop returned {ret:?}");
-            ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
+            vsock_rx_loop(device_for_rx, transport_kind, None)
+                .inspect_err(|err| error!("vsock_rx_loop returned {err:?}"))
+                .err()
+                .unwrap_or(LkError::NO_ERROR.into())
+                .into_c()
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
@@ -1232,9 +1235,11 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_tx_loop(device_for_tx, transport_kind, None, None);
-            error!("vsock_tx_loop returned {ret:?}");
-            ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
+            vsock_tx_loop(device_for_tx, transport_kind, None, None)
+                .inspect_err(|err| error!("vsock_tx_loop returned {err:?}"))
+                .err()
+                .unwrap_or(LkError::NO_ERROR.into())
+                .into_c()
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
