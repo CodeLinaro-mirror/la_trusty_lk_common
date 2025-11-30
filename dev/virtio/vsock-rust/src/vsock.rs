@@ -436,11 +436,11 @@ pub(crate) struct VsockRxEvent {
 
 impl VsockRxEvent {
     const NONE: u32 = 0;
-    const TERMINATE: u32 = 1 << WakeReasonFlag::Terminate as u32;
+    pub(crate) const TERMINATE: u32 = 1 << WakeReasonFlag::Terminate as u32;
 
     #[allow(dead_code)]
-    pub(crate) fn signal_stop(&self) {
-        self.wake_reason.fetch_or(Self::TERMINATE, Ordering::Relaxed);
+    pub(crate) fn signal(&self, event: u32) {
+        self.wake_reason.fetch_or(event, Ordering::Relaxed);
         self.event.signal();
     }
 }
@@ -698,12 +698,7 @@ where
         let peer_id = match transport_kind {
             TransportKind::DeviceFFAMsg(ffa_id) | TransportKind::DriverFFAMsg(ffa_id) => {
                 peer_id::TrustyPeerIdStorageSized::from_concrete(
-                    &peer_id::trusty_peer_id_vmid_ffa {
-                        kind: peer_id::TRUSTY_PEER_ID_KIND_VMID_FFA,
-                        reserved_1: 1, // Mandated by doccomment in trusty_peer_id.h
-                        id: ffa_id,
-                        padding: Default::default(),
-                    },
+                    &peer_id::trusty_peer_id_vmid_ffa::new(ffa_id),
                 )
             }
             TransportKind::DriverPCI => {
@@ -819,6 +814,7 @@ where
 {
     const TEN_MS: Duration = Duration::from_millis(10);
     let mut pending: VecDeque<VsockEvent> = VecDeque::new();
+    let mut terminate = false;
 
     debug!("starting vsock_rx_loop");
 
@@ -840,13 +836,22 @@ where
             .or_else(|| device.connection_manager.lock().deref_mut().poll().expect("poll failed"));
 
         if event.is_none() {
+            if terminate {
+                debug!("stopping vsock_rx_loop");
+                vsock_connection_close_all(&mut device.connections.lock());
+                return Ok(());
+            }
+
             let res = device.rx_event.event.wait_timeout(TEN_MS);
             match res {
                 Ok(()) => {
                     let wake_reason = device.rx_event.wake_reason.load(Ordering::Relaxed);
                     if (wake_reason & VsockRxEvent::TERMINATE) != 0 {
-                        vsock_connection_close_all(&mut device.connections.lock());
-                        return Ok(());
+                        // When terminate is set, we shouldn't be waiting or woken up
+                        assert!(!terminate);
+                        // Flag termination so we can process any remaining events
+                        // before exiting the rx loop.
+                        terminate = true;
                     }
                 }
                 Err(LkError::ERR_TIMED_OUT) => (),
@@ -1045,7 +1050,7 @@ where
 
         if let Some(ref evt_client) = &evt_client {
             if href.handle() == evt_client.handle() {
-                debug!("stopping vsock tx loop");
+                debug!("stopping vsock_tx_loop");
                 return Ok(());
             }
         };
@@ -1221,9 +1226,11 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_rx_loop(device_for_rx, transport_kind, None);
-            error!("vsock_rx_loop returned {ret:?}");
-            ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
+            vsock_rx_loop(device_for_rx, transport_kind, None)
+                .inspect_err(|err| error!("vsock_rx_loop returned {err:?}"))
+                .err()
+                .unwrap_or(LkError::NO_ERROR.into())
+                .into_c()
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
@@ -1232,9 +1239,11 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            let ret = vsock_tx_loop(device_for_tx, transport_kind, None, None);
-            error!("vsock_tx_loop returned {ret:?}");
-            ret.err().unwrap_or(LkError::NO_ERROR.into()).into_c()
+            vsock_tx_loop(device_for_tx, transport_kind, None, None)
+                .inspect_err(|err| error!("vsock_tx_loop returned {err:?}"))
+                .err()
+                .unwrap_or(LkError::NO_ERROR.into())
+                .into_c()
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
