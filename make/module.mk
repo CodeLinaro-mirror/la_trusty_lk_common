@@ -489,5 +489,6 @@ MODULE_ADD_IMPLICIT_DEPS := true
 MODULE_RUSTFLAGS_CONFIG :=
 MODULE_RLIBS :=
 MODULE_LIBRARIES :=
+MODULE_RUST_ENV :=
 
 endif # QUERY_MODULE (this line should stay after all other processing)
