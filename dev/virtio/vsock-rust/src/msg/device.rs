@@ -30,7 +30,7 @@ use crate::msg::device::transport::FFAMsgTransport;
 use crate::msg::BusAddress;
 use crate::msg::MAX_NUM_SHM;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
-use crate::sys::VIRTIO_CONFIG_S_DRIVER_OK;
+use crate::sys_dev2::VIRTIO_CONFIG_S_DRIVER_OK;
 use crate::vsock::TransportKind;
 use crate::vsock::VsockDevice;
 use crate::vsock::VsockRxEvent;

@@ -22,12 +22,8 @@
  */
 #![allow(dead_code)]
 
-use crate::sys::virtio_msg as VirtioMsg;
-use crate::sys::virtio_msg_ffa as VirtioMsgFFA;
 use crate::sys_dev2;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
-use core::mem::align_of;
-use core::mem::offset_of;
 use core::mem::size_of;
 use peer_id::Uuid;
 use rust_support::mmu::ArchMmuFlags;
@@ -80,66 +76,6 @@ const VIRTIO_MSG_FFA_UUID: Uuid =
 // virtio-msg spec 7.2: Total length of the message in bytes, include the 6-byte header.
 // Must be between 6 and 96.
 const MAX_VIRTIO_MSG_SIZE: usize = 96;
-
-// Verify some of the assumptions of the safety comments below.
-const_assert!(size_of::<VirtioMsgFFA>() == size_of::<VirtioMsg>());
-const_assert!(size_of::<VirtioMsgFFA>() == 40);
-const_assert!(align_of::<VirtioMsgFFA>() == align_of::<VirtioMsg>());
-const_assert!(offset_of!(VirtioMsgFFA, type_) == offset_of!(VirtioMsg, type_));
-const_assert!(offset_of!(VirtioMsgFFA, id) == offset_of!(VirtioMsg, id));
-const_assert!(
-    offset_of!(VirtioMsgFFA, __bindgen_anon_1) == offset_of!(VirtioMsg, __bindgen_anon_1)
-);
-const_assert!(size_of::<VirtioMsgFFA>() <= ARM_FFA_MSG_EXTENDED_ARGS_COUNT * size_of::<u64>());
-
-impl VirtioMsg {
-    fn from_bytes(buf: &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &VirtioMsg {
-        let buf = buf as *const [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT] as *const VirtioMsg;
-        // SAFETY:
-        // - The input reference `buf` is valid for the lifetime of this function.
-        // - The returned reference has the same lifetime as the input reference by elision rules.
-        // - `VirtioMsg` and `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` have compatible layouts:
-        //   - `VirtioMsg` is a packed struct with a size of 40 bytes and specific field offsets.
-        //   - `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` is a 112 byte (14 * 8) array.
-        // - The layout of `VirtioMsg` is such that its size and fields match the first 40 bytes of the input array.
-        // - `VirtioMsg` and `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` have compatible alignments.
-        // - Therefore, reinterpreting the first 40 bytes of the input array reference as `VirtioMsg` is safe.
-        unsafe { buf.as_ref().unwrap() }
-    }
-
-    fn from_bytes_mut(buf: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &mut VirtioMsg {
-        let buf = buf as *mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT] as *mut VirtioMsg;
-        // SAFETY:
-        // - Same safety considerations as `VirtioMsg::from_bytes` apply. The
-        //   mutability does not affect the validity of the reinterpretation.
-        // - `VirtioMsg` is a packed struct.
-        unsafe { buf.as_mut().unwrap() }
-    }
-}
-
-impl VirtioMsgFFA {
-    fn from_bytes(buf: &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &VirtioMsgFFA {
-        let buf = buf as *const [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT] as *const VirtioMsgFFA;
-        // SAFETY:
-        // - The input reference `buf` is valid for the lifetime of this function.
-        // - `VirtioMsgFFA` and `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` have compatible layouts:
-        //   - `VirtioMsgFFA` is a packed struct with a size of 40 bytes and specific field offsets.
-        //   - `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` is a 112 byte (14 * 8) array.
-        // - The layout of `VirtioMsgFFA` is such that its size and fields match the first 40 bytes of the input array.
-        // - `VirtioMsgFFA` and `[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]` have compatible alignments.
-        // - Therefore, reinterpreting the first 40 bytes of the input array reference as `VirtioMsg` is safe.
-        unsafe { buf.as_ref().unwrap() }
-    }
-
-    fn from_bytes_mut(buf: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &mut VirtioMsgFFA {
-        let buf = buf as *mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT] as *mut VirtioMsgFFA;
-        // SAFETY:
-        // - Same safety considerations as `VirtioMsgFFA::from_bytes` apply. The
-        //   mutability does not affect the validity of the reinterpretation.
-        // - `VirtioMsgFFA` is a packed struct.
-        unsafe { buf.as_mut().unwrap() }
-    }
-}
 
 impl sys_dev2::virtio_msg {
     fn from_bytes(buf: &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &Self {
