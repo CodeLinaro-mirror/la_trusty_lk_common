@@ -33,6 +33,7 @@
 // raw_ref_op is stable as of Rust 1.82
 #![cfg_attr(not(version("1.82")), feature(raw_ref_op))]
 #![feature(box_as_ptr)]
+#![feature(cfi_encoding, extern_types)]
 
 use alloc::format;
 use core::ffi::CStr;
@@ -46,6 +47,8 @@ mod sys {
     #![allow(unsafe_op_in_unsafe_fn)]
     #![allow(clippy::missing_safety_doc)]
     use num_derive::FromPrimitive;
+    use peer_id::{trusty_peer_id, uuid, uuid as uuid_t};
+
     include!(env!("BINDGEN_INC_FILE"));
 }
 
@@ -66,12 +69,12 @@ pub mod thread;
 pub mod uuid;
 pub mod vmm;
 
+pub use peer_id::uuid as uuid_t;
 pub use sys::list_node;
 pub use sys::lk_obj_ref_init;
 pub use sys::obj_ref;
 pub use sys::paddr_t;
 pub use sys::status_t;
-pub use sys::uuid_t;
 pub use sys::vaddr_t;
 pub use sys::Error;
 

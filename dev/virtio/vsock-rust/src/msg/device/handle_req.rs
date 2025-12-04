@@ -21,7 +21,6 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use crate::msg::device::ClientId;
 use crate::msg::device::VirtQueue;
 use crate::msg::device::VirtioMsgDevice;
 use crate::msg::device::VirtioMsgPayload;
@@ -30,6 +29,7 @@ use crate::msg::device::VirtioMsgResp;
 use crate::msg::device::TRANSPORT;
 use crate::msg::BusAddress;
 use crate::msg::VirtioMsg;
+use crate::FFAClientId;
 // glob import since we only allowlist virtio_msg.h, virtio_msg_ffa.h and virtio_config.h in bindgen
 use crate::sys::*;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
@@ -301,7 +301,7 @@ impl VirtioMsgDevice {
                     *unshare_req_entry = Some(ext_mem_obj);
                 }
                 // Notify the thread which handles the unmapping of the new request.
-                self.unshare.signal();
+                self.wake_memory_unmap.signal();
                 sm::intc_raise_doorbell_irq();
             }
             VirtioMsgPayload::GetConfig(req) => {
@@ -343,7 +343,10 @@ impl VirtioMsgDevice {
 
 // SAFETY: The buf argument must point to a 14-element u64 array without any aliasing references for
 // the lifetime of the function.
-pub unsafe extern "C" fn handle_req_callback(client_id: ClientId, buf_ptr: *mut u64) -> status_t {
+pub unsafe extern "C" fn handle_req_callback(
+    client_id: FFAClientId,
+    buf_ptr: *mut u64,
+) -> status_t {
     trace!("Received virtio-msg request with VM ID {client_id:?}");
 
     let device = TRANSPORT.get_device(client_id);

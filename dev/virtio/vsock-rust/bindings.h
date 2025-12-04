@@ -21,5 +21,10 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-pub use peer_id::uuid as uuid_t;
-pub use peer_id::Uuid;
+#include <stdint.h>
+#define __le16 uint16_t
+#define __le32 uint32_t
+#define __le64 uint64_t
+#include "virtio_config.h"
+#include "virtio_msg.h"
+#include "virtio_msg_ffa.h"
