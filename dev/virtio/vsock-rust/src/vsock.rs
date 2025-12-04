@@ -315,7 +315,7 @@ impl VsockConnection {
         let mut iov = iovec_kern { iov_base: self.rx_buffer.as_mut_ptr() as _, iov_len: length };
         let mut msg = ipc_msg_kern::new(&mut iov);
 
-        // Safety:
+        // SAFETY:
         // `c.href.handle` is a handle attached to a tipc channel.
         // `msg` contains an `iov` which points to a buffer from which
         // the kernel can read `iov_len` bytes.
@@ -592,7 +592,7 @@ where
                 continue;
             }
 
-            // Safety:
+            // SAFETY:
             // - `sid` is a valid uuid with static lifetime
             // - `path` points to a null-terminated C-string. The null byte was appended by
             //   `CString::new`.
@@ -616,7 +616,7 @@ where
                 continue;
             }
 
-            // Safety:
+            // SAFETY:
             // - `phandle` is a valid port handle from ipc_port_create
             let ret = unsafe { ipc_port_publish(phref.handle()) };
             if ret != 0 {
@@ -671,7 +671,7 @@ where
         c.state = VsockConnectionState::TipcOnly;
 
         let mut peer_uuid_ptr = core::ptr::null();
-        // Safety:
+        // SAFETY:
         // - `phandle` is a valid port from href
         // - `chandle` is a zeroed HandleRef from c
         // - `peer` is the zero-initialized pointer from above
@@ -689,7 +689,7 @@ where
         }
 
         debug_assert!(!peer_uuid_ptr.is_null());
-        // Safety:
+        // SAFETY:
         //   Since `ipc_port_accept` returned without error, it has stored into `peer_uuid_ptr` a
         //   non-null pointer which is valid for reads of the type `uuid`.
         let peer_uuid = unsafe { *peer_uuid_ptr };
@@ -737,7 +737,7 @@ where
 
         let (peer_id_ptr, peer_id_len) = peer_id.as_generic().into_raw_parts();
 
-        // Safety:
+        // SAFETY:
         // - `sid`` is a valid uuid with static lifetime
         // - `path` points to a null-terminated C-string. The null byte was appended by
         //   `CString::new`.
@@ -1196,7 +1196,7 @@ where
                 let mut msg_info = ipc_msg_info::default();
 
                 // TODO: add more idiomatic Rust interface
-                // Safety:
+                // SAFETY:
                 // `c.href.handle` is a valid handle to a tipc channel.
                 // `ipc_get_msg` can store a message descriptor in `msg_info`.
                 let ret = unsafe { ipc_get_msg(c.href.handle(), &mut msg_info) };
@@ -1204,13 +1204,13 @@ where
                     let mut iov: iovec_kern = tx_buffer.as_mut().into();
                     let mut msg = ipc_msg_kern::new(&mut iov);
 
-                    // Safety:
+                    // SAFETY:
                     // `c.href.handle` is a valid handle to a tipc channel.
                     // `msg_info` holds the results of a successful call to `ipc_get_msg`
                     // using the same handle.
                     let ret = unsafe { ipc_read_msg(c.href.handle(), msg_info.id, 0, &mut msg) };
 
-                    // Safety:
+                    // SAFETY:
                     // `ipc_put_msg` was called with the same handle and msg_info arguments.
                     unsafe { ipc_put_msg(c.href.handle(), msg_info.id) };
                     if ret >= 0 && ret as usize == msg_info.len {
