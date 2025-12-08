@@ -316,7 +316,7 @@ fn driver_init() -> Result<()> {
                 error!("could not create VirtIOSocket {e:?}");
                 LkError::ERR_GENERIC
             })?;
-        vsock_init(driver, TransportKind::DriverFFAMsg(ffa_id)).map_err(|e| {
+        vsock_init(driver, TransportKind::DriverFFAMsg(ffa_id), None).map_err(|e| {
             error!("vsock_init failed {e:?}");
             LkError::ERR_GENERIC
         })?;

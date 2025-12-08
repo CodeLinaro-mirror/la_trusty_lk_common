@@ -63,13 +63,14 @@ mod arch;
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 #[path = "pci/unimplemented.rs"]
 mod arch;
-mod hal;
+pub(crate) mod hal;
 
 impl PciHal {
     fn init_all_vsocks(
         mut pci_root: PciRoot<impl ConfigurationAccess>,
         pci_size: usize,
         use_hyp_transport: bool,
+        mut get_int_vector: impl FnMut(u8, u8, u8) -> Option<u32>,
     ) -> Result<(), Error> {
         for bus in u8::MIN..=u8::MAX {
             // each bus can use up to one megabyte of address space, make sure we stay in range
@@ -80,6 +81,13 @@ impl PciHal {
                 if virtio_device_type(&info) != Some(DeviceType::Socket) {
                     continue;
                 };
+
+                let cell = (bus as u32) << 16
+                    | (device_function.device as u32) << 11
+                    | (device_function.function as u32) << 8;
+                let vector = get_int_vector(bus, device_function.device, device_function.function);
+                log::debug!("initializing vsock device on bus: {}: device {}, function: {}, cell: {:08x} -> vector: {:?}",
+                           bus, device_function.device, device_function.function, cell, vector);
 
                 // Map the BARs of the device into virtual memory. Since the mappings must
                 // outlive the `PciTransport` constructed in `vsock_init` we no make no
@@ -122,7 +130,7 @@ impl PciHal {
 
                 let driver: VirtIOSocket<PciHal, SomeTransport, 4096> =
                     VirtIOSocket::new(transport)?;
-                vsock_init(driver, TransportKind::DriverPCI)?;
+                vsock_init(driver, TransportKind::DriverPCI, vector)?;
             }
         }
         Ok(())
@@ -137,6 +145,7 @@ unsafe fn map_pci_root_and_init_vsock(
     pci_paddr: paddr_t,
     pci_size: usize,
     cfg_size: usize,
+    get_int_vector: impl FnMut(u8, u8, u8) -> Option<u32>,
 ) -> Result<(), Error> {
     // The ECAM is defined in Section 7.2.2 of the PCI Express Base Specification, Revision 2.0.
     // The ECAM size must be a power of two with the exponent between 1 and 8.
@@ -196,7 +205,7 @@ unsafe fn map_pci_root_and_init_vsock(
         #[cfg(target_arch = "x86_64")]
         {
             let pci_root = PciRoot::new(HypCam::new(pci_paddr, cam));
-            PciHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport)?;
+            PciHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport, get_int_vector)?;
         }
     } else {
         // Safety:
@@ -206,7 +215,7 @@ unsafe fn map_pci_root_and_init_vsock(
         // so it, too, has `'static` lifetime.
         // We also check that the `cam` size is valid.
         let pci_root = PciRoot::new(unsafe { MmioCam::new(pci_vaddr.cast(), cam) });
-        PciHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport)?;
+        PciHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport, get_int_vector)?;
     }
     Ok(())
 }
@@ -223,10 +232,24 @@ pub unsafe extern "C" fn pci_init_mmio(
     debug!("initializing vsock: pci_paddr 0x{pci_paddr:x}, pci_size 0x{pci_size:x}");
     || -> Result<(), Error> {
         // Safety: Delegated to `map_pci_root_and_init_vsock`.
-        unsafe { map_pci_root_and_init_vsock(pci_paddr, pci_size, cfg_size) }?;
+        unsafe { map_pci_root_and_init_vsock(pci_paddr, pci_size, cfg_size, |_, _, _| None) }?;
         Ok(())
     }()
     .err()
     .unwrap_or(LkError::NO_ERROR.into())
     .into_c()
+}
+
+/// # Safety
+///
+/// See [`map_pci_root_and_init_vsock`].
+pub unsafe fn pci_init_mmio_with_interrupt_callback(
+    pci_paddr: paddr_t,
+    pci_size: usize,
+    cfg_size: usize,
+    get_int_vector: impl FnMut(u8, u8, u8) -> Option<u32>,
+) -> Result<(), Error> {
+    debug!("initializing vsock: pci_paddr 0x{pci_paddr:x}, pci_size 0x{pci_size:x}");
+    // Safety: Delegated to `map_pci_root_and_init_vsock`.
+    unsafe { map_pci_root_and_init_vsock(pci_paddr, pci_size, cfg_size, get_int_vector) }
 }
