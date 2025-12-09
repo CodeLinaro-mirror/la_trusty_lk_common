@@ -26,6 +26,8 @@ use core::ffi::c_void;
 use core::ffi::CStr;
 use core::ops::Deref;
 use core::ops::DerefMut;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+use core::ptr;
 use core::ptr::eq;
 use core::ptr::null_mut;
 use core::sync::atomic::AtomicU32;
@@ -80,6 +82,10 @@ use virtio_drivers_and_devices::device::socket::VsockConnectionManager;
 use virtio_drivers_and_devices::device::socket::VsockEvent;
 use virtio_drivers_and_devices::device::socket::VsockEventType;
 use virtio_drivers_and_devices::device::socket::VsockManager;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+use virtio_drivers_and_devices::transport::InterruptStatus;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+use virtio_drivers_and_devices::transport::SomeTransport;
 use virtio_drivers_and_devices::transport::Transport;
 use virtio_drivers_and_devices::Error as VirtioError;
 use virtio_drivers_and_devices::Hal;
@@ -91,6 +97,8 @@ use rust_support::handle_set::HandleSet;
 use rust_support::Error as LkError;
 
 use crate::err::Error;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+use crate::pci::hal::PciHal;
 use crate::FFAClientId;
 
 #[cfg(feature = "virtio_msg_device")]
@@ -156,6 +164,16 @@ pub(crate) enum TransportKind {
     DriverFFAMsg(FFAClientId),
     DeviceFFAMsg(FFAClientId),
     DriverPCI,
+}
+
+impl TransportKind {
+    fn supports_interrupts(&self) -> bool {
+        match self {
+            #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+            Self::DriverPCI => true,
+            _ => false,
+        }
+    }
 }
 
 struct TipcToVsockMapping {
@@ -431,6 +449,7 @@ fn vsock_connection_close(c: &mut VsockConnection, action: ConnectionStateAction
 #[repr(u32)]
 enum WakeReasonFlag {
     Terminate = 0,
+    QueueEvent = 1,
 }
 
 pub(crate) struct VsockRxEvent {
@@ -441,6 +460,7 @@ pub(crate) struct VsockRxEvent {
 impl VsockRxEvent {
     const NONE: u32 = 0;
     pub(crate) const TERMINATE: u32 = 1 << WakeReasonFlag::Terminate as u32;
+    const QUEUE_EVENT: u32 = 1 << WakeReasonFlag::QueueEvent as u32;
 
     #[allow(dead_code)]
     pub(crate) fn signal(&self, event: u32) {
@@ -804,6 +824,67 @@ where
     }
 }
 
+/// # Safety
+///
+/// This function is a Trusty interrupt handler. The code registering the handler
+/// must ensure the following preconditions:
+///
+/// 1. **Validity**:
+///    - `arg` must be a non-null, dereferenceable, properly-aligned pointer to
+///      an initialized `VsockDevice<VsockConnectionManager<PciHal, SomeTransport>>`.
+///    - The underlying `VsockDevice` must be ready to acknowledge interrupts.
+///
+/// 2. **Aliasing & Concurrency**:
+///    - This function creates a shared reference to the `VsockDevice`. The code
+///      registering the handler must ensure that no mutable references to the
+///      `VsockDevice` exist when the handler is invoked by the Trusty kernel.
+///
+/// 3. **Lifetime**: The memory pointed to by `arg` must remain valid and pinned
+///    for the entire duration of this function execution and as long as this
+///    function is registered as an interrupt handler.
+///
+/// Note that these requirements subsume the rules for safe pointer-to-reference
+/// conversion.
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+unsafe extern "C" fn vsock_pci_interrupt(
+    arg: *mut core::ffi::c_void,
+) -> rust_support::interrupt::handler_return {
+    let device_raw = arg as *const VsockDevice<VsockConnectionManager<PciHal, SomeTransport>>;
+
+    // SAFETY:
+    // - `device` satisfy pointer to reference conversion requirements
+    //   per the function preconditions.
+    let device = unsafe { device_raw.as_ref().expect("non-null pointer") };
+
+    let manager = device.connection_manager.data_ptr();
+
+    // SAFETY:
+    // - `manager` is a valid reference because it was obtained from `device` which is
+    //    guaranteed valid by the function preconditions.
+    // - `manager` points to an initialized VsockManager impl which is ready to acknowledge
+    //    underlying PCI transport per the function preconditions.
+    // - **Concurrency**: Safe because `ack_interrupt` performs an MMIO operation
+    //   (read-to-clear) on the ISR register. It does not modify Rust-managed memory,
+    //   and the driver guarantees it does not access these specific hardware bits
+    //   from the rx/tx threads.
+    let res = unsafe { VsockConnectionManager::ack_interrupt(manager) };
+    match res {
+        InterruptStatus::QUEUE_INTERRUPT => {
+            device.rx_event.signal(VsockRxEvent::QUEUE_EVENT);
+
+            rust_support::interrupt::handler_return::INT_RESCHEDULE
+        }
+        InterruptStatus::DEVICE_CONFIGURATION_INTERRUPT => {
+            error!("Device configuration interrupts are not supported.");
+            rust_support::interrupt::handler_return::INT_NO_RESCHEDULE
+        }
+        unknown => {
+            error!("Unknown interrupt kind: {:#b}", unknown.bits());
+            rust_support::interrupt::handler_return::INT_NO_RESCHEDULE
+        }
+    }
+}
+
 // The unused VM ref argument is only passed in if the peer is a VM. When this function returns the
 // VmRef gets dropped decreasing the VM's refcount by 1. The Arc<VsockDevice> also gets dropped. If
 // it's the last refcount that triggers the VsockDevice Drop impl which signals the `vsock_drop`
@@ -833,7 +914,6 @@ where
     }
 
     loop {
-        // TODO: use interrupts instead of polling
         // TODO: handle case where poll returns SocketError::OutputBufferTooShort
         let event = pending
             .pop_front()
@@ -846,15 +926,32 @@ where
                 return Ok(());
             }
 
-            let res = device.rx_event.event.wait_timeout(TEN_MS);
+            let res = if transport_kind.supports_interrupts() {
+                device.rx_event.event.wait();
+                Ok(())
+            } else {
+                device.rx_event.event.wait_timeout(TEN_MS)
+            };
             match res {
                 Ok(()) => {
                     let wake_reason = device.rx_event.wake_reason.load(Ordering::Relaxed);
+                    if (wake_reason & VsockRxEvent::QUEUE_EVENT) != 0 {
+                        // Clear the QUEUE_EVENT bit. There is no time-of-check-to-time-of-use
+                        // (TOCTTOU) problem here since this is the only place we read and
+                        // clear the bit. If an interrupt comes in and causes the bit to be
+                        // set after we read it here but before it is cleared, we do not miss
+                        // the queue event because we will process all events on the rx queues
+                        // before we go back to waiting for events (and thus rely on this bit).
+                        device
+                            .rx_event
+                            .wake_reason
+                            .fetch_xor(VsockRxEvent::QUEUE_EVENT, Ordering::Relaxed);
+                    }
                     if (wake_reason & VsockRxEvent::TERMINATE) != 0 {
                         // When terminate is set, we shouldn't be waiting or woken up
                         assert!(!terminate);
-                        // Flag termination so we can process any remaining events
-                        // before exiting the rx loop.
+                        // We might have rx events to process so flag the termination event
+                        // and process any pending and incoming events before exiting loop.
                         terminate = true;
                     }
                 }
@@ -1218,6 +1315,7 @@ impl<M: VsockManager> Drop for VsockDevice<M> {
 pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
     driver: VirtIOSocket<H, T, 4096>,
     transport_kind: TransportKind,
+    _irq_vector: Option<u32>, /* only used on aarch64 and x86_64 */
 ) -> Result<(), Error> {
     let manager = VsockConnectionManager::new_with_capacity(driver, 4096);
     let device_for_rx = Arc::new(VsockDevice::new(manager));
@@ -1230,11 +1328,96 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
         .priority(Priority::HIGH)
         .stack_size(stack_size)
         .spawn(move || {
-            vsock_rx_loop(device_for_rx, transport_kind, None)
+            // Register interrupt handler when using PCI transport
+            #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+            let device_for_rx_ptr = if let Some(vector) = _irq_vector {
+                assert!(transport_kind.supports_interrupts());
+                let device_for_rx_ptr = Arc::<VsockDevice<_>>::into_raw(device_for_rx.clone());
+
+                // SAFETY:
+                // 1. **Validity**:
+                //    - `device_for_rx_ptr` is a valid, initialized pointer obtained
+                //    from `Arc::into_raw`.
+                //    - The `VsockDevice` pointee is ready to acknowledge interrupts.
+                //    - `vector` will be validated by callee; invalid values cause panics.
+                //
+                // 2. **Lifetime**: The `VsockDevice` is guaranteed to outlive all interrupt
+                //    handler executions because:
+                //    - We have transferred ownership to the raw pointer (via `into_raw`).
+                //    - We do not reclaim ownership (via `from_raw`) until *after* the
+                //      interrupt is masked and deregistered at the end of this block.
+                //
+                // 3. **Concurrency**:
+                //    - The `vsock_pci_interrupt` handler only accesses `connection_manager`
+                //      to perform a read-to-clear MMIO operation in `ack_interrupt` which
+                //      does not thouch any Rust-managed memory that could be accessed by the
+                //      rx/tx threads.
+                //    - The `vsock_rx_loop` (running on this thread) retains an `Arc` to the
+                //      same device, but it does not reconfigure the device hardware or
+                //      invalidate the MMIO mappings while this handler is registered.
+                unsafe {
+                    rust_support::interrupt::register_int_handler(
+                        vector,
+                        Some(vsock_pci_interrupt),
+                        device_for_rx_ptr as *mut core::ffi::c_void,
+                    );
+                }
+
+                // SAFETY:
+                // - `vector` was validated by preceding call to `register_int_handler`.
+                // - a valid interrupt handler and interrupt handler argument has been
+                //   registered for this `vector`.
+                let res = unsafe { rust_support::interrupt::unmask_interrupt(vector) };
+                if res != LkError::NO_ERROR.into() {
+                    panic!("Failed to unmask interrupt vector({vector}): {res}");
+                }
+
+                Some(device_for_rx_ptr)
+            } else {
+                None
+            };
+
+            let res = vsock_rx_loop(device_for_rx, transport_kind, None)
                 .inspect_err(|err| error!("vsock_rx_loop returned {err:?}"))
                 .err()
                 .unwrap_or(LkError::NO_ERROR.into())
-                .into_c()
+                .into_c();
+
+            // If we installed an interrupt handler, de-register it to remove
+            // the pointer to the `VsockDevice` used as the handler argument.
+            #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+            if let Some(vector) = _irq_vector {
+                // SAFETY:
+                // - `vector` was validated by preceding call to `register_int_handler`.
+                // - interrupts for this `vector` were previously unmasked
+                let res = unsafe { rust_support::interrupt::mask_interrupt(vector) };
+                if res != LkError::NO_ERROR.into() {
+                    panic!("Failed to mask interrupt vector({vector}): {res}");
+                }
+
+                // De-register interrupt handler
+                //
+                // SAFETY:
+                // - `vector` was validated by preceding call to `register_int_handler`.
+                // - interrupts masked for `vector`
+                // - None is a valid value for handler
+                // - A null-ptr is a valid value for handler arg
+                unsafe {
+                    rust_support::interrupt::register_int_handler(vector, None, ptr::null_mut());
+                }
+
+                let device_for_rx_ptr = device_for_rx_ptr.unwrap();
+
+                // SAFETY:
+                // - `device_for_rx_ptr` was returned by `Arc<...>::into_raw`
+                // - `device_for_rx_ptr` points to memory allocated by global allocator
+                //   and has the expected size and alignment for this operation.
+                // - The handler has been deregistered (see above), so no concurrent
+                //   handler access can occur if the `Arc` drops the `VsockDevice`.
+                let _ = unsafe { Arc::<VsockDevice<_>>::from_raw(device_for_rx_ptr) };
+            }
+
+            res
         })
         .map_err(|e| LkError::from_lk(e).unwrap_err())?;
 
