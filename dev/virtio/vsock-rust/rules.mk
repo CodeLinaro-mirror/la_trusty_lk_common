@@ -213,11 +213,16 @@ VIRTIO_MSG_BINDGEN_TYPES := \
 	bus_area_unshare_resp \
 	bus_area_release \
 	bus_event_device \
+	bus_event_configure \
+	bus_event_configure_resp \
 	bus_ffa_version \
 	bus_ffa_version_resp \
+	bus_fifo_configure \
+	bus_fifo_configure_resp \
 	bus_get_devices \
 	bus_ping \
 	bus_ping_resp \
+	bus_reset_resp \
 	bus_status \
 	event_avail \
 	event_used \
