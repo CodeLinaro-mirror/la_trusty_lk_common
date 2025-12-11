@@ -26,7 +26,7 @@ mod vsock;
 #[allow(non_upper_case_globals)]
 #[rustfmt::skip]
 #[path = "bindings.rs"]
-mod sys_dev2;
+mod sys;
 
 pub use err::Error;
 pub use pci::pci_init_mmio_with_interrupt_callback;

@@ -22,7 +22,7 @@
  */
 #![allow(dead_code)]
 
-use crate::sys_dev2;
+use crate::sys;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::size_of;
 use peer_id::Uuid;
@@ -77,7 +77,7 @@ const VIRTIO_MSG_FFA_UUID: Uuid =
 // Must be between 6 and 96.
 const MAX_VIRTIO_MSG_SIZE: usize = 96;
 
-impl sys_dev2::virtio_msg {
+impl sys::virtio_msg {
     fn from_bytes(buf: &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> &Self {
         let buf = buf.as_ptr().cast::<Self>();
         // SAFETY:

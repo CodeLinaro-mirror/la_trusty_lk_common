@@ -29,8 +29,8 @@ use crate::msg::device::VirtioMsgResp;
 use crate::msg::device::TRANSPORT;
 use crate::msg::BusAddress;
 use crate::msg::MAX_NUM_SHM;
-use crate::sys_dev2;
-use crate::sys_dev2::{
+use crate::sys;
+use crate::sys::{
     VIRTIO_CONFIG_S_ACKNOWLEDGE, VIRTIO_CONFIG_S_DRIVER, VIRTIO_CONFIG_S_DRIVER_OK,
     VIRTIO_CONFIG_S_FAILED, VIRTIO_CONFIG_S_FEATURES_OK, VIRTIO_MSG_FFA_BUS_VERSION_1_0,
     VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP,
@@ -53,7 +53,7 @@ impl VirtioMsgDevice {
         &self,
         buf_ref: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
     ) -> Result<(), LkError> {
-        let dev_id = sys_dev2::virtio_msg::from_bytes(buf_ref).dev_id;
+        let dev_id = sys::virtio_msg::from_bytes(buf_ref).dev_id;
         // Pass ownership of the `buf_ref` argument to a `VirtioMsgReq` to reinterpret the array as
         // a virtio-msg request
         let req = VirtioMsgReq::parse(buf_ref)?;

@@ -25,7 +25,7 @@ use crate::msg::driver::hal::{MsgHal, VsockMemAllocator};
 use crate::msg::driver::requests::{VirtioMsgReq, VirtioMsgResp};
 use crate::msg::driver::transport::FFAMsgTransport;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
-use crate::sys_dev2::{
+use crate::sys::{
     bus_ffa_version_resp as BusFFAVersionResp, get_device_info_resp as GetDeviceInfoResp,
     VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_REVISION_1,
 };
