@@ -29,6 +29,8 @@ MODULE_LIBRARY_DEPS := \
 
 VSOCK_WITH_VIRTIO_MSG_DEVICE ?= false
 VSOCK_WITH_VIRTIO_MSG_DRIVER ?= false
+# virtio-msg specification version (must be either dev2 or alp0)
+VSOCK_WITH_VIRTIO_MSG_MIN_SPEC_VERSION ?= dev2
 
 # hypervisor_backends supports arm64 and x86-64 only for now
 ifeq ($(SUBARCH),x86-64)
@@ -123,6 +125,16 @@ MODULE_RUSTFLAGS += \
 	--cfg 'feature="virtio_msg_driver"' \
 
 endif
+
+VIRTIO_MSG_SPEC_VERSIONS = dev2 alp0
+
+ifneq ($(filter-out $(VIRTIO_MSG_SPEC_VERSIONS),$(VSOCK_WITH_VIRTIO_MSG_MIN_SPEC_VERSION)),)
+$(error unrecognized VSOCK_WITH_VIRTIO_MSG_MIN_SPEC_VERSION, $(VSOCK_WITH_VIRTIO_MSG_MIN_SPEC_VERSION))
+endif
+
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="virtio_msg_min_spec_version_$(VSOCK_WITH_VIRTIO_MSG_MIN_SPEC_VERSION)"' \
+
 
 ifeq (true,$(call TOBOOL,$(VSOCK_WITH_DEVICE_TREE)))
 MODULE_RUSTFLAGS += \
