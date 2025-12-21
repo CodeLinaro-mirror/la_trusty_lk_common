@@ -36,6 +36,7 @@ use crate::sys_dev2::{
     VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP,
     VIRTIO_MSG_REVISION_1,
 };
+use crate::vsock::VsockRxEvent;
 use crate::FFAClientId;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use log::debug;
@@ -71,6 +72,8 @@ impl VirtioMsgDevice {
         const SUPPORTED_VIRTIO_FEATURES: u64 = (1 << VIRTIO_VSOCK_F_STREAM)
             | (1 << VIRTIO_F_VERSION_1)
             | (1 << VIRTIO_F_ACCESS_PLATFORM);
+
+        const TX_QUEUE_IDX: u32 = 1;
 
         // Create a copy of the request payload. The enum variant determines what kind of request it is
         let req_payload = req.get_msg_payload();
@@ -340,6 +343,21 @@ impl VirtioMsgDevice {
                     config &= mask;
                 }
                 resp.write_get_config(0 /* generation */, req.offset, req.size, config);
+            }
+            VirtioMsgPayload::EventAvailable(queue) => {
+                debug!("received event avail request for queue {queue:x?}");
+                // We currently use events driver tx events to notify the device rx loop
+                // TODO: also make use of driver rx events. This will require non-trivial
+                //       changes to the virtio-drivers/virtio-drivers-and-devices crates.
+                //       See https://github.com/rcore-os/virtio-drivers/issues/208.
+                if queue.index == TX_QUEUE_IDX {
+                    self.rx_loop_evt
+                        .lock_unsaved() // interrupts are disabled in this context
+                        .as_ref()
+                        .expect("rx loop event was initialized")
+                        .signal(VsockRxEvent::QUEUE_EVENT);
+                    sm::intc_raise_doorbell_irq(); // make sure signaled thread runs
+                }
             }
             VirtioMsgPayload::UnknownBusReq(req_id) => {
                 error!("ignoring virtio-msg bus request with unknown id {req_id:x?}");

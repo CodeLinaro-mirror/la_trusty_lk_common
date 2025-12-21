@@ -175,6 +175,7 @@ impl TransportKind {
         match self {
             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
             Self::DriverPCI => true,
+            Self::DeviceFFAMsg(..) => true,
             _ => false,
         }
     }
@@ -464,7 +465,7 @@ pub(crate) struct VsockRxEvent {
 impl VsockRxEvent {
     const NONE: u32 = 0;
     pub(crate) const TERMINATE: u32 = 1 << WakeReasonFlag::Terminate as u32;
-    const QUEUE_EVENT: u32 = 1 << WakeReasonFlag::QueueEvent as u32;
+    pub(crate) const QUEUE_EVENT: u32 = 1 << WakeReasonFlag::QueueEvent as u32;
 
     #[allow(dead_code)]
     pub(crate) fn signal(&self, event: u32) {
