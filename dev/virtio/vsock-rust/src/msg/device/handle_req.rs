@@ -29,9 +29,14 @@ use crate::msg::device::VirtioMsgResp;
 use crate::msg::device::TRANSPORT;
 use crate::msg::BusAddress;
 use crate::msg::VirtioMsg;
+use crate::msg::MAX_NUM_SHM;
 use crate::FFAClientId;
 // glob import since we only allowlist virtio_msg.h, virtio_msg_ffa.h and virtio_config.h in bindgen
 use crate::sys::*;
+use crate::sys_dev2::{
+    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP,
+    VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP, VIRTIO_MSG_REVISION_1,
+};
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use log::debug;
 use log::error;
@@ -79,50 +84,77 @@ impl VirtioMsgDevice {
         // as a virtio-msg response which will be filled in depending on how we handle the request
         let resp = VirtioMsgResp::new(req);
         match req_payload {
-            VirtioMsgPayload::Activate(req) => {
-                debug!("received virtio-msg-ffa activate request {req:?}");
-                if req.driver_version != VIRTIO_MSG_FFA_VERSION_1_0 {
-                    error!("only virtio-msg-ffa version 1.0 is supported");
-                    resp.ffa_error();
-                } else {
-                    // Fill in the array with a response for the activate request
-                    resp.activate(
-                        req.driver_version,
-                        VIRTIO_MSG_FEATURES,
-                        1, /* number of devices */
+            VirtioMsgPayload::BusFFAVersion(req) => {
+                const DEVICE_FFA_BUS_VERSION: u32 = VIRTIO_MSG_FFA_BUS_VERSION_1_0;
+                let req_driver_version = req.driver_version;
+                let resp_device_version = match req_driver_version {
+                    0..DEVICE_FFA_BUS_VERSION => {
+                        debug!(
+                            "requested virtio-msg version not supported {:?}",
+                            req_driver_version
+                        );
+                        None
+                    }
+                    DEVICE_FFA_BUS_VERSION => {
+                        // Return the exact version in the request in case the device supports a
+                        // range of versions in the future.
+                        Some(req_driver_version)
+                    }
+                    _higher_versions => Some(DEVICE_FFA_BUS_VERSION),
+                };
+
+                const DEVICE_VIRTIO_MSG_REVISION: u32 = VIRTIO_MSG_REVISION_1;
+                let req_driver_revision = req.vmsg_revision;
+                let resp_device_revision = match req_driver_revision {
+                    0..DEVICE_VIRTIO_MSG_REVISION => {
+                        debug!(
+                            "requested virtio-msg revision not supported {:?}",
+                            req_driver_revision
+                        );
+                        None
+                    }
+                    DEVICE_VIRTIO_MSG_REVISION => {
+                        // Return the exact revision in the request in case the device supports a
+                        // range of revisions in the future.
+                        Some(req_driver_revision)
+                    }
+                    _higher_revisions => Some(DEVICE_VIRTIO_MSG_REVISION),
+                };
+
+                let req_features = req.features;
+                if req_features & VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP == 0 {
+                    debug!(
+                        "requested virtio-msg features don't include direct TX {:x?}",
+                        req_features
                     );
-                }
+                };
+                let resp_features = VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP;
+                resp.write_bus_ffa_version(
+                    resp_device_version.unwrap_or(0),
+                    resp_device_revision.unwrap_or(0),
+                    resp_features,
+                );
             }
-            VirtioMsgPayload::Configure(req) => {
-                debug!("received virtio-msg-ffa configure request {req:x?}");
-                let mut respond_err = false;
-                // If the driver tries to configure without support for direct messages respond with an error
-                if req.features & u64::from(VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP) == 0 {
-                    error!("virtio-msg device only supports direct messages");
-                    respond_err = true;
-                }
-                // If the driver tries to configure support for indirect messages respond with an error
-                if req.features & u64::from(VIRTIO_MSG_FFA_FEATURE_INDIRECT_MSG_SUPP) != 0 {
-                    error!("virtio-msg device does not support indirect messages");
-                    respond_err = true;
-                }
-                if respond_err {
-                    resp.ffa_error();
-                    return Ok(());
-                }
-
-                let num_shm_supported = ((req.features >> 8) & 0xFF) as u8;
-                debug!("virtio-msg driver using {num_shm_supported}/255 shared memory regions");
-
-                // Fill in the array with a response for the configure request
-                resp.configure(req.features);
+            VirtioMsgPayload::BusGetDevices(req) => {
+                let next_offset = 0;
+                let device_bitmap: u8 = if req.offset == 0 {
+                    // Only one vsock device per VM is currently supported.
+                    0b1
+                } else {
+                    let offset = req.offset;
+                    warn!(
+                        "unexpected virtio-msg bus_get_devices request with offset: {:?}",
+                        offset
+                    );
+                    0b0
+                };
+                resp.write_bus_get_devices(next_offset, device_bitmap);
             }
             VirtioMsgPayload::GetDeviceInfo => {
                 debug!("received virtio-msg get_device_info request");
                 let dev_ty = DeviceType::Socket;
-                let dev_version = 0;
                 let vendor_id = 0;
-                resp.device_info(dev_version, dev_ty, vendor_id);
+                resp.write_device_info(dev_ty, vendor_id);
             }
             VirtioMsgPayload::SetDeviceStatus(req) => {
                 debug!("received virtio-msg set_device_status request {req:x?}");
@@ -214,22 +246,21 @@ impl VirtioMsgDevice {
             VirtioMsgPayload::GetDeviceStatus => {
                 debug!("received virtio-msg get_device_status request");
                 let state = self.state.lock_unsaved();
-                resp.get_device_status(state.status);
+                resp.write_get_device_status(state.status);
             }
             VirtioMsgPayload::GetFeatures(req) => {
                 debug!("received virtio-msg get_features request {req:x?}");
-                resp.get_features(req.index, SUPPORTED_VIRTIO_FEATURES);
+                resp.write_get_device_features(req.index, SUPPORTED_VIRTIO_FEATURES);
             }
-            VirtioMsgPayload::SetFeatures(req) => {
-                debug!("received virtio-msg set_features request {req:x?}");
-                let requested_features = req.features[0];
+            VirtioMsgPayload::SetFeatures((_req, requested_features)) => {
+                debug!("received virtio-msg set_features request {requested_features:x?}");
                 if requested_features & SUPPORTED_VIRTIO_FEATURES != SUPPORTED_VIRTIO_FEATURES {
                     warn!("driver does not support required features: {requested_features:x?}");
                 }
                 // TODO: don't force F_ACCESS_PLATFORM once virtio-drivers accepts it
-                let negotiated_features =
+                let _negotiated_features =
                     (requested_features & SUPPORTED_VIRTIO_FEATURES) | VIRTIO_F_ACCESS_PLATFORM;
-                resp.set_features(0, negotiated_features);
+                // TODO: forbid FEATURES_OK if features are not acceptable
             }
             VirtioMsgPayload::GetVqueue(req) => {
                 debug!("received virtio-msg get_vqueue request {req:x?}");
@@ -240,21 +271,27 @@ impl VirtioMsgDevice {
                         return Err(LkError::ERR_INVALID_ARGS);
                     }
                 };
-                resp.get_vqueue(req.index, vqueue);
+                resp.write_get_vqueue(req.index, vqueue);
             }
             VirtioMsgPayload::AreaShare(req) => {
                 debug!("received virtio-msg-ffa area_share request {req:x?}");
-                let idx = req.area_id as u8;
-                if req.area_id > u8::MAX.into() {
-                    return Err(LkError::ERR_INVALID_ARGS);
-                }
-                // map_requests has 255 elements so this indexing can't panic
-                let mut state = self.state.lock_unsaved();
-                if state.share_requests[usize::from(idx)].is_some() {
-                    return Err(LkError::ERR_INVALID_ARGS);
-                }
-                state.share_requests[usize::from(idx)] = Some(req.mem_handle);
-                // leave area_id field in response buffer unmodified
+                let success = 'block: {
+                    let idx = usize::from(req.area_id);
+                    // This device implementation only supports MAX_NUM_SHM shared memory regions
+                    if idx >= MAX_NUM_SHM {
+                        break 'block false;
+                    }
+                    // If the device already received an area share request for this area ID return
+                    // an error. state.share_requests has MAX_NUM_SHM elements so this indexing
+                    // can't panic.
+                    let mut state = self.state.lock_unsaved();
+                    if state.share_requests[idx].is_some() {
+                        break 'block false;
+                    }
+                    state.share_requests[idx] = Some(req.mem_handle);
+                    true
+                };
+                resp.write_bus_area_share(req.area_id, success);
             }
             VirtioMsgPayload::SetVqueue(req) => {
                 debug!("received virtio-msg set_vqueue request {req:x?}");
@@ -271,51 +308,44 @@ impl VirtioMsgDevice {
                     avail_ring: req.driver_addr as BusAddress,
                     used_ring: req.device_addr as BusAddress,
                 });
-                // leave request buffer the same
-                resp.set_vqueue(
-                    req.index,
-                    req.size,
-                    req.descriptor_addr,
-                    req.driver_addr,
-                    req.device_addr,
-                )
             }
             VirtioMsgPayload::AreaUnshare(req) => {
                 debug!("received virtio-msg-ffa area_unshare request {req:x?}");
-                let idx = req.area_id as u8;
-                if idx as u32 != req.area_id {
-                    return Err(LkError::ERR_INVALID_ARGS);
-                }
-                // Take ownership of the ExtMemObj from memory_map in the device if it exists
-                let mapped_mem = self.state.lock_unsaved().memory_map[usize::from(idx)].take();
-
-                // If there was an ExtMemObj for the entry move ownership to
-                // unshare_requests since it cannot be dropped (i.e. unmapped
-                // from the kernel address space) in this thread.
-                if let Some(ext_mem_obj) = mapped_mem {
-                    let unshare_req_entry =
-                        &mut self.unshare_requests.lock_unsaved()[usize::from(idx)];
-                    if unshare_req_entry.is_some() {
-                        return Err(LkError::ERR_BAD_STATE);
+                let success = 'block: {
+                    let idx = usize::from(req.area_id);
+                    // This device implementation only supports MAX_NUM_SHM shared memory regions
+                    if idx >= MAX_NUM_SHM {
+                        break 'block false;
                     }
-                    *unshare_req_entry = Some(ext_mem_obj);
-                }
-                // Notify the thread which handles the unmapping of the new request.
-                self.wake_memory_unmap.signal();
-                sm::intc_raise_doorbell_irq();
+                    // Take ownership of the ExtMemObj from memory_map in the device if it exists
+                    let mapped_mem = self.state.lock_unsaved().memory_map[idx].take();
+
+                    // If there was an ExtMemObj for the entry move ownership to
+                    // unshare_requests since it cannot be dropped (i.e. unmapped
+                    // from the kernel address space) in this thread.
+                    if let Some(ext_mem_obj) = mapped_mem {
+                        let unshare_req_entry = &mut self.unshare_requests.lock_unsaved()[idx];
+                        if unshare_req_entry.is_some() {
+                            break 'block false;
+                        }
+                        *unshare_req_entry = Some(ext_mem_obj);
+                    }
+                    // Notify the thread which handles the unmapping of the new request.
+                    self.wake_memory_unmap.signal();
+                    sm::intc_raise_doorbell_irq();
+                    true
+                };
+                resp.write_bus_area_unshare(req.area_id, success);
             }
             VirtioMsgPayload::GetConfig(req) => {
                 debug!("received virtio-msg request {req:x?}");
-                let offset = [req.offset[0], req.offset[1], req.offset[2], 0];
-                let offset = u32::from_le_bytes(offset);
                 // The config space for vsock devices must always be in little endian
-                let config = (self.guest_cid as u64).to_le() >> offset;
-                resp.get_config(req.offset, req.size, [config, 0, 0, 0]);
-            }
-            VirtioMsgPayload::GetConfigGen => {
-                debug!("received virtio-msg config generation request");
-                // vsock config should not change so just return a constant
-                resp.get_config_gen(0)
+                let mut config = (self.guest_cid as u64).to_le().unbounded_shr(req.offset);
+                if req.size < 8 {
+                    let mask = (1u64 << (req.size * 8)) - 1;
+                    config &= mask;
+                }
+                resp.write_get_config(0 /* generation */, req.offset, req.size, config);
             }
             VirtioMsgPayload::ResetVqueue(req) => {
                 warn!("ignoring unsupported reset vqueue request {req:x?}");

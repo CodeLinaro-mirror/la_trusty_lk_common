@@ -119,6 +119,12 @@ impl<T> Mutex<T> {
     pub fn into_inner(self) -> T {
         self.value.into_inner()
     }
+
+    /// Mirrors nightly-only experimental `mutex_data_ptr` API.
+    /// See https://doc.rust-lang.org/std/sync/struct.Mutex.html#method.data_ptr
+    pub fn data_ptr(&self) -> *mut T {
+        self.value.get()
+    }
 }
 
 impl<T: ?Sized> Mutex<T> {
@@ -137,6 +143,12 @@ impl<T: ?Sized> Mutex<T> {
         let status = unsafe { mutex_acquire(self.mutex.get_raw()) };
         assert_eq!(Error::from_lk(status), Ok(()));
         MutexGuard { lock: self }
+    }
+}
+
+impl<T: ?Sized> MutexGuard<'_, T> {
+    pub fn unlock(self) {
+        drop(self)
     }
 }
 

@@ -93,6 +93,7 @@ ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_KEYMINT)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="keymint"' \
 	--cfg 'feature="keymint_commservice"' \
+	--cfg 'feature="keymint_provisioning_with_thal"' \
 
 endif
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_AUTHMGR)))
@@ -120,6 +121,17 @@ endif
 ifeq (true,$(call TOBOOL,$(VSOCK_WITH_VIRTIO_MSG_DRIVER)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="virtio_msg_driver"' \
+
+endif
+
+ifeq (true,$(call TOBOOL,$(VSOCK_WITH_DEVICE_TREE)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="device_tree"' \
+
+MODULE_LIBRARY_DEPS += \
+	$(LKROOT)/lib/region_alloc \
+	packages/modules/Virtualization/libs/libfdt \
+	trusty/kernel/lib/dtb_service/rust \
 
 endif
 
