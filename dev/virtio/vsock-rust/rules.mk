@@ -173,6 +173,12 @@ MODULE_RUSTFLAGS += \
 
 endif
 
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_RKP_TA)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="vm_attestation_service"' \
+
+endif
+
 MODULE_RUST_USE_CLIPPY := true
 
 # TODO: These are the options used to generate new_bindings.rs from the latest version of the
