@@ -21,12 +21,10 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-// glob import since we only allowlist virtio_msg.h, VirtioMsgFFA.h and virtio_config.h in bindgen
-use crate::sys::*;
 use crate::sys_dev2;
-use crate::sys_dev2::VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
+use crate::sys_dev2::{VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP, VIRTIO_MSG_TYPE_RESPONSE};
 
-use crate::msg::{MemShareAttr, VirtioMsg, VirtioMsgFFA, MAX_VIRTIO_MSG_SIZE};
+use crate::msg::{MemShareAttr, MAX_VIRTIO_MSG_SIZE};
 use crate::VsockVirtioFeatures;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::{size_of, size_of_val};
@@ -100,24 +98,6 @@ impl VirtioMsgReq {
         Self(buf)
     }
 
-    fn new_req<F: FnOnce(&mut VirtioMsg)>(id: u32, dev_id: u16, init_fn: F) -> Self {
-        let mut buf = [0; ARM_FFA_MSG_EXTENDED_ARGS_COUNT];
-        let msg = VirtioMsg::from_bytes_mut(&mut buf);
-        msg.id = u8::try_from(id).unwrap();
-        msg.dev_id = dev_id;
-        init_fn(msg);
-        Self(buf)
-    }
-
-    fn new_ffa_req<F: FnOnce(&mut VirtioMsgFFA)>(id: u32, init_fn: F) -> Self {
-        let mut buf = [0; ARM_FFA_MSG_EXTENDED_ARGS_COUNT];
-        let msg = VirtioMsgFFA::from_bytes_mut(&mut buf);
-        msg.type_ = VIRTIO_MSG_TYPE_BUS as u8;
-        msg.id = u8::try_from(id).unwrap();
-        init_fn(msg);
-        Self(buf)
-    }
-
     // TODO: Add arguments for direct and indirect message support once Trusty has the option.
     pub fn new_bus_ffa_version(driver_version: u32, vmsg_revision: u32, num_shm: u16) -> Self {
         Self::new_v2_req_with_payload(
@@ -132,22 +112,6 @@ impl VirtioMsgReq {
                 payload.area_num = num_shm;
             },
         )
-    }
-
-    pub fn activate(driver_version: u32) -> Self {
-        Self::new_ffa_req(VIRTIO_MSG_FFA_ACTIVATE, |msg| {
-            msg.__bindgen_anon_1.bus_activate = bus_activate { driver_version };
-        })
-    }
-
-    // TODO: Add arguments for direct and indirect message support once Trusty has the option.
-    pub fn configure(num_shm: u8) -> Self {
-        Self::new_ffa_req(VIRTIO_MSG_FFA_CONFIGURE, |msg| {
-            // Trusty only support direct messages so just hard-code this
-            let features =
-                u64::from(VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_SUPP) | (u64::from(num_shm) << 8);
-            msg.__bindgen_anon_1.bus_configure = bus_configure { features };
-        })
     }
 
     pub fn new_bus_get_devices(offset: u16, num_devs: u16) -> Self {
@@ -299,39 +263,12 @@ pub struct VirtioMsgResp {
 
 impl VirtioMsgResp {
     pub fn new(buf: [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT]) -> Result<Self> {
-        let resp = VirtioMsgFFA::from_bytes(&buf);
+        let resp = sys_dev2::virtio_msg::from_bytes(&buf);
         let msg_ty = u32::from(resp.type_);
         if msg_ty & VIRTIO_MSG_TYPE_RESPONSE == 0 {
             return Err(LkError::ERR_INVALID_ARGS);
         }
         Ok(Self { buf })
-    }
-
-    fn is_bus_msg(&self) -> bool {
-        let resp = VirtioMsgFFA::from_bytes(&self.buf);
-        u32::from(resp.type_) & VIRTIO_MSG_TYPE_BUS != 0
-    }
-
-    fn into_resp(self, msg_ty: u32) -> Result<VirtioMsg> {
-        if self.is_bus_msg() {
-            return Err(LkError::ERR_INVALID_ARGS);
-        }
-        let resp = VirtioMsg::from_bytes(&self.buf);
-        if u32::from(resp.id) != msg_ty {
-            return Err(LkError::ERR_INVALID_ARGS);
-        }
-        Ok(*resp)
-    }
-
-    fn into_ffa_resp(self, msg_ty: u32) -> Result<VirtioMsgFFA> {
-        if !self.is_bus_msg() {
-            return Err(LkError::ERR_INVALID_ARGS);
-        }
-        let resp = VirtioMsgFFA::from_bytes(&self.buf);
-        if u32::from(resp.id) != msg_ty {
-            return Err(LkError::ERR_INVALID_ARGS);
-        }
-        Ok(*resp)
     }
 
     /// Returns a copy of the payload in a virtio_msg response
@@ -409,20 +346,6 @@ impl VirtioMsgResp {
 
     pub fn read_bus_ffa_version(self) -> Result<sys_dev2::bus_ffa_version_resp> {
         self.read_v2_resp(sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION)
-    }
-
-    pub fn into_activate(self) -> Result<bus_activate_resp> {
-        let resp = self.into_ffa_resp(VIRTIO_MSG_FFA_ACTIVATE)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.bus_activate_resp })
-    }
-
-    pub fn into_configure(self) -> Result<bus_configure_resp> {
-        let resp = self.into_ffa_resp(VIRTIO_MSG_FFA_CONFIGURE)?;
-        // SAFETY: `resp` is derived from an array of bytes which is sufficient
-        // to initialize all union variants with valid values.
-        Ok(unsafe { resp.__bindgen_anon_1.bus_configure_resp })
     }
 
     pub fn read_bus_get_devices(&self) -> Result<(sys_dev2::bus_get_devices_resp, &[u8])> {
