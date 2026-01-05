@@ -39,7 +39,10 @@
  * upper and lower access to _most_ 64 bit gic registers (not GICR_VSGIPENDR,
  * GICR_VSGIR or GITS_SGIR).
  */
-/* TODO: add mmio_read32 when needed */
+static inline uint64_t mmio_read64(volatile uint64_t *ptr64) {
+    volatile uint32_t *ptr = (volatile uint32_t *)ptr64;
+    return (uint64_t)mmio_read32(ptr) | ((uint64_t)mmio_read32(ptr + 1) << 32);
+}
 static inline void mmio_write64(volatile uint64_t *ptr64, uint64_t val) {
     volatile uint32_t *ptr = (volatile uint32_t *)ptr64;
     mmio_write32(ptr, (uint32_t)val);
@@ -287,19 +290,41 @@ GEN_CP15_REG64_FUNCS(icc_sgi0r_el1, 2, c12);
 #define GICR_OFFSET (GICD_LIMIT)
 #endif
 
-#define GICRREG_READ(gic, cpu, reg) ({ \
+#define GICRREG_REDIST_READ(gic, redist, reg) ({ \
         ASSERT(gic < NUM_ARM_GICS); \
-        ASSERT(cpu < SMP_MAX_CPUS); \
+        ASSERT(GICR_CPU_OFFSET(redist) < arm_gics[(gic)].gicr_size); \
         ASSERT(reg >= GICR_OFFSET); \
         ASSERT(reg < GICR_LIMIT); \
-        mmio_read32((volatile uint32_t *)(arm_gics[(gic)].gicr_vaddr + GICR_CPU_OFFSET(cpu) + ((reg) - GICR_OFFSET))); \
+        mmio_read32((volatile uint32_t *)(arm_gics[(gic)].gicr_vaddr + GICR_CPU_OFFSET(redist) + ((reg) - GICR_OFFSET))); \
+    })
+#define GICRREG_REDIST_READ64(gic, redist, reg) ({ \
+        ASSERT(gic < NUM_ARM_GICS); \
+        ASSERT(GICR_CPU_OFFSET(redist) < arm_gics[(gic)].gicr_size); \
+        ASSERT(reg >= GICR_OFFSET); \
+        ASSERT(reg < GICR_LIMIT); \
+        mmio_read64((volatile uint64_t *)(arm_gics[(gic)].gicr_vaddr + GICR_CPU_OFFSET(redist) + ((reg) - GICR_OFFSET))); \
+    })
+#define GICRREG_REDIST_WRITE(gic, redist, reg, val) ({ \
+        ASSERT(gic < NUM_ARM_GICS); \
+        ASSERT(GICR_CPU_OFFSET(redist) < arm_gics[(gic)].gicr_size); \
+        ASSERT(reg >= GICR_OFFSET); \
+        ASSERT(reg < GICR_LIMIT); \
+        mmio_write32((volatile uint32_t *)(arm_gics[(gic)].gicr_vaddr + GICR_CPU_OFFSET(redist) + ((reg) - GICR_OFFSET)), (val)); \
+    })
+
+extern uint32_t arm_gicv3_cpu_redist_map[SMP_MAX_CPUS];
+
+#define GICRREG_READ(gic, cpu, reg) ({ \
+        ASSERT(cpu < SMP_MAX_CPUS); \
+        GICRREG_REDIST_READ((gic), arm_gicv3_cpu_redist_map[(cpu)], (reg)); \
+    })
+#define GICRREG_READ64(gic, cpu, reg) ({ \
+        ASSERT(cpu < SMP_MAX_CPUS); \
+        GICRREG_REDIST_READ64((gic), arm_gicv3_cpu_redist_map[(cpu)], (reg)); \
     })
 #define GICRREG_WRITE(gic, cpu, reg, val) ({ \
-        ASSERT(gic < NUM_ARM_GICS); \
         ASSERT(cpu < SMP_MAX_CPUS); \
-        ASSERT(reg >= GICR_OFFSET); \
-        ASSERT(reg < GICR_LIMIT); \
-        mmio_write32((volatile uint32_t *)(arm_gics[(gic)].gicr_vaddr + GICR_CPU_OFFSET(cpu) + ((reg) - GICR_OFFSET)), (val)); \
+        GICRREG_REDIST_WRITE((gic), arm_gicv3_cpu_redist_map[(cpu)], (reg), (val)); \
     })
 
 #define GICR_CTRL               (GICR_OFFSET + 0x0000)
