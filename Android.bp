@@ -1,3 +1,17 @@
+package {
+    default_applicable_licenses: [
+        "external_trusty_lk_license",
+        "trusty_kernel_license",
+    ],
+    default_team: "trendy_team_trusty",
+}
+
+license {
+    name: "external_trusty_lk_license",
+    license_kinds: ["SPDX-license-identifier-MIT"],
+    license_text: ["LICENSE"],
+}
+
 dirgroup {
     name: "trusty_dirgroup_external_trusty_lk",
     dirs: ["."],
