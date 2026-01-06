@@ -25,3 +25,11 @@ cc_library_headers {
     ],
     host_supported: true,
 }
+
+cc_library_headers {
+    name: "external_trusty_lk_headers_uapi",
+    host_supported: true,
+    export_include_dirs: [
+        "include/uapi",
+    ],
+}
