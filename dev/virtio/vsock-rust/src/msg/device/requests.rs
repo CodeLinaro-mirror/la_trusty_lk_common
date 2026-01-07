@@ -192,6 +192,7 @@ impl VirtioMsgResp<'_> {
         payload_ref
     }
 
+    #[cfg(feature = "virtio_msg_min_spec_version_dev2")]
     pub fn write_bus_ffa_version(mut self, device_version: u32, vmsg_revision: u32, features: u32) {
         let resp = self.as_mut_v2_payload::<sys::bus_ffa_version_resp>();
         resp.device_version = device_version;
