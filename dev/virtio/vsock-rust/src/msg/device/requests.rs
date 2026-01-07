@@ -23,6 +23,8 @@
 
 use crate::msg::device::VirtQueue;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
+#[cfg(feature = "virtio_msg_spec_version_alp0")]
+use crate::msg::MAX_NUM_SHM;
 use crate::sys;
 use crate::sys::{VIRTIO_MSG_TYPE_BUS, VIRTIO_MSG_TYPE_RESPONSE};
 use crate::VsockVirtioFeatures;
@@ -198,6 +200,22 @@ impl VirtioMsgResp<'_> {
         resp.device_version = device_version;
         resp.vmsg_revision = vmsg_revision;
         resp.features = features;
+    }
+
+    #[cfg(feature = "virtio_msg_spec_version_alp0")]
+    pub fn write_bus_ffa_version(
+        mut self,
+        version_major: u16,
+        version_minor: u16,
+        transport_revision: u32,
+        bus_features: u32,
+    ) {
+        let resp = self.as_mut_v2_payload::<sys::bus_ffa_version_resp>();
+        resp.bus_version = u32::from(version_minor) | (u32::from(version_major) << 16);
+        resp.transport_revision = transport_revision;
+        resp.transport_features = 0; /* Currently always zero in spec */
+        resp.bus_features = bus_features;
+        resp.area_num = MAX_NUM_SHM.try_into().unwrap();
     }
 
     pub fn write_bus_get_devices(self, next_offset: u16, bitmap: u8) {
