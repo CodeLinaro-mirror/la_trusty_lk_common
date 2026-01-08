@@ -1,0 +1,14 @@
+package {
+    default_applicable_licenses: ["trusty_kernel_license"],
+    default_team: "trendy_team_trusty",
+}
+
+cc_test_host {
+    name: "external_trusty_lk_hosttests_listtest",
+    srcs: [
+        "list_test.cpp",
+    ],
+    header_libs: [
+        "external_trusty_lk_headers_shared",
+    ],
+}
