@@ -166,7 +166,7 @@ struct VsockEvents {
     // since we only assign the VirtioMsgDevice's VM ID (stored in vm_ids in VirtioMsgTransport)
     // when we receive its first virtio-msg request.
     tx_stop: EventSource,
-    rx_stop: Arc<VsockRxEvent>,
+    rx_loop: Arc<VsockRxEvent>,
     drop_evt: Arc<Event>,
 }
 
@@ -313,7 +313,7 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: FFAClie
     // Store evt_source in the VirtioMsgDevice and get the events for the rx loop and VsockDevice drop
     *device.vsock_evts.lock() = Some(VsockEvents {
         tx_stop: evt_source,
-        rx_stop: vsock_device.get_vsock_rx_event(),
+        rx_loop: vsock_device.get_vsock_rx_event(),
         drop_evt: vsock_device.get_vsock_drop_event(),
     });
 
@@ -389,7 +389,7 @@ fn virtio_msg_vm_destroy(client_id: ext_mem_obj_id_t) -> Result<(), LkError> {
     // Signal the event_source so the event_client in the tx loop gets notified.
     vsock_evts.tx_stop.signal().expect("failed to signal tx event_source");
     // Signal for the rx loop to shutdown.
-    vsock_evts.rx_stop.signal(VsockRxEvent::TERMINATE);
+    vsock_evts.rx_loop.signal(VsockRxEvent::TERMINATE);
 
     // The tx and rx loops may take some time before returning but this function is called from the
     // sm-vm-notifier thread which should not block (since it handles other VMs) so just return and
