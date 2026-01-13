@@ -169,7 +169,9 @@ pub(crate) enum TransportKind {
 }
 
 impl TransportKind {
-    fn supports_interrupts(&self) -> bool {
+    /// Returns true iff the transport type causes the rx event to be signaled
+    /// which means we don't have to wait on the rx event with a timeout (poll).
+    fn signals_rx_event(&self) -> bool {
         match self {
             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
             Self::DriverPCI => true,
@@ -928,7 +930,7 @@ where
                 return Ok(());
             }
 
-            let res = if transport_kind.supports_interrupts() {
+            let res = if transport_kind.signals_rx_event() {
                 device.rx_event.event.wait();
                 Ok(())
             } else {
@@ -1333,7 +1335,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
             // Register interrupt handler when using PCI transport
             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
             let device_for_rx_ptr = if let Some(vector) = _irq_vector {
-                assert!(transport_kind.supports_interrupts());
+                assert!(transport_kind.signals_rx_event());
                 let device_for_rx_ptr = Arc::<VsockDevice<_>>::into_raw(device_for_rx.clone());
 
                 // SAFETY:
