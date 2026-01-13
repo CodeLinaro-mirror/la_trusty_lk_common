@@ -1,0 +1,44 @@
+package {
+    default_applicable_licenses: [
+        "external_trusty_lk_license",
+        "trusty_kernel_license",
+    ],
+    default_team: "trendy_team_trusty",
+}
+
+cc_defaults {
+    name: "external_trusty_lk_lib_libc_test_defaults",
+    cflags: [
+        "-DUTEST_BUILD",
+    ],
+    local_include_dirs: [
+        "test_includes",
+    ],
+    srcs: [
+        "printf.c",
+        "test_common/libc_printf_tests.cpp",
+    ],
+    header_libs: [
+        "external_trusty_lk_headers_shared",
+    ],
+}
+
+cc_test_host {
+    name: "external_trusty_lk_lib_libc_hosttest",
+    cflags: [
+        "-DRELEASE_BUILD=0",
+    ],
+    defaults: [
+        "external_trusty_lk_lib_libc_test_defaults",
+    ],
+}
+
+cc_test_host {
+    name: "external_trusty_lk_lib_libc_hosttest_release",
+    cflags: [
+        "-DRELEASE_BUILD=1",
+    ],
+    defaults: [
+        "external_trusty_lk_lib_libc_test_defaults",
+    ],
+}
