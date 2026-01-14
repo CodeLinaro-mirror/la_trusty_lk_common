@@ -1,3 +1,17 @@
+package {
+    default_applicable_licenses: [
+        "external_trusty_lk_license",
+        "trusty_kernel_license",
+    ],
+    default_team: "trendy_team_trusty",
+}
+
+license {
+    name: "external_trusty_lk_license",
+    license_kinds: ["SPDX-license-identifier-MIT"],
+    license_text: ["LICENSE"],
+}
+
 dirgroup {
     name: "trusty_dirgroup_external_trusty_lk",
     dirs: ["."],
@@ -10,4 +24,12 @@ cc_library_headers {
         "include/shared",
     ],
     host_supported: true,
+}
+
+cc_library_headers {
+    name: "external_trusty_lk_headers_uapi",
+    host_supported: true,
+    export_include_dirs: [
+        "include/uapi",
+    ],
 }
