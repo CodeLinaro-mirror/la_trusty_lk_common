@@ -169,10 +169,13 @@ pub(crate) enum TransportKind {
 }
 
 impl TransportKind {
-    fn supports_interrupts(&self) -> bool {
+    /// Returns true iff the transport type causes the rx event to be signaled
+    /// which means we don't have to wait on the rx event with a timeout (poll).
+    fn signals_rx_event(&self) -> bool {
         match self {
             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
             Self::DriverPCI => true,
+            Self::DeviceFFAMsg(..) => true,
             _ => false,
         }
     }
@@ -315,7 +318,7 @@ impl VsockConnection {
         let mut iov = iovec_kern { iov_base: self.rx_buffer.as_mut_ptr() as _, iov_len: length };
         let mut msg = ipc_msg_kern::new(&mut iov);
 
-        // Safety:
+        // SAFETY:
         // `c.href.handle` is a handle attached to a tipc channel.
         // `msg` contains an `iov` which points to a buffer from which
         // the kernel can read `iov_len` bytes.
@@ -462,7 +465,7 @@ pub(crate) struct VsockRxEvent {
 impl VsockRxEvent {
     const NONE: u32 = 0;
     pub(crate) const TERMINATE: u32 = 1 << WakeReasonFlag::Terminate as u32;
-    const QUEUE_EVENT: u32 = 1 << WakeReasonFlag::QueueEvent as u32;
+    pub(crate) const QUEUE_EVENT: u32 = 1 << WakeReasonFlag::QueueEvent as u32;
 
     #[allow(dead_code)]
     pub(crate) fn signal(&self, event: u32) {
@@ -592,7 +595,7 @@ where
                 continue;
             }
 
-            // Safety:
+            // SAFETY:
             // - `sid` is a valid uuid with static lifetime
             // - `path` points to a null-terminated C-string. The null byte was appended by
             //   `CString::new`.
@@ -616,7 +619,7 @@ where
                 continue;
             }
 
-            // Safety:
+            // SAFETY:
             // - `phandle` is a valid port handle from ipc_port_create
             let ret = unsafe { ipc_port_publish(phref.handle()) };
             if ret != 0 {
@@ -671,7 +674,7 @@ where
         c.state = VsockConnectionState::TipcOnly;
 
         let mut peer_uuid_ptr = core::ptr::null();
-        // Safety:
+        // SAFETY:
         // - `phandle` is a valid port from href
         // - `chandle` is a zeroed HandleRef from c
         // - `peer` is the zero-initialized pointer from above
@@ -689,7 +692,7 @@ where
         }
 
         debug_assert!(!peer_uuid_ptr.is_null());
-        // Safety:
+        // SAFETY:
         //   Since `ipc_port_accept` returned without error, it has stored into `peer_uuid_ptr` a
         //   non-null pointer which is valid for reads of the type `uuid`.
         let peer_uuid = unsafe { *peer_uuid_ptr };
@@ -737,7 +740,7 @@ where
 
         let (peer_id_ptr, peer_id_len) = peer_id.as_generic().into_raw_parts();
 
-        // Safety:
+        // SAFETY:
         // - `sid`` is a valid uuid with static lifetime
         // - `path` points to a null-terminated C-string. The null byte was appended by
         //   `CString::new`.
@@ -928,7 +931,7 @@ where
                 return Ok(());
             }
 
-            let res = if transport_kind.supports_interrupts() {
+            let res = if transport_kind.signals_rx_event() {
                 device.rx_event.event.wait();
                 Ok(())
             } else {
@@ -1196,7 +1199,7 @@ where
                 let mut msg_info = ipc_msg_info::default();
 
                 // TODO: add more idiomatic Rust interface
-                // Safety:
+                // SAFETY:
                 // `c.href.handle` is a valid handle to a tipc channel.
                 // `ipc_get_msg` can store a message descriptor in `msg_info`.
                 let ret = unsafe { ipc_get_msg(c.href.handle(), &mut msg_info) };
@@ -1204,13 +1207,13 @@ where
                     let mut iov: iovec_kern = tx_buffer.as_mut().into();
                     let mut msg = ipc_msg_kern::new(&mut iov);
 
-                    // Safety:
+                    // SAFETY:
                     // `c.href.handle` is a valid handle to a tipc channel.
                     // `msg_info` holds the results of a successful call to `ipc_get_msg`
                     // using the same handle.
                     let ret = unsafe { ipc_read_msg(c.href.handle(), msg_info.id, 0, &mut msg) };
 
-                    // Safety:
+                    // SAFETY:
                     // `ipc_put_msg` was called with the same handle and msg_info arguments.
                     unsafe { ipc_put_msg(c.href.handle(), msg_info.id) };
                     if ret >= 0 && ret as usize == msg_info.len {
@@ -1333,7 +1336,7 @@ pub(crate) fn vsock_init<T: Transport + 'static + Send, H: Hal + 'static>(
             // Register interrupt handler when using PCI transport
             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
             let device_for_rx_ptr = if let Some(vector) = _irq_vector {
-                assert!(transport_kind.supports_interrupts());
+                assert!(transport_kind.signals_rx_event());
                 let device_for_rx_ptr = Arc::<VsockDevice<_>>::into_raw(device_for_rx.clone());
 
                 // SAFETY:
