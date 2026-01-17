@@ -50,6 +50,7 @@ pub enum VirtioMsgPayload {
     GetConfig(sys_dev2::get_config),
     AreaShare(sys_dev2::bus_area_share),
     AreaUnshare(sys_dev2::bus_area_unshare),
+    EventAvailable(sys_dev2::event_avail),
     // Contains the ID for a bus request not defined by the virtio-msg spec
     UnknownBusReq(u32),
     // Contains the ID for a virtio request not defined by the virtio-msg spec
@@ -159,6 +160,9 @@ impl VirtioMsgReq<'_> {
                 }
                 sys_dev2::VIRTIO_MSG_GET_CONFIG => {
                     VirtioMsgPayload::GetConfig(self.get_v2_payload())
+                }
+                sys_dev2::VIRTIO_MSG_EVENT_AVAIL => {
+                    VirtioMsgPayload::EventAvailable(self.get_v2_payload())
                 }
                 _ => VirtioMsgPayload::UnknownDeviceReq(id),
             }

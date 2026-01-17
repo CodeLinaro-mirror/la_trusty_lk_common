@@ -83,8 +83,10 @@ impl Transport for FFAMsgTransport {
         resp.read_get_vqueue().expect("get_vqueue returned invalid response").max_size
     }
 
-    fn notify(&mut self, _queue: u16) {
-        // nop for now since Trusty virtio-msg device ignores event_avail requests anyway
+    fn notify(&mut self, queue: u16) {
+        log::debug!("signaling event on queue {queue}");
+        let req = VirtioMsgReq::new_event_avail(self.dev_id, queue);
+        send_virtio_msg_request(req).expect("event_avail virtio-msg request failed");
     }
 
     fn get_status(&self) -> DeviceStatus {
