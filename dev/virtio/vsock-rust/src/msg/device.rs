@@ -166,7 +166,6 @@ struct VsockEvents {
     // since we only assign the VirtioMsgDevice's VM ID (stored in vm_ids in VirtioMsgTransport)
     // when we receive its first virtio-msg request.
     tx_stop: EventSource,
-    rx_loop: Arc<VsockRxEvent>,
     drop_evt: Arc<Event>,
 }
 
@@ -182,6 +181,9 @@ pub struct VirtioMsgDevice {
     peer_dying: AtomicBool,
 
     vsock_evts: Mutex<Option<VsockEvents>>,
+    // Store `rx_loop` event separately so we can access it safely from an interrupt
+    // handler (interrupts disabled) which is not possible with a `Mutex`.
+    rx_loop_evt: IRQSpinLock<Option<Arc<VsockRxEvent>>>,
 }
 
 impl VirtioMsgDevice {
@@ -200,6 +202,7 @@ impl VirtioMsgDevice {
             wake_memory_unmap: Event::new(false, EVENT_FLAG_AUTOUNSIGNAL),
             peer_dying: AtomicBool::new(false),
             vsock_evts: Mutex::new(None),
+            rx_loop_evt: IRQSpinLock::new_irq(None),
         }
     }
 
@@ -310,12 +313,12 @@ fn start_per_device_threads(device: &'static VirtioMsgDevice, client_id: FFAClie
     // Publish the event_source so the client can open it
     evt_source.publish().unwrap();
 
-    // Store evt_source in the VirtioMsgDevice and get the events for the rx loop and VsockDevice drop
-    *device.vsock_evts.lock() = Some(VsockEvents {
-        tx_stop: evt_source,
-        rx_loop: vsock_device.get_vsock_rx_event(),
-        drop_evt: vsock_device.get_vsock_drop_event(),
-    });
+    // Store evt_source in the VirtioMsgDevice and get the event for VsockDevice drop
+    *device.vsock_evts.lock() =
+        Some(VsockEvents { tx_stop: evt_source, drop_evt: vsock_device.get_vsock_drop_event() });
+    // Store the event for the rx loop outside of `vsock_evts` separately as it is accessed
+    // in a context where interrupts are disabled meaning we can't protected by a `Mutex`.
+    *device.rx_loop_evt.lock_save() = Some(vsock_device.get_vsock_rx_event());
 
     let device_for_rx = Arc::new(vsock_device);
     let device_for_tx = device_for_rx.clone();
@@ -386,10 +389,16 @@ fn virtio_msg_vm_destroy(client_id: ext_mem_obj_id_t) -> Result<(), LkError> {
 
     let vsock_evts_guard = device.vsock_evts.lock();
     let vsock_evts = vsock_evts_guard.as_ref().unwrap();
+
     // Signal the event_source so the event_client in the tx loop gets notified.
     vsock_evts.tx_stop.signal().expect("failed to signal tx event_source");
     // Signal for the rx loop to shutdown.
-    vsock_evts.rx_loop.signal(VsockRxEvent::TERMINATE);
+    device
+        .rx_loop_evt
+        .lock_unsaved()
+        .as_ref()
+        .expect("Rx loop event was initialized")
+        .signal(VsockRxEvent::TERMINATE);
 
     // The tx and rx loops may take some time before returning but this function is called from the
     // sm-vm-notifier thread which should not block (since it handles other VMs) so just return and
@@ -418,6 +427,7 @@ fn virtio_msg_cleanup(device: &'static VirtioMsgDevice) -> i32 {
     device.state.lock_save().reset();
     device.peer_dying.store(false, Ordering::Relaxed);
     *device.vsock_evts.lock() = None;
+    *device.rx_loop_evt.lock_unsaved() = None;
     0
 }
 

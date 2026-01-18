@@ -22,7 +22,6 @@
  */
 
 #![deny(unsafe_op_in_unsafe_fn)]
-use core::ffi::c_int;
 use core::ptr;
 
 use log::debug;
@@ -165,7 +164,7 @@ unsafe fn map_pci_root_and_init_vsock(
 
     // Map the PCI configuration space.
     let pci_vaddr = ptr::null_mut();
-    // Safety:
+    // SAFETY:
     // `aspace` is `vmm_get_kernel_aspace()`.
     // `name` is a `&'static CStr`.
     // `pci_paddr` and `pci_size` are safe by this function's safety requirements.
@@ -183,7 +182,7 @@ unsafe fn map_pci_root_and_init_vsock(
     };
     LkError::from_lk(e)?;
 
-    // Safety:
+    // SAFETY:
     // `pci_paddr` and `pci_size` are safe by this function's safety requirements.
     match unsafe { mmio_map_region(pci_paddr, pci_size) } {
         // Ignore not supported which implies that guard is not used.
@@ -208,7 +207,7 @@ unsafe fn map_pci_root_and_init_vsock(
             PciHal::init_all_vsocks(pci_root, pci_size, use_hyp_transport, get_int_vector)?;
         }
     } else {
-        // Safety:
+        // SAFETY:
         // `pci_paddr` is a valid physical address to the base of the MMIO region.
         // `pci_vaddr` is the mapped virtual address of that.
         // `pci_paddr` has `'static` lifetime, and `pci_vaddr` is never unmapped,
@@ -223,26 +222,6 @@ unsafe fn map_pci_root_and_init_vsock(
 /// # Safety
 ///
 /// See [`map_pci_root_and_init_vsock`].
-#[no_mangle]
-pub unsafe extern "C" fn pci_init_mmio(
-    pci_paddr: paddr_t,
-    pci_size: usize,
-    cfg_size: usize,
-) -> c_int {
-    debug!("initializing vsock: pci_paddr 0x{pci_paddr:x}, pci_size 0x{pci_size:x}");
-    || -> Result<(), Error> {
-        // Safety: Delegated to `map_pci_root_and_init_vsock`.
-        unsafe { map_pci_root_and_init_vsock(pci_paddr, pci_size, cfg_size, |_, _, _| None) }?;
-        Ok(())
-    }()
-    .err()
-    .unwrap_or(LkError::NO_ERROR.into())
-    .into_c()
-}
-
-/// # Safety
-///
-/// See [`map_pci_root_and_init_vsock`].
 pub unsafe fn pci_init_mmio_with_interrupt_callback(
     pci_paddr: paddr_t,
     pci_size: usize,
@@ -250,6 +229,6 @@ pub unsafe fn pci_init_mmio_with_interrupt_callback(
     get_int_vector: impl FnMut(u8, u8, u8) -> Option<u32>,
 ) -> Result<(), Error> {
     debug!("initializing vsock: pci_paddr 0x{pci_paddr:x}, pci_size 0x{pci_size:x}");
-    // Safety: Delegated to `map_pci_root_and_init_vsock`.
+    // SAFETY: Delegated to `map_pci_root_and_init_vsock`.
     unsafe { map_pci_root_and_init_vsock(pci_paddr, pci_size, cfg_size, get_int_vector) }
 }

@@ -252,6 +252,17 @@ impl VirtioMsgReq {
         )
     }
 
+    pub fn new_event_avail(dev_id: u16, queue: u16) -> Self {
+        Self::new_v2_req_with_payload(
+            sys_dev2::VIRTIO_MSG_EVENT_AVAIL,
+            Some(dev_id),
+            |payload: &mut sys_dev2::event_avail| {
+                payload.index = u32::from(queue);
+                payload.next_offset_wrap = 0;
+            },
+        )
+    }
+
     pub fn get_buf(&self) -> &[u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT] {
         &self.0
     }

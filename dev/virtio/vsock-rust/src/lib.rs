@@ -29,7 +29,6 @@ mod vsock;
 mod sys_dev2;
 
 pub use err::Error;
-pub use pci::pci_init_mmio;
 pub use pci::pci_init_mmio_with_interrupt_callback;
 
 // FF-A partitions use 16-bit IDs
