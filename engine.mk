@@ -242,6 +242,7 @@ GLOBAL_SHARED_COMPILEFLAGS += -U__linux__
 ifeq (true,$(call TOBOOL,$(KERNEL_CFI_ENABLED)))
 GLOBAL_USER_RUSTFLAGS += -C lto=thin
 GLOBAL_KERNEL_RUSTFLAGS += -C linker-plugin-lto -Zsplit-lto-unit
+GLOBAL_KERNEL_RUSTFLAGS += -Zsanitizer=cfi
 else
 GLOBAL_SHARED_RUSTFLAGS += -C lto=thin
 endif
