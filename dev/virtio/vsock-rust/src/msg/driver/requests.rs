@@ -22,7 +22,9 @@
  */
 
 use crate::sys;
-use crate::sys::{VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP, VIRTIO_MSG_TYPE_RESPONSE};
+#[cfg(feature = "virtio_msg_min_spec_version_dev2")]
+use crate::sys::VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
+use crate::sys::VIRTIO_MSG_TYPE_RESPONSE;
 
 use crate::msg::{MemShareAttr, MAX_VIRTIO_MSG_SIZE};
 use crate::VsockVirtioFeatures;
@@ -99,6 +101,7 @@ impl VirtioMsgReq {
     }
 
     // TODO: Add arguments for direct and indirect message support once Trusty has the option.
+    #[cfg(feature = "virtio_msg_min_spec_version_dev2")]
     pub fn new_bus_ffa_version(driver_version: u32, vmsg_revision: u32, num_shm: u16) -> Self {
         Self::new_v2_req_with_payload(
             sys::VIRTIO_MSG_FFA_BUS_VERSION,

@@ -27,8 +27,9 @@ use crate::msg::driver::transport::FFAMsgTransport;
 use crate::msg::VIRTIO_MSG_FFA_UUID;
 use crate::sys::{
     bus_ffa_version_resp as BusFFAVersionResp, get_device_info_resp as GetDeviceInfoResp,
-    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_REVISION_1,
 };
+#[cfg(feature = "virtio_msg_min_spec_version_dev2")]
+use crate::sys::{VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_REVISION_1};
 use crate::vsock::{vsock_init, TransportKind};
 use alloc::vec::Vec;
 use arm_ffa::{
@@ -176,14 +177,20 @@ fn send_virtio_msg_request(req: VirtioMsgReq) -> Result<VirtioMsgResp> {
     VirtioMsgResp::new(resp.params)
 }
 
-fn negotiate_version(
-    driver_version: u32,
-    vmsg_revision: u32,
-    num_shm: u16,
-) -> Result<BusFFAVersionResp> {
-    let req = VirtioMsgReq::new_bus_ffa_version(driver_version, vmsg_revision, num_shm);
+#[cfg(feature = "virtio_msg_min_spec_version_dev2")]
+fn negotiate_version() -> Result<BusFFAVersionResp> {
+    let driver_version = VIRTIO_MSG_FFA_BUS_VERSION_1_0;
+    let vmsg_revision = VIRTIO_MSG_REVISION_1;
+    /* FEATURE_DIRECT_MSG_TX_SUPP is hard-coded since that's the only thing Trusty supports */
+    let req =
+        VirtioMsgReq::new_bus_ffa_version(driver_version, vmsg_revision, 1 /* num_shm */);
     let resp = send_virtio_msg_request(req)?;
     resp.read_bus_ffa_version()
+}
+
+#[cfg(feature = "virtio_msg_min_spec_version_alp0")]
+fn negotiate_version() -> Result<BusFFAVersionResp> {
+    todo!("implement version negotation for virtio-msg ALP0 spec")
 }
 
 // Enumerate devices and return a Vec with the IDs of the devices available.
@@ -275,13 +282,7 @@ fn driver_init() -> Result<()> {
     // Call FFA_PARTITION_INFO_GET to get the FFA ID for the partition with the virtio-msg device
     let ffa_id = init_receiver_id()?;
 
-    let negotiate_resp = negotiate_version(
-        VIRTIO_MSG_FFA_BUS_VERSION_1_0,
-        VIRTIO_MSG_REVISION_1,
-        /* FEATURE_DIRECT_MSG_TX_SUPP is hard-coded since that's the only thing Trusty supports */
-        1, /* num_shm */
-    )
-    .inspect_err(|e| {
+    let negotiate_resp = negotiate_version().inspect_err(|e| {
         error!("virtio-msg version request failed with {e}");
     })?;
     debug!("received {negotiate_resp:?} as response to virtio-msg version request");
