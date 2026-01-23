@@ -426,6 +426,16 @@ WEAK_FUNCTION(arm64_curr_cpu_num)
 
     msr     spsel, #0 /* Use SP0 for kernel stacks */
 
+#if DYNAMIC_IDLE_THREAD_STACKS
+    adrl    tmp, arm64_idle_thread_stack_ptrs
+    ldr     tmp, [tmp, cpuid, lsl #3]
+    mov     sp, tmp
+
+#if KERNEL_SCS_ENABLED
+    adrl    tmp, arm64_idle_thread_shadow_stack_ptrs
+    ldr     ssp, [tmp, cpuid, lsl #3]
+#endif
+#else /* DYNAMIC_IDLE_THREAD_STACKS */
     adrl    tmp, __stack_end
     mov     tmp2, #ARCH_DEFAULT_STACK_SIZE
     mul     tmp2, tmp2, cpuid
@@ -438,6 +448,7 @@ WEAK_FUNCTION(arm64_curr_cpu_num)
     mul     tmp, tmp, cpuid
     add     ssp, ssp, tmp
 #endif
+#endif /* DYNAMIC_IDLE_THREAD_STACKS */
 
     mov     x0, cpuid
     bl      arm64_secondary_entry
@@ -518,7 +529,11 @@ DATA(page_tables_not_ready)
 .section .bss.prebss.stack
     .align 4
 DATA(__stack)
+#if DYNAMIC_IDLE_THREAD_STACKS
+    .skip ARCH_DEFAULT_STACK_SIZE
+#else
     .skip ARCH_DEFAULT_STACK_SIZE * SMP_MAX_CPUS
+#endif
 DATA(__stack_end)
 
 #if KERNEL_SCS_ENABLED
@@ -531,7 +546,22 @@ DATA(__stack_end)
      */
     .align 3
 DATA(__shadow_stack)
+#if DYNAMIC_IDLE_THREAD_STACKS
+    .skip ARCH_DEFAULT_SHADOW_STACK_SIZE
+#else
     .skip ARCH_DEFAULT_SHADOW_STACK_SIZE * SMP_MAX_CPUS
+#endif
+#endif
+
+#if DYNAMIC_IDLE_THREAD_STACKS
+.section .bss.prebss.idle_thread_stack_ptrs
+    .align 3
+DATA(arm64_idle_thread_stack_ptrs)
+    .skip 8 * SMP_MAX_CPUS
+#if KERNEL_SCS_ENABLED
+DATA(arm64_idle_thread_shadow_stack_ptrs)
+    .skip 8 * SMP_MAX_CPUS
+#endif
 #endif
 
 .section .bss.prebss.sp_el1_bufs
