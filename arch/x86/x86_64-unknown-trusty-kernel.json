@@ -24,7 +24,7 @@
     },
     "static-position-independent-executables": true,
     "supported-sanitizers": ["cfi"],
-    "target-pointer-width": "64",
+    "target-pointer-width": 64,
     "features": "-3dnow,-3dnowa,-mmx,-sse,-sse2,+soft-float",
     "rustc-abi": "x86-softfloat"
 }
