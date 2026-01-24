@@ -32,12 +32,12 @@ use crate::msg::MAX_NUM_SHM;
 use crate::sys;
 use crate::sys::{
     VIRTIO_CONFIG_S_ACKNOWLEDGE, VIRTIO_CONFIG_S_DRIVER, VIRTIO_CONFIG_S_DRIVER_OK,
-    VIRTIO_CONFIG_S_FAILED, VIRTIO_CONFIG_S_FEATURES_OK,
+    VIRTIO_CONFIG_S_FAILED, VIRTIO_CONFIG_S_FEATURES_OK, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP,
 };
 #[cfg(feature = "virtio_msg_min_spec_version_dev2")]
 use crate::sys::{
-    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP,
-    VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP, VIRTIO_MSG_REVISION_1,
+    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP,
+    VIRTIO_MSG_REVISION_1,
 };
 use crate::vsock::VsockRxEvent;
 use crate::FFAClientId;
@@ -95,7 +95,39 @@ fn handle_version_request(req: sys::bus_ffa_version, resp: VirtioMsgResp) {
 }
 
 #[cfg(feature = "virtio_msg_min_spec_version_alp0")]
-fn handle_version_request(_req: sys::bus_ffa_version, _resp: VirtioMsgResp) {}
+fn handle_version_request(req: sys::bus_ffa_version, resp: VirtioMsgResp) {
+    /* Use fake version 0.1 for ALP0 since it may be incompatible with the finalized version 1.0 */
+    const CURRENT_MAJOR_VERSION: u16 = 0;
+    const CURRENT_MINOR_VERSION: u16 = 1;
+    const CURRENT_TRANSPORT_REVISION: u32 = 1;
+    const SUPPORTED_BUS_FEATURES: u32 = VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP;
+
+    if req.bus_version == 0 && req.transport_revision == 0 {
+        resp.write_bus_ffa_version(
+            CURRENT_MAJOR_VERSION,
+            CURRENT_MINOR_VERSION,
+            CURRENT_TRANSPORT_REVISION,
+            SUPPORTED_BUS_FEATURES,
+        );
+        return;
+    }
+
+    let req_major_version = req.bus_version >> 16;
+    let req_minor_version = req.bus_version & 0xFFFF;
+    if req_major_version == CURRENT_MAJOR_VERSION
+        && req_minor_version == CURRENT_MINOR_VERSION
+        && req.transport_revision == CURRENT_TRANSPORT_REVISION
+    {
+        resp.write_bus_ffa_version(
+            req_major_version.try_into().unwrap(),
+            req_minor_version.try_into().unwrap(),
+            req.transport_revision,
+            SUPPORTED_BUS_FEATURES,
+        );
+        return;
+    }
+    resp.write_bus_ffa_version(0, 0, 0, 0);
+}
 
 impl VirtioMsgDevice {
     /// Handles a virtio-msg request in a u64 array and writes the response back to the same array.
