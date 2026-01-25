@@ -25,8 +25,9 @@ mod vsock;
 #[allow(non_camel_case_types)]
 #[allow(non_upper_case_globals)]
 #[rustfmt::skip]
-#[path = "bindings.rs"]
-mod sys_dev2;
+#[cfg_attr(feature = "virtio_msg_min_spec_version_alp0", path = "alp0_bindings.rs")]
+#[cfg_attr(feature = "virtio_msg_min_spec_version_dev2", path = "dev2_bindings.rs")]
+mod sys;
 
 pub use err::Error;
 pub use pci::pci_init_mmio_with_interrupt_callback;

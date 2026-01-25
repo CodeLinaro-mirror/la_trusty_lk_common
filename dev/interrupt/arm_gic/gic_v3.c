@@ -104,6 +104,44 @@ static void gicv3_gicr_init(void) {
     gicv3_gicr_mark_awake(cpu);
 }
 
+/*
+ * Mapping from the CPU numbers returned by arch_curr_cpu_num
+ * to the Redistributors as seen by the GIC.
+ */
+uint32_t arm_gicv3_cpu_redist_map[SMP_MAX_CPUS];
+
+#define TYPER_LAST_BIT (0x1u << 4)
+
+static void gicv3_gicr_init_cpu_map(void) {
+    uint32_t cpu = arch_curr_cpu_num();
+    struct arm_gic_affinities affs = arch_cpu_num_to_gic_affinities(cpu);
+
+    /*
+     * Scan all the Redistributors until we find one
+     * whose Affinity_Value matches the current CPU.
+     */
+    for (uint32_t redist = 0;
+         GICR_CPU_OFFSET(redist) < arm_gics[0].gicr_size;
+         redist++) {
+        uint64_t typer = GICRREG_REDIST_READ64(0, redist, GICR_TYPER);
+        if (((typer >> 56) & 0xff) == affs.aff3 &&
+            ((typer >> 48) & 0xff) == affs.aff2 &&
+            ((typer >> 40) & 0xff) == affs.aff1 &&
+            ((typer >> 32) & 0xff) == affs.aff0) {
+            arm_gicv3_cpu_redist_map[cpu] = redist;
+            return;
+        }
+
+        if (typer & TYPER_LAST_BIT) {
+            break;
+        }
+    }
+    /*
+     * We reached the end of the Redistributors
+     * and didn't find our CPU
+     */
+    panic("%s: GIC Redistributor not found for CPU %u\n", __func__, cpu);
+}
 
 /* GICD_CTRL Register write pending bit */
 #define GICD_CTLR_RWP  (0x1U << 31)
@@ -216,6 +254,8 @@ void arm_gicv3_init(void) {
 }
 
 void arm_gicv3_init_percpu(void) {
+    gicv3_gicr_init_cpu_map();
+
 #if WITH_LIB_SM
     /* TZ */
     /* Initialized by ATF */
