@@ -190,7 +190,23 @@ fn negotiate_version() -> Result<BusFFAVersionResp> {
 
 #[cfg(feature = "virtio_msg_min_spec_version_alp0")]
 fn negotiate_version() -> Result<BusFFAVersionResp> {
-    todo!("implement version negotation for virtio-msg ALP0 spec")
+    /* Request the device's highest supported FF-A bus version and transport revision */
+    let req = VirtioMsgReq::new_bus_ffa_version(0, 0, 0);
+    let resp = send_virtio_msg_request(req)?;
+    let device_resp = resp.read_bus_ffa_version()?;
+    let major_version = device_resp.bus_version >> 16;
+    let minor_version = device_resp.bus_version & 0xFFFF;
+    /* Use fake version 0.1 for ALP0 since it may be incompatible with the finalized version 1.0 */
+    if major_version != 0 || minor_version != 1 || device_resp.transport_revision != 1 {
+        return Err(LkError::ERR_INVALID_ARGS);
+    }
+    let req = VirtioMsgReq::new_bus_ffa_version(
+        major_version.try_into().unwrap(),
+        minor_version.try_into().unwrap(),
+        device_resp.transport_revision,
+    );
+    let resp = send_virtio_msg_request(req)?;
+    resp.read_bus_ffa_version()
 }
 
 // Enumerate devices and return a Vec with the IDs of the devices available.

@@ -117,6 +117,22 @@ impl VirtioMsgReq {
         )
     }
 
+    #[cfg(feature = "virtio_msg_min_spec_version_alp0")]
+    pub fn new_bus_ffa_version(
+        version_major: u16,
+        version_minor: u16,
+        transport_revision: u32,
+    ) -> Self {
+        Self::new_v2_req_with_payload(
+            sys::VIRTIO_MSG_FFA_BUS_VERSION,
+            None,
+            |payload: &mut sys::bus_ffa_version| {
+                payload.bus_version = u32::from(version_minor) | (u32::from(version_major) << 16);
+                payload.transport_revision = transport_revision;
+            },
+        )
+    }
+
     pub fn new_bus_get_devices(offset: u16, num_devs: u16) -> Self {
         // virtio-msg spec 4.4.7.1: The offset and number of device numbers requested MUST be
         // multiples of 8.
