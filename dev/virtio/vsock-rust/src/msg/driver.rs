@@ -296,7 +296,13 @@ fn driver_init() -> Result<()> {
     }
 
     // Call FFA_PARTITION_INFO_GET to get the FFA ID for the partition with the virtio-msg device
-    let ffa_id = init_receiver_id()?;
+    let ffa_id = match init_receiver_id() {
+        Ok(id) => id,
+        Err(_) => {
+            warn!("disabling vsock driver (did not find Secure Partition with virtio-msg UUID)");
+            return Ok(());
+        }
+    };
 
     let negotiate_resp = negotiate_version().inspect_err(|e| {
         error!("virtio-msg version request failed with {e}");
