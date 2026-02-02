@@ -153,6 +153,12 @@ MODULE_RUSTFLAGS += \
 
 endif
 
+ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_SECURECLOCK_SERVICE)))
+MODULE_RUSTFLAGS += \
+	--cfg 'feature="secureclock_service"' \
+
+endif
+
 ifeq (true,$(call TOBOOL,$(TRUSTY_VM_ENABLE_AUTHMGR_VIA_VSOCK)))
 MODULE_RUSTFLAGS += --cfg 'feature="tipc_vsock_authmgr"'
 
