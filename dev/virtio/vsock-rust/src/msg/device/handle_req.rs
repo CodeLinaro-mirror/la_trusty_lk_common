@@ -114,8 +114,8 @@ fn handle_version_request(req: sys::bus_ffa_version, resp: VirtioMsgResp) {
 
     let req_major_version = req.bus_version >> 16;
     let req_minor_version = req.bus_version & 0xFFFF;
-    if req_major_version == CURRENT_MAJOR_VERSION
-        && req_minor_version == CURRENT_MINOR_VERSION
+    if req_major_version == u32::from(CURRENT_MAJOR_VERSION)
+        && req_minor_version == u32::from(CURRENT_MINOR_VERSION)
         && req.transport_revision == CURRENT_TRANSPORT_REVISION
     {
         resp.write_bus_ffa_version(
