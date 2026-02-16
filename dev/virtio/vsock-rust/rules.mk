@@ -30,7 +30,7 @@ MODULE_LIBRARY_DEPS := \
 VSOCK_WITH_VIRTIO_MSG_DEVICE ?= false
 VSOCK_WITH_VIRTIO_MSG_DRIVER ?= false
 # virtio-msg specification version (must be either dev2 or alp0)
-VSOCK_WITH_VIRTIO_MSG_MIN_SPEC_VERSION ?= dev2
+VSOCK_WITH_VIRTIO_MSG_MIN_SPEC_VERSION ?= alp0
 
 # hypervisor_backends supports arm64 and x86-64 only for now
 ifeq ($(SUBARCH),x86-64)
