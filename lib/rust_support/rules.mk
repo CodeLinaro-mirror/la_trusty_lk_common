@@ -49,6 +49,8 @@ MODULE_DEPS := \
 
 MODULE_BINDGEN_ALLOW_FUNCTIONS := \
 	_panic \
+	arch_clean_cache_range \
+	arch_sync_cache_range \
 	event_destroy \
 	event_init \
 	event_signal \

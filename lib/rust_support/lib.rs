@@ -52,6 +52,7 @@ mod sys {
     include!(env!("BINDGEN_INC_FILE"));
 }
 
+pub mod arch;
 pub mod err;
 pub mod event;
 pub mod handle;

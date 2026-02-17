@@ -29,13 +29,17 @@ use crate::msg::device::VirtioMsgResp;
 use crate::msg::device::TRANSPORT;
 use crate::msg::BusAddress;
 use crate::msg::MAX_NUM_SHM;
-use crate::sys_dev2;
-use crate::sys_dev2::{
+use crate::sys;
+use crate::sys::{
     VIRTIO_CONFIG_S_ACKNOWLEDGE, VIRTIO_CONFIG_S_DRIVER, VIRTIO_CONFIG_S_DRIVER_OK,
-    VIRTIO_CONFIG_S_FAILED, VIRTIO_CONFIG_S_FEATURES_OK, VIRTIO_MSG_FFA_BUS_VERSION_1_0,
-    VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP,
+    VIRTIO_CONFIG_S_FAILED, VIRTIO_CONFIG_S_FEATURES_OK, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP,
+};
+#[cfg(feature = "virtio_msg_min_spec_version_dev2")]
+use crate::sys::{
+    VIRTIO_MSG_FFA_BUS_VERSION_1_0, VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP,
     VIRTIO_MSG_REVISION_1,
 };
+use crate::vsock::VsockRxEvent;
 use crate::FFAClientId;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use log::debug;
@@ -46,13 +50,92 @@ use rust_support::status_t;
 use rust_support::Error as LkError;
 use virtio_drivers_and_devices::transport::DeviceType;
 
+#[cfg(feature = "virtio_msg_min_spec_version_dev2")]
+fn handle_version_request(req: sys::bus_ffa_version, resp: VirtioMsgResp) {
+    const DEVICE_FFA_BUS_VERSION: u32 = VIRTIO_MSG_FFA_BUS_VERSION_1_0;
+    let req_driver_version = req.driver_version;
+    let resp_device_version = match req_driver_version {
+        0..DEVICE_FFA_BUS_VERSION => {
+            debug!("requested virtio-msg version not supported {:?}", req_driver_version);
+            None
+        }
+        DEVICE_FFA_BUS_VERSION => {
+            // Return the exact version in the request in case the device supports a
+            // range of versions in the future.
+            Some(req_driver_version)
+        }
+        _higher_versions => Some(DEVICE_FFA_BUS_VERSION),
+    };
+
+    const DEVICE_VIRTIO_MSG_REVISION: u32 = VIRTIO_MSG_REVISION_1;
+    let req_driver_revision = req.vmsg_revision;
+    let resp_device_revision = match req_driver_revision {
+        0..DEVICE_VIRTIO_MSG_REVISION => {
+            debug!("requested virtio-msg revision not supported {:?}", req_driver_revision);
+            None
+        }
+        DEVICE_VIRTIO_MSG_REVISION => {
+            // Return the exact revision in the request in case the device supports a
+            // range of revisions in the future.
+            Some(req_driver_revision)
+        }
+        _higher_revisions => Some(DEVICE_VIRTIO_MSG_REVISION),
+    };
+
+    let req_features = req.features;
+    if req_features & VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP == 0 {
+        debug!("requested virtio-msg features don't include direct TX {:x?}", req_features);
+    };
+    let resp_features = VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP;
+    resp.write_bus_ffa_version(
+        resp_device_version.unwrap_or(0),
+        resp_device_revision.unwrap_or(0),
+        resp_features,
+    );
+}
+
+#[cfg(feature = "virtio_msg_min_spec_version_alp0")]
+fn handle_version_request(req: sys::bus_ffa_version, resp: VirtioMsgResp) {
+    /* Use fake version 0.1 for ALP0 since it may be incompatible with the finalized version 1.0 */
+    const CURRENT_MAJOR_VERSION: u16 = 0;
+    const CURRENT_MINOR_VERSION: u16 = 1;
+    const CURRENT_TRANSPORT_REVISION: u32 = 1;
+    const SUPPORTED_BUS_FEATURES: u32 = VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP;
+
+    if req.bus_version == 0 && req.transport_revision == 0 {
+        resp.write_bus_ffa_version(
+            CURRENT_MAJOR_VERSION,
+            CURRENT_MINOR_VERSION,
+            CURRENT_TRANSPORT_REVISION,
+            SUPPORTED_BUS_FEATURES,
+        );
+        return;
+    }
+
+    let req_major_version = req.bus_version >> 16;
+    let req_minor_version = req.bus_version & 0xFFFF;
+    if req_major_version == CURRENT_MAJOR_VERSION
+        && req_minor_version == CURRENT_MINOR_VERSION
+        && req.transport_revision == CURRENT_TRANSPORT_REVISION
+    {
+        resp.write_bus_ffa_version(
+            req_major_version.try_into().unwrap(),
+            req_minor_version.try_into().unwrap(),
+            req.transport_revision,
+            SUPPORTED_BUS_FEATURES,
+        );
+        return;
+    }
+    resp.write_bus_ffa_version(0, 0, 0, 0);
+}
+
 impl VirtioMsgDevice {
     /// Handles a virtio-msg request in a u64 array and writes the response back to the same array.
     fn handle_req(
         &self,
         buf_ref: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
     ) -> Result<(), LkError> {
-        let dev_id = sys_dev2::virtio_msg::from_bytes(buf_ref).dev_id;
+        let dev_id = sys::virtio_msg::from_bytes(buf_ref).dev_id;
         // Pass ownership of the `buf_ref` argument to a `VirtioMsgReq` to reinterpret the array as
         // a virtio-msg request
         let req = VirtioMsgReq::parse(buf_ref)?;
@@ -72,6 +155,8 @@ impl VirtioMsgDevice {
             | (1 << VIRTIO_F_VERSION_1)
             | (1 << VIRTIO_F_ACCESS_PLATFORM);
 
+        const TX_QUEUE_IDX: u32 = 1;
+
         // Create a copy of the request payload. The enum variant determines what kind of request it is
         let req_payload = req.get_msg_payload();
         // Passes ownership of the `buf_ref` argument to a `VirtioMsgResp` to reinterpret the array
@@ -79,55 +164,7 @@ impl VirtioMsgDevice {
         let resp = VirtioMsgResp::new(req);
         match req_payload {
             VirtioMsgPayload::BusFFAVersion(req) => {
-                const DEVICE_FFA_BUS_VERSION: u32 = VIRTIO_MSG_FFA_BUS_VERSION_1_0;
-                let req_driver_version = req.driver_version;
-                let resp_device_version = match req_driver_version {
-                    0..DEVICE_FFA_BUS_VERSION => {
-                        debug!(
-                            "requested virtio-msg version not supported {:?}",
-                            req_driver_version
-                        );
-                        None
-                    }
-                    DEVICE_FFA_BUS_VERSION => {
-                        // Return the exact version in the request in case the device supports a
-                        // range of versions in the future.
-                        Some(req_driver_version)
-                    }
-                    _higher_versions => Some(DEVICE_FFA_BUS_VERSION),
-                };
-
-                const DEVICE_VIRTIO_MSG_REVISION: u32 = VIRTIO_MSG_REVISION_1;
-                let req_driver_revision = req.vmsg_revision;
-                let resp_device_revision = match req_driver_revision {
-                    0..DEVICE_VIRTIO_MSG_REVISION => {
-                        debug!(
-                            "requested virtio-msg revision not supported {:?}",
-                            req_driver_revision
-                        );
-                        None
-                    }
-                    DEVICE_VIRTIO_MSG_REVISION => {
-                        // Return the exact revision in the request in case the device supports a
-                        // range of revisions in the future.
-                        Some(req_driver_revision)
-                    }
-                    _higher_revisions => Some(DEVICE_VIRTIO_MSG_REVISION),
-                };
-
-                let req_features = req.features;
-                if req_features & VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP == 0 {
-                    debug!(
-                        "requested virtio-msg features don't include direct TX {:x?}",
-                        req_features
-                    );
-                };
-                let resp_features = VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_RX_SUPP;
-                resp.write_bus_ffa_version(
-                    resp_device_version.unwrap_or(0),
-                    resp_device_revision.unwrap_or(0),
-                    resp_features,
-                );
+                handle_version_request(req, resp);
             }
             VirtioMsgPayload::BusGetDevices(req) => {
                 let next_offset = 0;
@@ -340,6 +377,21 @@ impl VirtioMsgDevice {
                     config &= mask;
                 }
                 resp.write_get_config(0 /* generation */, req.offset, req.size, config);
+            }
+            VirtioMsgPayload::EventAvailable(queue) => {
+                debug!("received event avail request for queue {queue:x?}");
+                // We currently use events driver tx events to notify the device rx loop
+                // TODO: also make use of driver rx events. This will require non-trivial
+                //       changes to the virtio-drivers/virtio-drivers-and-devices crates.
+                //       See https://github.com/rcore-os/virtio-drivers/issues/208.
+                if queue.index == TX_QUEUE_IDX {
+                    self.rx_loop_evt
+                        .lock_unsaved() // interrupts are disabled in this context
+                        .as_ref()
+                        .expect("rx loop event was initialized")
+                        .signal(VsockRxEvent::QUEUE_EVENT);
+                    sm::intc_raise_doorbell_irq(); // make sure signaled thread runs
+                }
             }
             VirtioMsgPayload::UnknownBusReq(req_id) => {
                 error!("ignoring virtio-msg bus request with unknown id {req_id:x?}");

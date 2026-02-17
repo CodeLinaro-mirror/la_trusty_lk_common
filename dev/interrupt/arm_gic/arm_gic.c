@@ -588,7 +588,8 @@ void arm_gic_init_map(struct arm_gic_init_info* init_info)
     arm_gics[0].gicd_size = init_info->gicd_size;
 
 #if GIC_VERSION > 2
-    if (init_info->gicr_size < GICR_CPU_OFFSET(SMP_MAX_CPUS - 1) + GICR_MIN_SIZE) {
+    /* We don't know how many CPUs there are, but it's at least 1 */
+    if (init_info->gicr_size < GICR_MIN_SIZE) {
         panic("%s: gicr mapping too small %zu\n", __func__,
               init_info->gicr_size);
     }

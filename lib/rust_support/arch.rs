@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Google Inc. All rights reserved
+ * Copyright (c) 2025 Google Inc. All rights reserved
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -21,7 +21,26 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/*
- * TODO(b/370957658): generate header automatically via cbindgen.
- */
-int pci_init_mmio(paddr_t cfg_base, size_t size, size_t cfg_size);
+pub fn clean_cache_range<T>(slice: &[T]) {
+    let range = slice.as_ptr_range();
+    // SAFETY: The caller passes in a valid slice and the
+    // only side effects of the kernel function are on the cache.
+    unsafe {
+        crate::sys::arch_clean_cache_range(
+            range.start.addr(),
+            range.end.byte_offset_from_unsigned(range.start),
+        );
+    }
+}
+
+pub fn sync_cache_range<T>(slice: &[T]) {
+    let range = slice.as_ptr_range();
+    // SAFETY: The caller passes in a valid slice and the
+    // only side effects of the kernel function are on the cache.
+    unsafe {
+        crate::sys::arch_sync_cache_range(
+            range.start.addr(),
+            range.end.byte_offset_from_unsigned(range.start),
+        );
+    }
+}

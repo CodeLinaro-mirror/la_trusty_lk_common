@@ -23,8 +23,10 @@
 
 use crate::msg::device::VirtQueue;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
-use crate::sys_dev2;
-use crate::sys_dev2::{VIRTIO_MSG_TYPE_BUS, VIRTIO_MSG_TYPE_RESPONSE};
+#[cfg(feature = "virtio_msg_spec_version_alp0")]
+use crate::msg::MAX_NUM_SHM;
+use crate::sys;
+use crate::sys::{VIRTIO_MSG_TYPE_BUS, VIRTIO_MSG_TYPE_RESPONSE};
 use crate::VsockVirtioFeatures;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
 use core::mem::{size_of, size_of_val};
@@ -38,18 +40,19 @@ pub struct VirtioMsgReq<'a> {
 }
 
 pub enum VirtioMsgPayload {
-    BusFFAVersion(sys_dev2::bus_ffa_version),
-    BusGetDevices(sys_dev2::bus_get_devices),
+    BusFFAVersion(sys::bus_ffa_version),
+    BusGetDevices(sys::bus_get_devices),
     GetDeviceInfo,
-    SetDeviceStatus(sys_dev2::set_device_status),
+    SetDeviceStatus(sys::set_device_status),
     GetDeviceStatus,
-    GetFeatures(sys_dev2::get_features),
-    SetFeatures((sys_dev2::set_features, VsockVirtioFeatures)),
-    GetVqueue(sys_dev2::get_vqueue),
-    SetVqueue(sys_dev2::set_vqueue),
-    GetConfig(sys_dev2::get_config),
-    AreaShare(sys_dev2::bus_area_share),
-    AreaUnshare(sys_dev2::bus_area_unshare),
+    GetFeatures(sys::get_features),
+    SetFeatures((sys::set_features, VsockVirtioFeatures)),
+    GetVqueue(sys::get_vqueue),
+    SetVqueue(sys::set_vqueue),
+    GetConfig(sys::get_config),
+    AreaShare(sys::bus_area_share),
+    AreaUnshare(sys::bus_area_unshare),
+    EventAvailable(sys::event_avail),
     // Contains the ID for a bus request not defined by the virtio-msg spec
     UnknownBusReq(u32),
     // Contains the ID for a virtio request not defined by the virtio-msg spec
@@ -60,7 +63,7 @@ impl VirtioMsgReq<'_> {
     pub fn parse(
         buf: &mut [u64; ARM_FFA_MSG_EXTENDED_ARGS_COUNT],
     ) -> Result<VirtioMsgReq<'_>, LkError> {
-        let req = sys_dev2::virtio_msg::from_bytes(buf);
+        let req = sys::virtio_msg::from_bytes(buf);
         let msg_ty = u32::from(req.type_);
         if msg_ty & VIRTIO_MSG_TYPE_RESPONSE != 0 {
             return Err(LkError::ERR_INVALID_ARGS);
@@ -69,13 +72,13 @@ impl VirtioMsgReq<'_> {
     }
 
     pub fn is_bus_msg(&self) -> bool {
-        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
+        let req = sys::virtio_msg::from_bytes(self.buf);
         // Check whether the request is a bus or virtio message
         u32::from(req.type_) & VIRTIO_MSG_TYPE_BUS != 0
     }
 
     fn get_v2_payload<T: FromBytes>(&self) -> T {
-        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
+        let req = sys::virtio_msg::from_bytes(self.buf);
         // SAFETY: The `payload` field on `req` is right after the header fields and this creates a
         // `&[u8]` of the remaining portion of the buffer from which `req` is derived.
         let payload_slice =
@@ -89,7 +92,7 @@ impl VirtioMsgReq<'_> {
     }
 
     fn get_v2_payload_variable_size<T, const N: usize>(&self) -> (T, [u8; N]) {
-        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
+        let req = sys::virtio_msg::from_bytes(self.buf);
 
         let payload_ptr: *const u8 = req.payload.as_ptr();
         // SAFETY: payload_ptr is non-null and points to a buffer at least as bit as `T`.
@@ -111,7 +114,7 @@ impl VirtioMsgReq<'_> {
     }
 
     pub fn get_msg_payload(&self) -> VirtioMsgPayload {
-        let req = sys_dev2::virtio_msg::from_bytes(self.buf);
+        let req = sys::virtio_msg::from_bytes(self.buf);
 
         // The request ID determines which field is valid in the payload union. Note that a given ID
         // may represent different requests depending on whether it's a bus or virtio message.
@@ -119,16 +122,16 @@ impl VirtioMsgReq<'_> {
 
         if self.is_bus_msg() {
             match id {
-                sys_dev2::VIRTIO_MSG_FFA_BUS_VERSION => {
+                sys::VIRTIO_MSG_FFA_BUS_VERSION => {
                     VirtioMsgPayload::BusFFAVersion(self.get_v2_payload())
                 }
-                sys_dev2::VIRTIO_MSG_BUS_GET_DEVICES => {
+                sys::VIRTIO_MSG_BUS_GET_DEVICES => {
                     VirtioMsgPayload::BusGetDevices(self.get_v2_payload())
                 }
-                sys_dev2::VIRTIO_MSG_FFA_BUS_AREA_SHARE => {
+                sys::VIRTIO_MSG_FFA_BUS_AREA_SHARE => {
                     VirtioMsgPayload::AreaShare(self.get_v2_payload())
                 }
-                sys_dev2::VIRTIO_MSG_FFA_BUS_AREA_UNSHARE => {
+                sys::VIRTIO_MSG_FFA_BUS_AREA_UNSHARE => {
                     VirtioMsgPayload::AreaUnshare(self.get_v2_payload())
                 }
                 _ => VirtioMsgPayload::UnknownBusReq(id),
@@ -136,29 +139,26 @@ impl VirtioMsgReq<'_> {
         } else {
             match id {
                 // GET_DEVICE_INFO requests don't use the payload
-                sys_dev2::VIRTIO_MSG_DEVICE_INFO => VirtioMsgPayload::GetDeviceInfo,
-                sys_dev2::VIRTIO_MSG_SET_DEVICE_STATUS => {
+                sys::VIRTIO_MSG_DEVICE_INFO => VirtioMsgPayload::GetDeviceInfo,
+                sys::VIRTIO_MSG_SET_DEVICE_STATUS => {
                     VirtioMsgPayload::SetDeviceStatus(self.get_v2_payload())
                 }
                 // GET_DEVICE_STATUS requests don't use the payload
-                sys_dev2::VIRTIO_MSG_GET_DEVICE_STATUS => VirtioMsgPayload::GetDeviceStatus,
-                sys_dev2::VIRTIO_MSG_GET_DEV_FEATURES => {
+                sys::VIRTIO_MSG_GET_DEVICE_STATUS => VirtioMsgPayload::GetDeviceStatus,
+                sys::VIRTIO_MSG_GET_DEV_FEATURES => {
                     VirtioMsgPayload::GetFeatures(self.get_v2_payload())
                 }
-                sys_dev2::VIRTIO_MSG_SET_DRV_FEATURES => {
+                sys::VIRTIO_MSG_SET_DRV_FEATURES => {
                     let (set_features_header, set_features_data) =
                         self.get_v2_payload_variable_size();
                     let feature_data = u64::from_le_bytes(set_features_data);
                     VirtioMsgPayload::SetFeatures((set_features_header, feature_data))
                 }
-                sys_dev2::VIRTIO_MSG_GET_VQUEUE => {
-                    VirtioMsgPayload::GetVqueue(self.get_v2_payload())
-                }
-                sys_dev2::VIRTIO_MSG_SET_VQUEUE => {
-                    VirtioMsgPayload::SetVqueue(self.get_v2_payload())
-                }
-                sys_dev2::VIRTIO_MSG_GET_CONFIG => {
-                    VirtioMsgPayload::GetConfig(self.get_v2_payload())
+                sys::VIRTIO_MSG_GET_VQUEUE => VirtioMsgPayload::GetVqueue(self.get_v2_payload()),
+                sys::VIRTIO_MSG_SET_VQUEUE => VirtioMsgPayload::SetVqueue(self.get_v2_payload()),
+                sys::VIRTIO_MSG_GET_CONFIG => VirtioMsgPayload::GetConfig(self.get_v2_payload()),
+                sys::VIRTIO_MSG_EVENT_AVAIL => {
+                    VirtioMsgPayload::EventAvailable(self.get_v2_payload())
                 }
                 _ => VirtioMsgPayload::UnknownDeviceReq(id),
             }
@@ -174,13 +174,13 @@ impl VirtioMsgResp<'_> {
     pub fn new(req: VirtioMsgReq) -> VirtioMsgResp {
         let buf = req.buf;
         // Set the RESPONSE bit in the same buffer the request came in
-        sys_dev2::virtio_msg::from_bytes_mut(buf).type_ |= VIRTIO_MSG_TYPE_RESPONSE as u8;
+        sys::virtio_msg::from_bytes_mut(buf).type_ |= VIRTIO_MSG_TYPE_RESPONSE as u8;
         VirtioMsgResp { buf }
     }
 
     fn as_mut_v2_payload<T: FromBytes + IntoBytes + KnownLayout>(&mut self) -> &mut T {
         let buf_size = size_of_val(self.buf);
-        let resp = sys_dev2::virtio_msg::from_bytes_mut(self.buf);
+        let resp = sys::virtio_msg::from_bytes_mut(self.buf);
         let total_size = size_of_val(resp) + size_of::<T>();
         resp.msg_size = total_size.try_into().unwrap();
         // SAFETY: The `payload` field on `resp` is right after the header fields and this creates a
@@ -194,27 +194,43 @@ impl VirtioMsgResp<'_> {
         payload_ref
     }
 
+    #[cfg(feature = "virtio_msg_min_spec_version_dev2")]
     pub fn write_bus_ffa_version(mut self, device_version: u32, vmsg_revision: u32, features: u32) {
-        let resp = self.as_mut_v2_payload::<sys_dev2::bus_ffa_version_resp>();
+        let resp = self.as_mut_v2_payload::<sys::bus_ffa_version_resp>();
         resp.device_version = device_version;
         resp.vmsg_revision = vmsg_revision;
         resp.features = features;
     }
 
+    #[cfg(feature = "virtio_msg_spec_version_alp0")]
+    pub fn write_bus_ffa_version(
+        mut self,
+        version_major: u16,
+        version_minor: u16,
+        transport_revision: u32,
+        bus_features: u32,
+    ) {
+        let resp = self.as_mut_v2_payload::<sys::bus_ffa_version_resp>();
+        resp.bus_version = u32::from(version_minor) | (u32::from(version_major) << 16);
+        resp.transport_revision = transport_revision;
+        resp.transport_features = 0; /* Currently always zero in spec */
+        resp.bus_features = bus_features;
+        resp.area_num = MAX_NUM_SHM.try_into().unwrap();
+    }
+
     pub fn write_bus_get_devices(self, next_offset: u16, bitmap: u8) {
-        let resp = sys_dev2::virtio_msg::from_bytes_mut(self.buf);
+        let resp = sys::virtio_msg::from_bytes_mut(self.buf);
         let bitmap_size = size_of_val(&bitmap);
-        let total_size =
-            size_of_val(resp) + size_of::<sys_dev2::bus_get_devices_resp>() + bitmap_size;
+        let total_size = size_of_val(resp) + size_of::<sys::bus_get_devices_resp>() + bitmap_size;
         resp.msg_size = total_size.try_into().unwrap();
 
         // This pointer may be unaligned since virtio_msg is packed
-        let payload_ptr = resp.payload.as_mut_ptr().cast::<sys_dev2::bus_get_devices_resp>();
+        let payload_ptr = resp.payload.as_mut_ptr().cast::<sys::bus_get_devices_resp>();
 
         // The number of devices described by the bitmap
         let num_devs = bitmap_size * 8;
 
-        let payload = sys_dev2::bus_get_devices_resp {
+        let payload = sys::bus_get_devices_resp {
             offset: 0,
             num: num_devs.try_into().unwrap(),
             next_offset,
@@ -232,7 +248,7 @@ impl VirtioMsgResp<'_> {
 
     // Set the payload as the response to a device_info request
     pub fn write_device_info(mut self, dev_ty: DeviceType, vendor_id: u32) {
-        let resp = self.as_mut_v2_payload::<sys_dev2::get_device_info_resp>();
+        let resp = self.as_mut_v2_payload::<sys::get_device_info_resp>();
         resp.device_id = dev_ty as u32;
         resp.vendor_id = vendor_id;
         resp.num_feature_bits = u32::try_from(size_of::<VsockVirtioFeatures>()).unwrap() * 8;
@@ -246,21 +262,21 @@ impl VirtioMsgResp<'_> {
 
     // Set the payload as the response to a get_device_status request
     pub fn write_get_device_status(mut self, status: u32) {
-        let resp = self.as_mut_v2_payload::<sys_dev2::get_device_status_resp>();
+        let resp = self.as_mut_v2_payload::<sys::get_device_status_resp>();
         resp.status = status;
     }
 
     // Set the payload as the response to a get_device_features request
     pub fn write_get_device_features(self, index: u32, features: VsockVirtioFeatures) {
-        let resp = sys_dev2::virtio_msg::from_bytes_mut(self.buf);
+        let resp = sys::virtio_msg::from_bytes_mut(self.buf);
         let feature_data_size = size_of::<VsockVirtioFeatures>();
         let total_size =
-            size_of_val(resp) + size_of::<sys_dev2::get_features_resp>() + feature_data_size;
+            size_of_val(resp) + size_of::<sys::get_features_resp>() + feature_data_size;
         resp.msg_size = total_size.try_into().unwrap();
 
-        let payload_ptr = resp.payload.as_mut_ptr().cast::<sys_dev2::get_features_resp>();
+        let payload_ptr = resp.payload.as_mut_ptr().cast::<sys::get_features_resp>();
         let num_blocks = feature_data_size / size_of::<u32>();
-        let payload = sys_dev2::get_features_resp {
+        let payload = sys::get_features_resp {
             index,
             num: num_blocks.try_into().unwrap(),
             ..Default::default()
@@ -279,7 +295,7 @@ impl VirtioMsgResp<'_> {
 
     // Set the payload as the response to a get_vqueue request
     pub fn write_get_vqueue(mut self, index: u32, vqueue: Option<&VirtQueue>) {
-        let resp = self.as_mut_v2_payload::<sys_dev2::get_vqueue_resp>();
+        let resp = self.as_mut_v2_payload::<sys::get_vqueue_resp>();
         // virtio-msg spec 3.2: If the virtqueue was configured, the current information is returned
         // otherwise all fields other than Max Virtqueue Size are 0.
         match vqueue {
@@ -304,11 +320,10 @@ impl VirtioMsgResp<'_> {
 
     // Set the payload as the response to a get_config request
     pub fn write_get_config(self, generation: u32, offset: u32, size: u32, data: u64) {
-        let resp = sys_dev2::virtio_msg::from_bytes_mut(self.buf);
-        let total_size =
-            size_of_val(resp) + size_of::<sys_dev2::get_config_resp>() + size_of_val(&data);
+        let resp = sys::virtio_msg::from_bytes_mut(self.buf);
+        let total_size = size_of_val(resp) + size_of::<sys::get_config_resp>() + size_of_val(&data);
         resp.msg_size = total_size.try_into().unwrap();
-        let payload_ptr = resp.payload.as_mut_ptr().cast::<sys_dev2::get_config_resp>();
+        let payload_ptr = resp.payload.as_mut_ptr().cast::<sys::get_config_resp>();
 
         // SAFETY: All calls to write_unaligned take a non-null pointer to a buffer at least as big
         // as the type of the argument being written since payload_ptr is derived from a reference
@@ -329,13 +344,13 @@ impl VirtioMsgResp<'_> {
     }
 
     pub fn write_bus_area_share(mut self, area_id: u16, success: bool) {
-        let resp = self.as_mut_v2_payload::<sys_dev2::bus_area_share_resp>();
+        let resp = self.as_mut_v2_payload::<sys::bus_area_share_resp>();
         resp.area_id = area_id;
         resp.result = if success { 0 } else { 1 };
     }
 
     pub fn write_bus_area_unshare(mut self, area_id: u16, success: bool) {
-        let resp = self.as_mut_v2_payload::<sys_dev2::bus_area_unshare_resp>();
+        let resp = self.as_mut_v2_payload::<sys::bus_area_unshare_resp>();
         resp.area_id = area_id;
         resp.result = if success { 0 } else { 1 };
     }

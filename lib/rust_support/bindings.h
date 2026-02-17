@@ -24,6 +24,7 @@
 #pragma once
 
 #include <arch/mmu.h>
+#include <arch/ops.h>
 #include <kernel/event.h>
 #include <kernel/mutex.h>
 #include <kernel/thread.h>
