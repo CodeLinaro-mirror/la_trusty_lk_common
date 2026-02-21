@@ -35,8 +35,7 @@
 #![feature(box_as_ptr)]
 #![feature(cfi_encoding, extern_types)]
 
-use alloc::format;
-use core::ffi::CStr;
+use core::fmt::Write;
 use core::panic::PanicInfo;
 
 mod sys {
@@ -86,9 +85,8 @@ pub const INFINITE_TIME: u32 = u32::MAX;
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
-    let panic_message = format!("{info}\0");
-    let panic_message_c = CStr::from_bytes_with_nul(panic_message.as_bytes())
-        .expect("Unexpected null byte in panic message");
-    // SAFETY: Calling C function with string pointers that outlive the call
-    unsafe { sys::_panic(c"Rust in Trusty kernel %s\n".as_ptr(), panic_message_c.as_ptr()) }
+    let mut writer = log::TrustyKernelWriter;
+    write!(writer, "Rust in Trusty kernel: {}", info.message()).ok();
+    // SAFETY: Calling _panic with null is safe
+    unsafe { sys::_panic(core::ptr::null()) }
 }
