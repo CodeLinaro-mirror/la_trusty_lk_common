@@ -153,6 +153,11 @@ const PORT_MAP: &[TipcPort] = &[
     TipcPort { port: 19, name: c"android.trusty.vm_attestation.IVmAttestation/default" },
     #[cfg(feature = "secureclock_service")]
     TipcPort { port: 20, name: c"android.hardware.security.secureclock.ISecureClock/default" },
+    #[cfg(feature = "remotelyprovisionedcomponent_default")]
+    TipcPort {
+        port: 21,
+        name: c"android.hardware.security.keymint.IRemotelyProvisionedComponent/default",
+    },
 ];
 
 /// Finds the TIPC name associated with a given vsock port number.
