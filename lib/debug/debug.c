@@ -65,9 +65,11 @@ void _panic(const char *fmt, ...)
         thread_exit_from_panic();
     }
 
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
+    if (fmt) {
+        va_start(ap, fmt);
+        vprintf(fmt, ap);
+        va_end(ap);
+    }
 
     platform_halt(HALT_ACTION_HALT, HALT_REASON_SW_PANIC);
 }
