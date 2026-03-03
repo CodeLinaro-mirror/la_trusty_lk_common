@@ -26,6 +26,7 @@ use crate::sys;
 use crate::sys::VIRTIO_MSG_FFA_FEATURE_DIRECT_MSG_TX_SUPP;
 use crate::sys::VIRTIO_MSG_TYPE_RESPONSE;
 
+use crate::msg::driver::NEXT_MSG_TOKEN;
 use crate::msg::{MemShareAttr, MAX_VIRTIO_MSG_SIZE};
 use crate::VsockVirtioFeatures;
 use arm_ffa::ARM_FFA_MSG_EXTENDED_ARGS_COUNT;
@@ -63,6 +64,22 @@ impl VirtioMsgReq {
         let mut buf = [0; ARM_FFA_MSG_EXTENDED_ARGS_COUNT];
         let buf_size = size_of_val(&buf);
         let msg = sys::virtio_msg::from_bytes_mut(&mut buf);
+        // The token (i.e. unique message ID) in the virtio-msg header reserves zero for event
+        // messages and the driver cannot send VIRTIO_MSG_EVENT_USED so we only need to check the
+        // following two.
+        let is_event_msg =
+            msg_id == sys::VIRTIO_MSG_EVENT_AVAIL || msg_id == sys::VIRTIO_MSG_EVENT_CONFIG;
+        if !is_event_msg {
+            let mut next_token_guard = NEXT_MSG_TOKEN.lock();
+            let msg_token = *next_token_guard;
+            if msg_token == u16::MAX {
+                *next_token_guard = 1;
+            } else {
+                *next_token_guard += 1;
+            }
+            msg.token = msg_token;
+            next_token_guard.unlock();
+        }
         msg.msg_id = u8::try_from(msg_id).unwrap();
         match dev_id {
             Some(id) => {
