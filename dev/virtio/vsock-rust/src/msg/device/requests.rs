@@ -23,7 +23,7 @@
 
 use crate::msg::device::VirtQueue;
 use crate::msg::device::VSOCK_QUEUE_SIZE;
-#[cfg(feature = "virtio_msg_spec_version_alp0")]
+#[cfg(feature = "virtio_msg_min_spec_version_alp0")]
 use crate::msg::MAX_NUM_SHM;
 use crate::sys;
 use crate::sys::{VIRTIO_MSG_TYPE_BUS, VIRTIO_MSG_TYPE_RESPONSE};
@@ -202,7 +202,7 @@ impl VirtioMsgResp<'_> {
         resp.features = features;
     }
 
-    #[cfg(feature = "virtio_msg_spec_version_alp0")]
+    #[cfg(feature = "virtio_msg_min_spec_version_alp0")]
     pub fn write_bus_ffa_version(
         mut self,
         version_major: u16,
