@@ -151,6 +151,8 @@ const PORT_MAP: &[TipcPort] = &[
     TipcPort { port: 18, name: c"android.trusty.membuf.IMemoryBufferShareVm/default" },
     #[cfg(feature = "vm_attestation_service")]
     TipcPort { port: 19, name: c"android.trusty.vm_attestation.IVmAttestation/default" },
+    #[cfg(feature = "secureclock_service")]
+    TipcPort { port: 20, name: c"android.hardware.security.secureclock.ISecureClock/default" },
 ];
 
 /// Finds the TIPC name associated with a given vsock port number.
@@ -1148,8 +1150,8 @@ where
             device.print_stats();
             continue;
         }
-        if ret.is_err() {
-            warn!("handle_set_wait failed: {}", ret.unwrap_err());
+        if let Err(e) = ret {
+            warn!("handle_set_wait failed: {e}");
             thread::sleep(ten_secs);
             continue;
         }
@@ -1273,13 +1275,10 @@ where
                     c.local_port
                 );
                 let res = device.connection_manager.lock().shutdown(c.peer, c.local_port);
-                if res.is_ok() {
-                    return ConnectionStateAction::Close;
+                if let Err(e) = res {
+                    warn!("failed to send shutdown command, connection removed? {e}");
                 } else {
-                    warn!(
-                        "failed to send shutdown command, connection removed? {}",
-                        res.unwrap_err()
-                    );
+                    return ConnectionStateAction::Close;
                 }
             }
             ConnectionStateAction::None
