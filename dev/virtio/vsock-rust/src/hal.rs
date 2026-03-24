@@ -98,24 +98,25 @@ pub(crate) fn dma_alloc(
 
 // Safety: `vaddr` was returned by `dma_alloc` and hasn't been deallocated.
 pub(crate) unsafe fn dma_dealloc(_paddr: PhysAddr, vaddr: NonNull<u8>, _pages: usize) -> i32 {
+    #[cfg(feature = "device_tree")]
+    {
+        let mut dma_pools = device_tree::DMA_POOL_ALLOCS.lock();
+        for pool in dma_pools.iter_mut() {
+            if pool.region().contains(&_paddr) {
+                pool.dealloc(_paddr);
+                // The region allocator is responsible for
+                // unmapping `vaddr` from `_paddr`, so we
+                // can stop here without calling `vmm_free_region`.
+                return 0;
+            }
+        }
+    }
+
     let aspace = vmm_get_kernel_aspace();
     let vaddr = vaddr.as_ptr();
     // Safety:
     // - function-level requirements
     // - `aspace` points to the kernel address space object
     // - `vaddr` is a region in `aspace`
-    let rc = unsafe { vmm_free_region(aspace, vaddr as usize) };
-
-    #[cfg(feature = "device_tree")]
-    if rc == 0 {
-        let mut dma_pools = device_tree::DMA_POOL_ALLOCS.lock();
-        for pool in dma_pools.iter_mut() {
-            if pool.region().contains(&_paddr) {
-                pool.dealloc(_paddr);
-                break;
-            }
-        }
-    }
-
-    rc
+    unsafe { vmm_free_region(aspace, vaddr as usize) }
 }
