@@ -95,7 +95,6 @@ ifeq (true,$(call TOBOOL,$(TRUSTY_VM_INCLUDE_KEYMINT)))
 MODULE_RUSTFLAGS += \
 	--cfg 'feature="keymint"' \
 	--cfg 'feature="keymint_commservice"' \
-	--cfg 'feature="keymint_device"' \
 	--cfg 'feature="keymint_provisioning_with_thal"' \
 	--cfg 'feature="remotelyprovisionedcomponent_default"' \
 	--cfg 'feature="secureclock_service"' \

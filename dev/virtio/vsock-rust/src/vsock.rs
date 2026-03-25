@@ -155,8 +155,6 @@ const PORT_MAP: &[TipcPort] = &[
     TipcPort { port: 20, name: c"android.hardware.security.secureclock.ISecureClock/default" },
     #[cfg(feature = "remotelyprovisionedcomponent_default")]
     TipcPort { port: 21, name: c"IRemotelyProvisionedComponent/default" },
-    #[cfg(feature = "keymint_device")]
-    TipcPort { port: 22, name: c"android.hardware.security.keymint.IKeyMintDevice/default" },
 ];
 
 /// Finds the TIPC name associated with a given vsock port number.
