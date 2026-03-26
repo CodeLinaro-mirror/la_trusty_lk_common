@@ -50,15 +50,6 @@ TEST_BUILD ?=
 
 DEBUG ?= 2
 
-# LOG_LEVEL_KERNEL_RUST controls LK_LOGLEVEL_RUST
-# when LOG_LEVEL_KERNEL_RUST = 0, Rust max log level is LevelFilter::Off
-# when LOG_LEVEL_KERNEL_RUST = 1, Rust max log level is LevelFilter::Error
-# when LOG_LEVEL_KERNEL_RUST = 2, Rust max log level is LogLevel::Warning
-# when LOG_LEVEL_KERNEL_RUST = 3, Rust max log level is LogLevel::Info
-# when LOG_LEVEL_KERNEL_RUST = 4, Rust max log level is LogLevel::Debug
-# when LOG_LEVEL_KERNEL_RUST = 5 or greater, the max log level is LogLevel::Trace
-LOG_LEVEL_KERNEL_RUST ?= $(LOG_LEVEL_KERNEL)
-
 BUILDDIR := $(BUILDROOT)/build-$(PROJECT)
 OUTBIN := $(BUILDDIR)/lk.bin
 OUTELF := $(BUILDDIR)/lk.elf
@@ -203,6 +194,15 @@ include platform/$(PLATFORM)/rules.mk
 # when LOG_LEVEL_KERNEL = 1, dprintf INFO level is enabled
 # when LOG_LEVEL_KERNEL = 2, dprintf SPEW level is enabled
 LOG_LEVEL_KERNEL ?= $(DEBUG)
+
+# LOG_LEVEL_KERNEL_RUST controls LK_LOGLEVEL_RUST
+# when LOG_LEVEL_KERNEL_RUST = 0, Rust max log level is LevelFilter::Off
+# when LOG_LEVEL_KERNEL_RUST = 1, Rust max log level is LevelFilter::Error
+# when LOG_LEVEL_KERNEL_RUST = 2, Rust max log level is LogLevel::Warning
+# when LOG_LEVEL_KERNEL_RUST = 3, Rust max log level is LogLevel::Info
+# when LOG_LEVEL_KERNEL_RUST = 4, Rust max log level is LogLevel::Debug
+# when LOG_LEVEL_KERNEL_RUST = 5 or greater, the max log level is LogLevel::Trace
+LOG_LEVEL_KERNEL_RUST ?= $(LOG_LEVEL_KERNEL)
 
 # LOG_LEVEL_USER controls TLOG_LVL_DEFAULT
 # when LOG_LEVEL_USER = 2 TLOG_LVL_DEFAULT = 4 (info)
