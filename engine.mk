@@ -50,11 +50,6 @@ TEST_BUILD ?=
 
 DEBUG ?= 2
 
-# LOG_LEVEL_KERNEL controls LK_LOGLEVEL
-# when LOG_LEVEL_KERNEL = 1, dprintf INFO level is enabled
-# when LOG_LEVEL_KERNEL = 2, dprintf SPEW level is enabled
-LOG_LEVEL_KERNEL ?= $(DEBUG)
-
 # LOG_LEVEL_KERNEL_RUST controls LK_LOGLEVEL_RUST
 # when LOG_LEVEL_KERNEL_RUST = 0, Rust max log level is LevelFilter::Off
 # when LOG_LEVEL_KERNEL_RUST = 1, Rust max log level is LevelFilter::Error
@@ -63,11 +58,6 @@ LOG_LEVEL_KERNEL ?= $(DEBUG)
 # when LOG_LEVEL_KERNEL_RUST = 4, Rust max log level is LogLevel::Debug
 # when LOG_LEVEL_KERNEL_RUST = 5 or greater, the max log level is LogLevel::Trace
 LOG_LEVEL_KERNEL_RUST ?= $(LOG_LEVEL_KERNEL)
-
-# LOG_LEVEL_USER controls TLOG_LVL_DEFAULT
-# when LOG_LEVEL_USER = 2 TLOG_LVL_DEFAULT = 4 (info)
-# when LOG_LEVEL_USER = 3 TLOG_LVL_DEFAULT = 5 (debug)
-LOG_LEVEL_USER ?= $(DEBUG)
 
 BUILDDIR := $(BUILDROOT)/build-$(PROJECT)
 OUTBIN := $(BUILDDIR)/lk.bin
@@ -207,6 +197,17 @@ ifndef PLATFORM
 $(error couldn't find target or target doesn't define platform)
 endif
 include platform/$(PLATFORM)/rules.mk
+
+# set default log levels if they haven't already been set by the project file
+# LOG_LEVEL_KERNEL controls LK_LOGLEVEL
+# when LOG_LEVEL_KERNEL = 1, dprintf INFO level is enabled
+# when LOG_LEVEL_KERNEL = 2, dprintf SPEW level is enabled
+LOG_LEVEL_KERNEL ?= $(DEBUG)
+
+# LOG_LEVEL_USER controls TLOG_LVL_DEFAULT
+# when LOG_LEVEL_USER = 2 TLOG_LVL_DEFAULT = 4 (info)
+# when LOG_LEVEL_USER = 3 TLOG_LVL_DEFAULT = 5 (debug)
+LOG_LEVEL_USER ?= $(DEBUG)
 
 # use linker garbage collection, if requested
 ifeq ($(WITH_LINKER_GC),1)
