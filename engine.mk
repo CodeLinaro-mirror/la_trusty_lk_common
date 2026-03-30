@@ -240,11 +240,10 @@ GLOBAL_SHARED_COMPILEFLAGS += -U__linux__
 # clang selects this by default, but rustc currently needs it to be selected
 # manually.
 ifeq (true,$(call TOBOOL,$(KERNEL_CFI_ENABLED)))
-GLOBAL_USER_RUSTFLAGS += -C lto=thin
 GLOBAL_KERNEL_RUSTFLAGS += -C linker-plugin-lto -Zsplit-lto-unit
 GLOBAL_KERNEL_RUSTFLAGS += -Zsanitizer=cfi
 else
-GLOBAL_SHARED_RUSTFLAGS += -C lto=thin
+GLOBAL_KERNEL_RUSTFLAGS += -C lto=thin
 endif
 
 # Decide on the branch protection scheme.
