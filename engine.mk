@@ -48,8 +48,6 @@ endif
 
 TEST_BUILD ?=
 
-DEBUG ?= 2
-
 BUILDDIR := $(BUILDROOT)/build-$(PROJECT)
 OUTBIN := $(BUILDDIR)/lk.bin
 OUTELF := $(BUILDDIR)/lk.elf
@@ -188,6 +186,9 @@ ifndef PLATFORM
 $(error couldn't find target or target doesn't define platform)
 endif
 include platform/$(PLATFORM)/rules.mk
+
+# set a default if it hasn't already been set by the project file
+DEBUG ?= 2
 
 # set default log levels if they haven't already been set by the project file
 # LOG_LEVEL_KERNEL controls LK_LOGLEVEL
