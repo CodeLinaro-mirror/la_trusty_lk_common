@@ -58,6 +58,10 @@ type Result<T> = core::result::Result<T, LkError>;
 // ensure it's been validated.
 static RECEIVER_ID: AtomicU32 = AtomicU32::new(u32::MAX);
 
+lazy_static! {
+    static ref NEXT_MSG_TOKEN: Mutex<u16> = Mutex::new(1);
+}
+
 fn get_receiver_id() -> u16 {
     let receiver_id = RECEIVER_ID.load(Ordering::Relaxed);
     // u32::MAX is the initial sentinel value, but any valid value will fit in a u16
