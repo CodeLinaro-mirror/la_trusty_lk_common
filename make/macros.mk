@@ -1,8 +1,16 @@
 # Find the local dir of the make file
 GET_LOCAL_DIR    = $(patsubst %/,%,$(dir $(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST))))
 
-# makes sure the target dir exists
-MKDIR = if [ ! -d $(dir $@) ]; then mkdir -p $(dir $@); fi
+# Ensure the target dir exists.
+#
+# If the path exists but is not a directory, replace it with an empty directory.
+# (Note: this only handles one layer; it won't work if <target_dir>/.. is a
+# file, but this hasn't come up in practice.)
+MKDIR = \
+	if [ ! -d $(@D) ]; then \
+		rm -f $(@D); \
+		mkdir -p $(@D); \
+	fi
 
 # prepends the BUILD_DIR var to each item in the list
 TOBUILDDIR = $(addprefix $(BUILDDIR)/,$(1))
