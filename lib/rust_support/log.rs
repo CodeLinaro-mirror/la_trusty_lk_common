@@ -47,7 +47,7 @@ pub struct TrustyKernelLogger;
 // The core::fmt::Write methods used to print formatted logs take a `&mut Self` so if
 // TrustyKernelLogger were to implement them they could not be called from Log::log. Instead we
 // define a private, stateless type to implement Write.
-struct TrustyKernelWriter;
+pub(super) struct TrustyKernelWriter;
 
 impl Write for TrustyKernelWriter {
     fn write_str(&mut self, msg: &str) -> Result {
